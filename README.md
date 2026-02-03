@@ -1,5 +1,4 @@
-# MapaCameras Web
-
+# CIVITAS Map
 Frontend do painel de mapa (câmeras, radares e camadas civitas) usando React + Vite + Mapbox GL.
 
 ## Requisitos
