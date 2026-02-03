@@ -1790,7 +1790,7 @@ export default function MapPage() {
                 <span className="chipIcon">
                   <img src={cameraIntelIcon} alt="" style={{ width: 16, height: 16 }} />
                 </span>
-                <span>Inteligentes</span>
+                <span>Super Câmeras Inteligentes</span>
                 <span className="chipDot" style={{ background: showCamerasIntel ? "#f59e0b" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCamerasIntel ? "ON" : "OFF"}</span>

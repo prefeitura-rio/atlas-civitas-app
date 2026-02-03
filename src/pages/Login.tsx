@@ -64,9 +64,9 @@ export default function Login() {
         display: "flex",
         flexDirection: "column",
         background:
-          "radial-gradient(1200px 600px at 20% 10%, rgba(0,0,0,0.08), transparent 60%)," +
-          "radial-gradient(1200px 600px at 80% 90%, rgba(0,0,0,0.06), transparent 60%)," +
-          "linear-gradient(180deg, #fff, #fafafa)",
+          "radial-gradient(900px 500px at 15% 10%, rgba(255,255,255,0.08), transparent 60%)," +
+          "radial-gradient(900px 500px at 85% 90%, rgba(255,255,255,0.06), transparent 60%)," +
+          "linear-gradient(180deg, #050505, #0b0b0f)",
       }}
     >
       {/* TOP BAR */}
@@ -113,16 +113,19 @@ export default function Login() {
           style={{
             width: "100%",
             maxWidth: 420,
-            border: "1px solid #e5e7eb",
+            border: "1px solid rgba(255,255,255,0.14)",
             borderRadius: 16,
             padding: 18,
-            background: "white",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
+            boxShadow: "0 18px 50px rgba(0,0,0,0.45)",
+            color: "#f5f5f5",
+            backdropFilter: "blur(18px) saturate(160%)",
           }}
         >
           <div style={{ marginBottom: 18, textAlign: "center" }}>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>CIVITAS Map</h2>
-            <p style={{ margin: "6px 0 0", opacity: 0.75, fontSize: 13 }}>
+            <p style={{ margin: "6px 0 0", opacity: 0.7, fontSize: 13 }}>
               
             </p>
           </div>
@@ -141,7 +144,9 @@ export default function Login() {
 
           <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
             <div style={{ display: "grid", gap: 6 }}>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-white/80">
+                Email
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -149,12 +154,15 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="username"
-                style={{ width: "100%" }}
+                className="!border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
+                style={{ width: "100%", backgroundColor: "#0b0b0f", color: "#fff" }}
               />
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
-              <Label htmlFor="password">Senha</Label>
+              <Label htmlFor="password" className="text-white/80">
+                Senha
+              </Label>
 
               <div style={{ position: "relative", width: "100%" }}>
                 <Input
@@ -164,7 +172,8 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
-                  style={{ width: "100%", paddingRight: 44 }}
+                  className="!border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
+                  style={{ width: "100%", paddingRight: 44, backgroundColor: "#0b0b0f", color: "#fff" }}
                 />
 
                 <button
@@ -179,14 +188,15 @@ export default function Login() {
                     transform: "translateY(-50%)",
                     width: 32,
                     height: 32,
-                    border: "none",
-                    background: "transparent",
-                    borderRadius: 8,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "#0b0b0f",
+                    borderRadius: 10,
                     cursor: "pointer",
-                    color: "#6b7280",
+                    color: "rgba(255,255,255,0.9)",
                     display: "grid",
                     placeItems: "center",
                     padding: 0,
+                    boxShadow: "0 6px 16px rgba(0,0,0,0.35)",
                   }}
                 >
                   {passwordType === "password" ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -194,7 +204,11 @@ export default function Login() {
               </div>
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full border border-white/30 bg-white/20 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-white/30 hover:text-white"
+            >
               {loading ? "Entrando..." : "Login"}
             </Button>
           </form>
