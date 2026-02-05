@@ -41,6 +41,43 @@ export default function Login() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [passwordType, setPasswordType] = useState<"password" | "text">("password");
+  const [authToast, setAuthToast] = useState<string | null>(null);
+  const [authToastSeconds, setAuthToastSeconds] = useState<number | null>(null);
+  const [authToastProgress, setAuthToastProgress] = useState(100);
+
+  useEffect(() => {
+    const msg = localStorage.getItem("auth_toast");
+    if (!msg) return;
+    setAuthToast(msg);
+    localStorage.removeItem("auth_toast");
+  }, []);
+
+  useEffect(() => {
+    if (!authToast) return;
+    const durationMs = 5000;
+    const startedAt = Date.now();
+    setAuthToastSeconds(5);
+    setAuthToastProgress(100);
+
+    const tick = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const remainingMs = Math.max(0, durationMs - elapsed);
+      const nextSeconds = Math.ceil(remainingMs / 1000);
+      const nextProgress = Math.max(0, Math.round((remainingMs / durationMs) * 100));
+      setAuthToastSeconds(nextSeconds);
+      setAuthToastProgress(nextProgress);
+
+      if (remainingMs <= 0) {
+        setAuthToast(null);
+        setAuthToastSeconds(null);
+        setAuthToastProgress(0);
+      }
+    }, 100);
+
+    return () => {
+      window.clearInterval(tick);
+    };
+  }, [authToast]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,8 +106,91 @@ export default function Login() {
           "linear-gradient(180deg, #050505, #0b0b0f)",
       }}
     >
+      {authToast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            right: 16,
+            zIndex: 60,
+            maxWidth: 320,
+            width: "calc(100vw - 32px)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(0,0,0,0.08)",
+              background: "rgba(255,255,255,0.95)",
+              color: "rgba(0,0,0,0.85)",
+              fontSize: 13,
+              boxShadow: "0 12px 30px rgba(0,0,0,0.25)",
+              backdropFilter: "blur(10px)",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <AlertTriangle size={16} />
+            <div style={{ lineHeight: 1.3 }}>
+              {authToast}
+              {authToastSeconds !== null && authToastSeconds >= 0 && (
+                <span style={{ marginLeft: 6, opacity: 0.7 }}>({authToastSeconds}s)</span>
+              )}
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                bottom: 0,
+                height: 3,
+                width: `${authToastProgress}%`,
+                background: "#00c0f3",
+                transition: "width 0.1s linear",
+              }}
+            />
+          </div>
+        </div>
+      )}
+      <style>{`
+        @media (max-width: 640px) {
+          .loginHeader {
+            height: 64px !important;
+            padding: 0 12px !important;
+          }
+          .loginLogo {
+            height: 28px !important;
+          }
+          .loginCard {
+            border-radius: 14px !important;
+            padding: 14px !important;
+          }
+          .loginTitle {
+            font-size: 18px !important;
+          }
+        }
+        .loginInput {
+          background-color: #0b0b0f !important;
+          color: #ffffff !important;
+        }
+        .loginInput::placeholder {
+          color: rgba(255,255,255,0.45) !important;
+        }
+        .loginInput:-webkit-autofill,
+        .loginInput:-webkit-autofill:hover,
+        .loginInput:-webkit-autofill:focus,
+        .loginInput:-webkit-autofill:active {
+          -webkit-text-fill-color: #ffffff !important;
+          box-shadow: 0 0 0 1000px #0b0b0f inset !important;
+          transition: background-color 9999s ease-in-out 0s;
+        }
+      `}</style>
       {/* TOP BAR */}
       <header
+        className="loginHeader"
         style={{
           height: 88,
           display: "flex",
@@ -86,6 +206,7 @@ export default function Login() {
           <img
             src={civitasLogo}
             alt="Civitas Rio"
+            className="loginLogo"
             style={{ height: 34, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
@@ -94,6 +215,7 @@ export default function Login() {
           <img
             src={prefeituraLogo}
             alt="Prefeitura do Rio"
+            className="loginLogo"
             style={{ height: 34, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
@@ -102,6 +224,7 @@ export default function Login() {
           <img
             src={disqueDenunciaLogo}
             alt="Disque Denúncia"
+            className="loginLogo"
             style={{ height: 38, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
@@ -110,6 +233,7 @@ export default function Login() {
       {/* CONTENT */}
       <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
         <div
+          className="loginCard"
           style={{
             width: "100%",
             maxWidth: 420,
@@ -124,7 +248,9 @@ export default function Login() {
           }}
         >
           <div style={{ marginBottom: 18, textAlign: "center" }}>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>CIVITAS Map</h2>
+            <h2 className="loginTitle" style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>
+              CIVITAS Map
+            </h2>
             <p style={{ margin: "6px 0 0", opacity: 0.7, fontSize: 13 }}>
               
             </p>
@@ -154,7 +280,7 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="username"
-                className="!border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
+                className="loginInput !border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
                 style={{ width: "100%", backgroundColor: "#0b0b0f", color: "#fff" }}
               />
             </div>
@@ -172,7 +298,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
-                  className="!border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
+                  className="loginInput !border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
                   style={{ width: "100%", paddingRight: 44, backgroundColor: "#0b0b0f", color: "#fff" }}
                 />
 

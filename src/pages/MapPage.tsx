@@ -141,6 +141,8 @@ const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN?.toString() || 
 
 // só dark streets
 const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11" as const;
+const PAGE_SIZE = 50;
+const ADMIN_PAGE_SIZE = 50;
 
 // IDs fixos
 const SOURCES = {
@@ -373,8 +375,8 @@ const INLINE_CSS = `
   .mobileBar { display: none; }
 
   @media (max-width: 860px) {
-    .desktopPanels { display: none; }
-    .mobileBar { display: flex; }
+    .desktopPanels { display: none !important; }
+    .mobileBar { display: flex !important; }
     .mobileDrawer {
       position: fixed;
       left: 12px;
@@ -386,6 +388,41 @@ const INLINE_CSS = `
       transition: transform .18s ease;
       z-index: 20;
     }
+    .tabBtn {
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+    .subTab {
+      padding: 7px 9px;
+      font-size: 11px;
+    }
+    .adminGrid2 { grid-template-columns: 1fr !important; }
+    .adminRow { flex-wrap: wrap; }
+    .adminRowBtn { width: 100%; }
+    .adminCard { max-width: 100%; overflow: hidden; }
+    .adminLabelWrap { flex-wrap: wrap; line-height: 1.2; }
+    .dockWrap {
+      position: fixed;
+      top: auto;
+      right: 12px;
+      bottom: 72px;
+    }
+    .dockHandle {
+      height: 32px;
+      padding: 0 10px;
+      font-size: 11px;
+      border-radius: 999px;
+    }
+    .dock {
+      padding: 10px;
+      gap: 6px;
+      min-width: 150px;
+      border-radius: 16px;
+    }
+    .dockTitle { font-size: 11px; }
+    .dockChip { padding: 7px 9px; font-size: 12px; }
+    .dockFab { width: 40px; height: 40px; font-size: 16px; }
+    .menuOpen .dockWrap { display: none; }
   }
 
   .mapboxgl-map { position: absolute; inset: 0; }
@@ -493,21 +530,23 @@ const INLINE_CSS = `
     margin:4px 0;
   }
   .dockFab{
-    width:40px;
-    height:40px;
+    width:44px;
+    height:44px;
     border-radius:999px;
-    border: 1px solid rgba(0,0,0,0.12);
-    background: rgba(0,0,0,0.86);
+    border: 1px solid rgba(0,0,0,0.14);
+    background: linear-gradient(180deg, rgba(20,20,20,0.98), rgba(0,0,0,0.92));
     color: #fff;
     display:grid;
     place-items:center;
     cursor:pointer;
-    box-shadow: 0 14px 30px rgba(0,0,0,0.20);
+    box-shadow: 0 14px 34px rgba(0,0,0,0.28);
     align-self:flex-end;
     transition: transform .12s ease, filter .12s ease;
     font-weight: 900;
+    font-size: 18px;
   }
   .dockFab:hover{ transform: translateY(-1px); filter: brightness(1.05); }
+  .dockFab:active{ transform: translateY(0px) scale(0.98); }
   .dockNote{
     font-size:11px;
     color: rgba(0,0,0,0.65);
@@ -529,6 +568,17 @@ async function fetchJson<T>(url: string, opts: RequestInit = {}) {
     data = text;
   }
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.setItem(
+        "auth_toast",
+        "Sua sessão expirou. Faça login novamente para continuar."
+      );
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("user_role");
+      try {
+        window.location.href = "/login";
+      } catch {}
+    }
     const msg =
       typeof data === "string"
         ? data
@@ -688,6 +738,9 @@ export default function MapPage() {
 
   const [panel, setPanel] = useState<PanelKey>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const [loadingCameras, setLoadingCameras] = useState(false);
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -708,6 +761,14 @@ export default function MapPage() {
 
   const [listMode, setListMode] = useState<"cameras" | "inteligentes" | "lpr" | "radares">("cameras");
   const [query, setQuery] = useState("");
+  const [pageCameras, setPageCameras] = useState(1);
+  const [pageIntel, setPageIntel] = useState(1);
+  const [pageLpr, setPageLpr] = useState(1);
+  const [pageRadares, setPageRadares] = useState(1);
+  const [mobileCountCameras, setMobileCountCameras] = useState(PAGE_SIZE);
+  const [mobileCountIntel, setMobileCountIntel] = useState(PAGE_SIZE);
+  const [mobileCountLpr, setMobileCountLpr] = useState(PAGE_SIZE);
+  const [mobileCountRadares, setMobileCountRadares] = useState(PAGE_SIZE);
 
   const [me, setMe] = useState<Me | null>(null);
   const [loadingMe, setLoadingMe] = useState(false);
@@ -1115,7 +1176,7 @@ export default function MapPage() {
         .setHTML(`
           <div style="font-family: system-ui; min-width: 240px;">
             <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              🟠 Câmera Inteligente
+              🟠 Super Câmera Inteligente
               <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
             </div>
             <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
@@ -1148,7 +1209,7 @@ export default function MapPage() {
         .setHTML(`
           <div style="font-family: system-ui; min-width: 240px;">
             <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              🟦 Câmera LPR
+              🟢 Câmera LPR
               <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
             </div>
             <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
@@ -1688,6 +1749,82 @@ export default function MapPage() {
     });
   }, [cameras, camerasIntel, camerasLpr, radares, query, listMode]);
 
+  const { page, setPage, totalPages, pagedItems } = useMemo(() => {
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const current =
+      listMode === "cameras"
+        ? pageCameras
+        : listMode === "inteligentes"
+        ? pageIntel
+        : listMode === "lpr"
+        ? pageLpr
+        : pageRadares;
+    const safe = clamp(current, 1, pages);
+    const sliceStart = (safe - 1) * PAGE_SIZE;
+    const sliceEnd = sliceStart + PAGE_SIZE;
+    const setter =
+      listMode === "cameras"
+        ? setPageCameras
+        : listMode === "inteligentes"
+        ? setPageIntel
+        : listMode === "lpr"
+        ? setPageLpr
+        : setPageRadares;
+
+    return {
+      page: safe,
+      setPage: setter,
+      totalPages: pages,
+      pagedItems: filtered.slice(sliceStart, sliceEnd),
+    };
+  }, [filtered, listMode, pageCameras, pageIntel, pageLpr, pageRadares]);
+
+  const mobileCount =
+    listMode === "cameras"
+      ? mobileCountCameras
+      : listMode === "inteligentes"
+      ? mobileCountIntel
+      : listMode === "lpr"
+      ? mobileCountLpr
+      : mobileCountRadares;
+
+  const listItems = isMobile ? filtered.slice(0, mobileCount) : pagedItems;
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 860px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) setDockOpen(false);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (listMode === "cameras") setPageCameras(1);
+    if (listMode === "inteligentes") setPageIntel(1);
+    if (listMode === "lpr") setPageLpr(1);
+    if (listMode === "radares") setPageRadares(1);
+  }, [listMode, query]);
+
+  useEffect(() => {
+    setMobileCountCameras(PAGE_SIZE);
+    setMobileCountIntel(PAGE_SIZE);
+    setMobileCountLpr(PAGE_SIZE);
+    setMobileCountRadares(PAGE_SIZE);
+  }, [listMode, query]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages, setPage]);
+
   useMemo(() => {
     if (!selectedCode) return null;
     return cameras.find((c) => c.code === selectedCode) || null;
@@ -1702,11 +1839,22 @@ export default function MapPage() {
   const panelMaxHeight = panel === "admin" ? "74vh" : "56vh";
 
   return (
-    <div style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden" }}>
+    <div
+      className={panelOpen || mobileMenuOpen ? "menuOpen" : undefined}
+      style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden" }}
+    >
       {/* ✅ CSS CORRETO */}
       <style>{INLINE_CSS}</style>
 
-      <div ref={mapContainerRef} style={{ position: "absolute", inset: 0, background: "#0b0b0f" }} />
+      <div
+        ref={mapContainerRef}
+        onClick={() => {
+          if (panelOpen) setPanelOpen(false);
+          if (mobileMenuOpen) setMobileMenuOpen(false);
+          if (mobileSearchOpen) setMobileSearchOpen(false);
+        }}
+        style={{ position: "absolute", inset: 0, background: "#0b0b0f" }}
+      />
 
       {!MAPBOX_TOKEN && (
         <div
@@ -1737,6 +1885,7 @@ export default function MapPage() {
       {/* DOCK */}
       <div
         className="dockWrap"
+        style={isMobile && mobileMenuOpen ? { display: "none" } : undefined}
         onMouseEnter={() => {
           setDockOpen(true);
           bumpDockAutoHide();
@@ -1901,27 +2050,10 @@ export default function MapPage() {
             display: "flex",
             alignItems: "center",
             gap: 12,
-            minWidth: 280,
+            minWidth: 150,
           }}
         >
-          <img src={civitasLogo} alt="Civitas" style={{ height: 28, width: 98 }} />
-          <div style={{ lineHeight: 1.1 }}>
-            <div className="title" style={{ fontSize: 14 }}>
-              Painel Informativo
-            </div>
-
-            {(loadingMe || meErr || me) && (
-              <div style={{ fontSize: 11, opacity: 0.8, marginTop: 4 }}>
-                {loadingMe
-                  ? "Carregando usuário..."
-                  : meErr
-                  ? `Auth: ${meErr}`
-                  : me
-                  ? `Logado: ${me.full_name} (${role})`
-                  : ""}
-              </div>
-            )}
-          </div>
+          <img src={civitasLogo} alt="Civitas" style={{ height: 32, width: 120 }} />
         </div>
 
         <div
@@ -1940,7 +2072,7 @@ export default function MapPage() {
             onClick={() => togglePanel("map")}
             title="Clique de novo pra fechar"
           >
-            Mapa
+            Central
           </button>
 
           <button
@@ -2020,7 +2152,7 @@ export default function MapPage() {
                     {listMode === "cameras"
                       ? "Câmeras"
                       : listMode === "inteligentes"
-                      ? "Câmeras Inteligentes"
+                      ? "Super Câmeras Inteligentes"
                       : listMode === "lpr"
                       ? "Câmeras LPR"
                       : "Radares"}
@@ -2033,7 +2165,7 @@ export default function MapPage() {
                       : listMode === "inteligentes"
                       ? loadingCamerasIntel
                         ? "Carregando..."
-                        : `${camerasIntel.length} inteligentes`
+                        : `${camerasIntel.length} super câmeras inteligentes`
                       : listMode === "lpr"
                       ? loadingCamerasLpr
                         ? "Carregando..."
@@ -2057,7 +2189,7 @@ export default function MapPage() {
                     className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
                     onClick={() => setListMode("inteligentes")}
                   >
-                    Inteligentes
+                    Super Câmeras Inteligentes
                   </button>
                   <button
                     className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
@@ -2082,7 +2214,7 @@ export default function MapPage() {
                     listMode === "cameras"
                       ? "Buscar por nome, código, cidade, endereço..."
                       : listMode === "inteligentes"
-                      ? "Buscar por nome, código, IP, direção..."
+                      ? "Buscar por nome, código, IP, direção (super)..."
                       : listMode === "lpr"
                       ? "Buscar por nome, código, IP, direção..."
                       : "Buscar por CODCET, bairro, logradouro, sentido..."
@@ -2108,7 +2240,7 @@ export default function MapPage() {
 
               <div style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
                 {listMode === "cameras" &&
-                  (filtered as Camera[]).map((c) => (
+                  (listItems as Camera[]).map((c) => (
                     <div
                       key={c.code}
                       className="listItem"
@@ -2148,7 +2280,7 @@ export default function MapPage() {
                   ))}
 
                 {listMode === "inteligentes" &&
-                  (filtered as CameraIntel[]).map((c) => (
+                  (listItems as CameraIntel[]).map((c) => (
                     <div
                       key={c.code}
                       className="listItem"
@@ -2188,7 +2320,7 @@ export default function MapPage() {
                   ))}
 
                 {listMode === "lpr" &&
-                  (filtered as CameraLpr[]).map((c) => (
+                  (listItems as CameraLpr[]).map((c) => (
                     <div
                       key={c.code}
                       className="listItem"
@@ -2228,7 +2360,7 @@ export default function MapPage() {
                   ))}
 
                 {listMode === "radares" &&
-                  (filtered as Radar[]).map((r) => {
+                  (listItems as Radar[]).map((r) => {
                     const lat = Number(r.lat);
                     const lng = Number(r.lng);
                     const ok = Number.isFinite(lat) && Number.isFinite(lng);
@@ -2278,13 +2410,37 @@ export default function MapPage() {
                     {listMode === "cameras"
                       ? "Nenhuma câmera encontrada."
                       : listMode === "inteligentes"
-                      ? "Nenhuma câmera inteligente encontrada."
+                      ? "Nenhuma Super Câmera Inteligente encontrada."
                       : listMode === "lpr"
                       ? "Nenhuma câmera LPR encontrada."
                       : "Nenhum radar encontrado."}
                   </div>
                 )}
               </div>
+
+              {!isMobile && filtered.length > PAGE_SIZE && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <button
+                    className="btnGhost"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page <= 1}
+                    style={{ opacity: page <= 1 ? 0.5 : 1 }}
+                  >
+                    Anterior
+                  </button>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>
+                    Página {page} de {totalPages}
+                  </div>
+                  <button
+                    className="btnGhost"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page >= totalPages}
+                    style={{ opacity: page >= totalPages ? 0.5 : 1 }}
+                  >
+                    Próxima
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -2301,10 +2457,17 @@ export default function MapPage() {
                   marginBottom: 12,
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>Trocar senha</div>
+                <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>Dados do usuário</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 12,fontWeight: 900}}>Nome</div>
+                  <div style={{ fontSize: 13,  }}>{me?.full_name || "-"}</div>
+                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
+                  <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
+                </div>
               </div>
 
               <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
+                <div style={{ fontSize: 13, fontWeight: 900 }}>Trocar senha</div>
                 <input
                   value={pwOld}
                   onChange={(e) => setPwOld(e.target.value)}
@@ -2398,7 +2561,7 @@ export default function MapPage() {
               </div>
 
               <div style={{ maxHeight: panelMaxHeight, overflow: "auto" }}>
-                {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} />}
+                {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
                 {adminTab === "cameras" && (
                   <AdminCamerasPanel
                     apiBase={API_BASE}
@@ -2406,6 +2569,7 @@ export default function MapPage() {
                     onSynced={() => {
                       loadCameras();
                     }}
+                    isMobile={isMobile}
                   />
                 )}
                 {adminTab === "radares" && (
@@ -2415,9 +2579,10 @@ export default function MapPage() {
                     onSynced={() => {
                       loadRadares();
                     }}
+                    isMobile={isMobile}
                   />
                 )}
-                {adminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} />}
+                {adminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
               </div>
             </>
           )}
@@ -2451,22 +2616,78 @@ export default function MapPage() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={civitasLogo} alt="Civitas" style={{ height: 26, width: 26 }} />
-            <div style={{ lineHeight: 1.1 }}>
-              <div className="title" style={{ fontSize: 13 }}>
-                MapaCâmeras & Radares
-              </div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                {loadingCameras || loadingRadares
-                  ? "Carregando..."
-                  : `${cameras.length} câmeras • ${camerasIntel.length} inteligentes • ${camerasLpr.length} LPR • ${radares.length} radares`}
-              </div>
-            </div>
+            <img src={civitasLogo} alt="Civitas" style={{ height: 34, width: 120 }} />
           </div>
 
-          <button className="btnGhost" onClick={() => setPanelOpen((v) => !v)}>
-            {panelOpen ? "Fechar" : "Menu"}
-          </button>
+          <div style={{ position: "relative" }}>
+            <button
+              className="btnGhost"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              style={{
+                width: 40,
+                height: 32,
+                padding: 0,
+                borderRadius: 10,
+                display: "grid",
+                placeItems: "center",
+              }}
+              aria-label="Abrir menu"
+              title="Menu"
+            >
+              <span style={{ display: "grid", gap: 3 }}>
+                <span style={{ width: 18, height: 2, background: "rgba(0,0,0,0.85)", borderRadius: 999 }} />
+                <span style={{ width: 18, height: 2, background: "rgba(0,0,0,0.85)", borderRadius: 999 }} />
+                <span style={{ width: 18, height: 2, background: "rgba(0,0,0,0.85)", borderRadius: 999 }} />
+              </span>
+            </button>
+
+            {mobileMenuOpen && (
+              <div
+                className="glassStrong"
+                style={{
+                  position: "absolute",
+                  right: -6,
+                  top: "calc(100% + 14px)",
+                  padding: 8,
+                  display: "grid",
+                  gap: 6,
+                  zIndex: 40,
+                  minWidth: 140,
+                }}
+              >
+                <button
+                  className="btnGhost"
+                  onClick={() => {
+                    setMobileSearchOpen(true);
+                    setMobileMenuOpen(false);
+                  }}
+                  style={{ width: "100%", borderRadius: 10 }}
+                >
+                  Buscar local
+                </button>
+                <button
+                  className="btnGhost"
+                  onClick={() => {
+                    setPanelOpen((v) => !v);
+                    setMobileMenuOpen(false);
+                  }}
+                  style={{ width: "100%", borderRadius: 10 }}
+                >
+                  {panelOpen ? "Fechar menu" : "Menu"}
+                </button>
+                <button
+                  className="btnGhost"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    auth?.logout?.();
+                  }}
+                  style={{ width: "100%", borderRadius: 10 }}
+                >
+                  Sair
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {panelOpen && (
@@ -2514,21 +2735,6 @@ export default function MapPage() {
               )}
 
               <div style={{ flex: 1 }} />
-
-              <button
-                onClick={() => auth?.logout?.()}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  background: "rgba(255,255,255,0.90)",
-                  cursor: "pointer",
-                  fontWeight: 900,
-                  color: "rgba(0,0,0,0.85)",
-                }}
-              >
-                Sair
-              </button>
             </div>
 
             {panel === "map" && (
@@ -2544,7 +2750,7 @@ export default function MapPage() {
                     className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
                     onClick={() => setListMode("inteligentes")}
                   >
-                    Inteligentes
+                    Super Câmeras Inteligentes
                   </button>
                   <button
                     className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
@@ -2568,7 +2774,7 @@ export default function MapPage() {
                       listMode === "cameras"
                         ? "Buscar câmera..."
                         : listMode === "inteligentes"
-                        ? "Buscar inteligente..."
+                        ? "Buscar super câmeras inteligente..."
                         : listMode === "lpr"
                         ? "Buscar LPR..."
                         : "Buscar radar..."
@@ -2592,9 +2798,21 @@ export default function MapPage() {
                   </button>
                 </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
+                <div
+                  style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
+                  onScroll={(e) => {
+                    if (!isMobile) return;
+                    const el = e.currentTarget;
+                    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+                      if (listMode === "cameras") setMobileCountCameras((v) => v + PAGE_SIZE);
+                      if (listMode === "inteligentes") setMobileCountIntel((v) => v + PAGE_SIZE);
+                      if (listMode === "lpr") setMobileCountLpr((v) => v + PAGE_SIZE);
+                      if (listMode === "radares") setMobileCountRadares((v) => v + PAGE_SIZE);
+                    }
+                  }}
+                >
                   {listMode === "cameras" &&
-                    (filtered as Camera[]).slice(0, 60).map((c) => (
+                    (listItems as Camera[]).map((c) => (
                       <div
                         key={c.code}
                         className="listItem"
@@ -2635,7 +2853,7 @@ export default function MapPage() {
                     ))}
 
                   {listMode === "inteligentes" &&
-                    (filtered as CameraIntel[]).slice(0, 60).map((c) => (
+                    (listItems as CameraIntel[]).map((c) => (
                       <div
                         key={c.code}
                         className="listItem"
@@ -2676,7 +2894,7 @@ export default function MapPage() {
                     ))}
 
                   {listMode === "lpr" &&
-                    (filtered as CameraLpr[]).slice(0, 60).map((c) => (
+                    (listItems as CameraLpr[]).map((c) => (
                       <div
                         key={c.code}
                         className="listItem"
@@ -2717,7 +2935,7 @@ export default function MapPage() {
                     ))}
 
                   {listMode === "radares" &&
-                    (filtered as Radar[]).slice(0, 60).map((r) => {
+                    (listItems as Radar[]).map((r) => {
                       const lat = Number(r.lat);
                       const lng = Number(r.lng);
                       const ok = Number.isFinite(lat) && Number.isFinite(lng);
@@ -2769,13 +2987,37 @@ export default function MapPage() {
                       {listMode === "cameras"
                         ? "Nenhuma câmera."
                         : listMode === "inteligentes"
-                        ? "Nenhuma câmera inteligente."
+                        ? "Nenhuma Super Câmera Inteligente."
                         : listMode === "lpr"
                         ? "Nenhuma câmera LPR."
                         : "Nenhum radar."}
                     </div>
                   )}
                 </div>
+
+                {!isMobile && filtered.length > PAGE_SIZE && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                    <button
+                      className="btnGhost"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page <= 1}
+                      style={{ opacity: page <= 1 ? 0.5 : 1 }}
+                    >
+                      Anterior
+                    </button>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>
+                      Página {page} de {totalPages}
+                    </div>
+                    <button
+                      className="btnGhost"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page >= totalPages}
+                      style={{ opacity: page >= totalPages ? 0.5 : 1 }}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                )}
               </>
             )}
 
@@ -2866,19 +3108,97 @@ export default function MapPage() {
                   </button>
                 </div>
 
-                {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} />}
+                {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
                 {adminTab === "cameras" && (
-                  <AdminCamerasPanel apiBase={API_BASE} token={accessToken} onSynced={() => loadCameras()} />
+                  <AdminCamerasPanel
+                    apiBase={API_BASE}
+                    token={accessToken}
+                    onSynced={() => loadCameras()}
+                    isMobile={isMobile}
+                  />
                 )}
                 {adminTab === "radares" && (
-                  <AdminRadaresPanel apiBase={API_BASE} token={accessToken} onSynced={() => loadRadares()} />
+                  <AdminRadaresPanel
+                    apiBase={API_BASE}
+                    token={accessToken}
+                    onSynced={() => loadRadares()}
+                    isMobile={isMobile}
+                  />
                 )}
-                {adminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} />}
+                {adminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
               </>
             )}
           </div>
         )}
       </div>
+
+      {mobileSearchOpen && (
+        <div
+          className="glassStrong"
+          style={{
+            position: "fixed",
+            left: 12,
+            right: 12,
+            bottom: 12,
+            zIndex: 26,
+            padding: 10,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            color: "#0b0b0f",
+          }}
+        >
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleSearch();
+                setMobileSearchOpen(false);
+              }
+            }}
+            placeholder="Buscar rua ou coordenadas"
+            style={{ ...inputStyle(), flex: 1 }}
+          />
+          <button
+            className="btnGhost"
+            onClick={() => {
+              handleSearch();
+              setMobileSearchOpen(false);
+            }}
+            title="Buscar"
+          >
+            Buscar
+          </button>
+          <button
+            className="btnGhost"
+            onClick={() => {
+              setMobileSearchOpen(false);
+            }}
+            title="Fechar"
+            style={{ padding: "8px 10px" }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {mobileSearchOpen && searchErr && (
+        <div
+          style={{
+            position: "fixed",
+            left: 12,
+            right: 12,
+            bottom: 68,
+            zIndex: 26,
+            fontSize: 11,
+            color: "#991b1b",
+            textAlign: "center",
+          }}
+        >
+          {searchErr}
+        </div>
+      )}
     </div>
   );
 }
@@ -2886,7 +3206,15 @@ export default function MapPage() {
 /* ===========================
    ADMIN: USERS CRUD (inline)
 =========================== */
-function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string }) {
+function AdminUsersPanel({
+  apiBase,
+  token,
+  isMobile,
+}: {
+  apiBase: string;
+  token: string;
+  isMobile: boolean;
+}) {
   const USERS_URL = `${apiBase}/api/v1/users`;
 
   const [loading, setLoading] = useState(false);
@@ -2906,6 +3234,8 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
   const [isActive, setIsActive] = useState(true);
   const [roleOpen, setRoleOpen] = useState(false);
   const roleWrapRef = useRef<HTMLDivElement | null>(null);
+  const [page, setPage] = useState(1);
+  const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
 
   function resetForm() {
     setId(null);
@@ -2949,6 +3279,11 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+    setMobileCount(ADMIN_PAGE_SIZE);
+  }, [items.length]);
 
   useEffect(() => {
     function handleDocClick(e: MouseEvent) {
@@ -3086,6 +3421,7 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div
+        className="adminCard"
         style={{
           padding: 12,
           borderRadius: 16,
@@ -3097,7 +3433,7 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
           {id ? "Editar usuário" : "Criar usuário"}
         </div>
 
-        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+        <div className="adminGrid2" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" style={inputStyle()} />
           <input
             value={fullName}
@@ -3184,6 +3520,7 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
           />
 
           <label
+            className="adminLabelWrap"
             style={{
               display: "flex",
               gap: 10,
@@ -3258,6 +3595,7 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
       </div>
 
       <div
+        className="adminCard"
         style={{
           padding: 12,
           borderRadius: 16,
@@ -3270,10 +3608,21 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
           <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
         </div>
 
-        <div style={{ display: "grid", gap: 8 }}>
-          {items.map((u) => (
+        <div
+          style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+          onScroll={(e) => {
+            if (!isMobile) return;
+            const el = e.currentTarget;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+              setMobileCount((v) => v + ADMIN_PAGE_SIZE);
+            }
+          }}
+        >
+          {(isMobile ? items.slice(0, mobileCount) : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)).map(
+            (u) => (
             <div
               key={u.id}
+              className="adminRow"
               style={{
                 border: "1px solid rgba(0,0,0,0.10)",
                 borderRadius: 14,
@@ -3308,6 +3657,7 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
 
               <button
                 onClick={() => pick(u)}
+                className="adminRowBtn"
                 style={{
                   padding: "8px 10px",
                   borderRadius: 12,
@@ -3323,6 +3673,7 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
               {u.is_active ? (
                 <button
                   onClick={() => deactivate(u.id)}
+                  className="adminRowBtn"
                   style={{
                     padding: "8px 10px",
                     borderRadius: 12,
@@ -3338,6 +3689,7 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
               ) : (
                 <button
                   onClick={() => reactivate(u.id)}
+                  className="adminRowBtn"
                   style={{
                     padding: "8px 10px",
                     borderRadius: 12,
@@ -3356,6 +3708,30 @@ function AdminUsersPanel({ apiBase, token }: { apiBase: string; token: string })
 
           {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum usuário encontrado.</div>}
         </div>
+
+        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <button
+              className="btnGhost"
+              onClick={() => setPage((v) => Math.max(1, v - 1))}
+              disabled={page <= 1}
+              style={{ opacity: page <= 1 ? 0.5 : 1 }}
+            >
+              Anterior
+            </button>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
+            </div>
+            <button
+              className="btnGhost"
+              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
+              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
+              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+            >
+              Próxima
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3368,10 +3744,12 @@ function AdminCamerasPanel({
   apiBase,
   token,
   onSynced,
+  isMobile,
 }: {
   apiBase: string;
   token: string;
   onSynced?: () => void;
+  isMobile: boolean;
 }) {
   const CAMS_URL = `${apiBase}/api/v1/cameras`;
   const SYNC_CAMERAS_URL = `${apiBase}/api/v1/sync/cameras`;
@@ -3392,6 +3770,12 @@ function AdminCamerasPanel({
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [camTab, setCamTab] = useState<"cameras" | "civitas">("cameras");
   const [civitasTab, setCivitasTab] = useState<"inteligentes" | "lpr">("inteligentes");
+  const [pageCams, setPageCams] = useState(1);
+  const [pageIntel, setPageIntel] = useState(1);
+  const [pageLpr, setPageLpr] = useState(1);
+  const [mobileCountCams, setMobileCountCams] = useState(ADMIN_PAGE_SIZE);
+  const [mobileCountIntel, setMobileCountIntel] = useState(ADMIN_PAGE_SIZE);
+  const [mobileCountLpr, setMobileCountLpr] = useState(ADMIN_PAGE_SIZE);
 
   const [id, setId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -3506,6 +3890,15 @@ function AdminCamerasPanel({
     if (civitasTab === "lpr") loadLpr();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camTab, civitasTab]);
+
+  useEffect(() => {
+    setPageCams(1);
+    setPageIntel(1);
+    setPageLpr(1);
+    setMobileCountCams(ADMIN_PAGE_SIZE);
+    setMobileCountIntel(ADMIN_PAGE_SIZE);
+    setMobileCountLpr(ADMIN_PAGE_SIZE);
+  }, [camTab, civitasTab, items.length, intelItems.length, lprItems.length]);
 
   async function runSyncCameras() {
     setSyncMsg(null);
@@ -3650,6 +4043,7 @@ function AdminCamerasPanel({
       {camTab === "cameras" && (
         <>
           <div
+            className="adminCard"
             style={{
               padding: 12,
               borderRadius: 16,
@@ -3678,6 +4072,7 @@ function AdminCamerasPanel({
               </button>
 
               <label
+                className="adminLabelWrap"
                 style={{
                   display: "flex",
                   gap: 10,
@@ -3703,25 +4098,11 @@ function AdminCamerasPanel({
             {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
             {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
 
-            <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-              <button
-                onClick={save}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  background: "rgba(0,0,0,0.86)",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontWeight: 900,
-                }}
-              >
-                Salvar (exemplo)
-              </button>
-            </div>
+            
           </div>
 
           <div
+            className="adminCard"
             style={{
               padding: 12,
               borderRadius: 16,
@@ -3734,10 +4115,23 @@ function AdminCamerasPanel({
               <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
             </div>
 
-            <div style={{ display: "grid", gap: 8 }}>
-              {items.map((c) => (
+            <div
+              style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+              onScroll={(e) => {
+                if (!isMobile) return;
+                const el = e.currentTarget;
+                if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+                  setMobileCountCams((v) => v + ADMIN_PAGE_SIZE);
+                }
+              }}
+            >
+              {(isMobile
+                ? items.slice(0, mobileCountCams)
+                : items.slice((pageCams - 1) * ADMIN_PAGE_SIZE, pageCams * ADMIN_PAGE_SIZE)
+              ).map((c) => (
                 <div
                   key={c.id || c.code}
+                  className="adminRow"
                   style={{
                     border: "1px solid rgba(0,0,0,0.10)",
                     borderRadius: 14,
@@ -3771,11 +4165,36 @@ function AdminCamerasPanel({
                 <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera encontrada.</div>
               )}
             </div>
+
+            {!isMobile && items.length > ADMIN_PAGE_SIZE && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <button
+                  className="btnGhost"
+                  onClick={() => setPageCams((v) => Math.max(1, v - 1))}
+                  disabled={pageCams <= 1}
+                  style={{ opacity: pageCams <= 1 ? 0.5 : 1 }}
+                >
+                  Anterior
+                </button>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  Página {pageCams} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
+                </div>
+                <button
+                  className="btnGhost"
+                  onClick={() => setPageCams((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
+                  disabled={pageCams >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
+                  style={{ opacity: pageCams >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+                >
+                  Próxima
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
       {camTab === "civitas" && (
         <div
+          className="adminCard"
           style={{
             padding: 12,
             borderRadius: 16,
@@ -3804,6 +4223,7 @@ function AdminCamerasPanel({
             </button>
 
             <label
+              className="adminLabelWrap"
               style={{
                 display: "flex",
                 gap: 10,
@@ -3833,6 +4253,7 @@ function AdminCamerasPanel({
 
       {camTab === "civitas" && civitasTab === "inteligentes" && (
         <div
+          className="adminCard"
           style={{
             padding: 12,
             borderRadius: 16,
@@ -3846,10 +4267,23 @@ function AdminCamerasPanel({
               {intelLoading ? "Carregando..." : `${intelItems.length} itens`}
             </div>
           </div>
-          <div style={{ display: "grid", gap: 8 }}>
-            {intelItems.map((c) => (
+          <div
+            style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+            onScroll={(e) => {
+              if (!isMobile) return;
+              const el = e.currentTarget;
+              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+                setMobileCountIntel((v) => v + ADMIN_PAGE_SIZE);
+              }
+            }}
+          >
+            {(isMobile
+              ? intelItems.slice(0, mobileCountIntel)
+              : intelItems.slice((pageIntel - 1) * ADMIN_PAGE_SIZE, pageIntel * ADMIN_PAGE_SIZE)
+            ).map((c) => (
               <div
                 key={c.id || c.code}
+                className="adminRow"
                 style={{
                   border: "1px solid rgba(0,0,0,0.10)",
                   borderRadius: 14,
@@ -3879,14 +4313,39 @@ function AdminCamerasPanel({
               </div>
             ))}
             {!intelItems.length && !intelLoading && (
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera inteligente encontrada.</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma Super Câmera Inteligente encontrada.</div>
             )}
           </div>
+
+          {!isMobile && intelItems.length > ADMIN_PAGE_SIZE && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <button
+                className="btnGhost"
+                onClick={() => setPageIntel((v) => Math.max(1, v - 1))}
+                disabled={pageIntel <= 1}
+                style={{ opacity: pageIntel <= 1 ? 0.5 : 1 }}
+              >
+                Anterior
+              </button>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Página {pageIntel} de {Math.max(1, Math.ceil(intelItems.length / ADMIN_PAGE_SIZE))}
+              </div>
+              <button
+                className="btnGhost"
+                onClick={() => setPageIntel((v) => Math.min(Math.ceil(intelItems.length / ADMIN_PAGE_SIZE), v + 1))}
+                disabled={pageIntel >= Math.ceil(intelItems.length / ADMIN_PAGE_SIZE)}
+                style={{ opacity: pageIntel >= Math.ceil(intelItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+              >
+                Próxima
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {camTab === "civitas" && civitasTab === "lpr" && (
         <div
+          className="adminCard"
           style={{
             padding: 12,
             borderRadius: 16,
@@ -3900,10 +4359,23 @@ function AdminCamerasPanel({
               {lprLoading ? "Carregando..." : `${lprItems.length} itens`}
             </div>
           </div>
-          <div style={{ display: "grid", gap: 8 }}>
-            {lprItems.map((c) => (
+          <div
+            style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+            onScroll={(e) => {
+              if (!isMobile) return;
+              const el = e.currentTarget;
+              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+                setMobileCountLpr((v) => v + ADMIN_PAGE_SIZE);
+              }
+            }}
+          >
+            {(isMobile
+              ? lprItems.slice(0, mobileCountLpr)
+              : lprItems.slice((pageLpr - 1) * ADMIN_PAGE_SIZE, pageLpr * ADMIN_PAGE_SIZE)
+            ).map((c) => (
               <div
                 key={c.id || c.code}
+                className="adminRow"
                 style={{
                   border: "1px solid rgba(0,0,0,0.10)",
                   borderRadius: 14,
@@ -3936,6 +4408,30 @@ function AdminCamerasPanel({
               <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera LPR encontrada.</div>
             )}
           </div>
+
+          {!isMobile && lprItems.length > ADMIN_PAGE_SIZE && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <button
+                className="btnGhost"
+                onClick={() => setPageLpr((v) => Math.max(1, v - 1))}
+                disabled={pageLpr <= 1}
+                style={{ opacity: pageLpr <= 1 ? 0.5 : 1 }}
+              >
+                Anterior
+              </button>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Página {pageLpr} de {Math.max(1, Math.ceil(lprItems.length / ADMIN_PAGE_SIZE))}
+              </div>
+              <button
+                className="btnGhost"
+                onClick={() => setPageLpr((v) => Math.min(Math.ceil(lprItems.length / ADMIN_PAGE_SIZE), v + 1))}
+                disabled={pageLpr >= Math.ceil(lprItems.length / ADMIN_PAGE_SIZE)}
+                style={{ opacity: pageLpr >= Math.ceil(lprItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+              >
+                Próxima
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -3949,10 +4445,12 @@ function AdminRadaresPanel({
   apiBase,
   token,
   onSynced,
+  isMobile,
 }: {
   apiBase: string;
   token: string;
   onSynced?: () => void;
+  isMobile: boolean;
 }) {
   const RADARES_URL = `${apiBase}/api/v1/radares`;
   const SYNC_RADARES_URL = `${apiBase}/api/v1/sync/radares`;
@@ -3963,6 +4461,8 @@ function AdminRadaresPanel({
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [items, setItems] = useState<Radar[]>([]);
   const [deactivateMissing, setDeactivateMissing] = useState(true);
+  const [page, setPage] = useState(1);
+  const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
 
   async function load() {
     setErr(null);
@@ -4033,9 +4533,15 @@ function AdminRadaresPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+    setMobileCount(ADMIN_PAGE_SIZE);
+  }, [items.length]);
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div
+        className="adminCard"
         style={{
           padding: 12,
           borderRadius: 16,
@@ -4064,6 +4570,7 @@ function AdminRadaresPanel({
           </button>
 
           <label
+            className="adminLabelWrap"
             style={{
               display: "flex",
               gap: 10,
@@ -4106,6 +4613,7 @@ function AdminRadaresPanel({
       </div>
 
       <div
+        className="adminCard"
         style={{
           padding: 12,
           borderRadius: 16,
@@ -4118,8 +4626,18 @@ function AdminRadaresPanel({
           <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
         </div>
 
-        <div style={{ display: "grid", gap: 8 }}>
-          {items.map((r) => (
+        <div
+          style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+          onScroll={(e) => {
+            if (!isMobile) return;
+            const el = e.currentTarget;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+              setMobileCount((v) => v + ADMIN_PAGE_SIZE);
+            }
+          }}
+        >
+          {(isMobile ? items.slice(0, mobileCount) : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)).map(
+            (r) => (
             <div
               key={r.id || r.codcet}
               style={{
@@ -4144,6 +4662,30 @@ function AdminRadaresPanel({
 
           {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum radar encontrado.</div>}
         </div>
+
+        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <button
+              className="btnGhost"
+              onClick={() => setPage((v) => Math.max(1, v - 1))}
+              disabled={page <= 1}
+              style={{ opacity: page <= 1 ? 0.5 : 1 }}
+            >
+              Anterior
+            </button>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
+            </div>
+            <button
+              className="btnGhost"
+              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
+              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
+              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+            >
+              Próxima
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4152,12 +4694,22 @@ function AdminRadaresPanel({
 /* ===========================
    ADMIN: LOGS
 =========================== */
-function AdminLogsPanel({ apiBase, token }: { apiBase: string; token: string }) {
+function AdminLogsPanel({
+  apiBase,
+  token,
+  isMobile,
+}: {
+  apiBase: string;
+  token: string;
+  isMobile: boolean;
+}) {
   const LOGS_URL = `${apiBase}/api/v1/logs`;
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [items, setItems] = useState<AdminLog[]>([]);
+  const [page, setPage] = useState(1);
+  const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
 
   async function load() {
     setErr(null);
@@ -4186,9 +4738,15 @@ function AdminLogsPanel({ apiBase, token }: { apiBase: string; token: string }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+    setMobileCount(ADMIN_PAGE_SIZE);
+  }, [items.length]);
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div
+        className="adminCard"
         style={{
           padding: 12,
           borderRadius: 16,
@@ -4220,6 +4778,7 @@ function AdminLogsPanel({ apiBase, token }: { apiBase: string; token: string }) 
       </div>
 
       <div
+        className="adminCard"
         style={{
           padding: 12,
           borderRadius: 16,
@@ -4227,8 +4786,20 @@ function AdminLogsPanel({ apiBase, token }: { apiBase: string; token: string }) 
           border: "1px solid rgba(66, 66, 66, 0.1)",
         }}
       >
-        <div style={{ display: "grid", gap: 8 }}>
-          {items.map((l, idx) => (
+        <div
+          style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+          onScroll={(e) => {
+            if (!isMobile) return;
+            const el = e.currentTarget;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+              setMobileCount((v) => v + ADMIN_PAGE_SIZE);
+            }
+          }}
+        >
+          {(isMobile
+            ? items.slice(0, mobileCount)
+            : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
+          ).map((l, idx) => (
             <div
               key={l.id || idx}
               style={{
@@ -4254,6 +4825,30 @@ function AdminLogsPanel({ apiBase, token }: { apiBase: string; token: string }) 
 
           {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Sem logs ainda.</div>}
         </div>
+
+        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <button
+              className="btnGhost"
+              onClick={() => setPage((v) => Math.max(1, v - 1))}
+              disabled={page <= 1}
+              style={{ opacity: page <= 1 ? 0.5 : 1 }}
+            >
+              Anterior
+            </button>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
+            </div>
+            <button
+              className="btnGhost"
+              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
+              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
+              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+            >
+              Próxima
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
