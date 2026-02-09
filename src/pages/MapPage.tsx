@@ -351,6 +351,7 @@ export default function MapPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const isMobileRef = useRef(false);
 
   const [loadingCameras, setLoadingCameras] = useState(false);
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -431,13 +432,24 @@ export default function MapPage() {
   const [searchErr, setSearchErr] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<{ lng: number; lat: number } | null>(null);
   const searchTimerRef = useRef<number | null>(null);
+  const panelRef = useRef<PanelKey>(null);
+  const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    panelRef.current = panel;
+  }, [panel]);
 
   function bumpDockAutoHide() {
     if (dockTimerRef.current) window.clearTimeout(dockTimerRef.current);
     if (DOCK_AUTOHIDE_MS <= 0) return;
     dockTimerRef.current = window.setTimeout(() => {
-      setDockOpen(false);
+      if (isMobileRef.current) setDockOpen(false);
     }, DOCK_AUTOHIDE_MS);
+  }
+
+  function closeDockUnlessBairros() {
+    if (!showBairros) setDockOpen(false);
   }
 
   useEffect(() => {
@@ -1162,7 +1174,22 @@ export default function MapPage() {
         ],
       });
       if (!features || features.length === 0) popup?.remove();
+
+      if (panelRef.current !== null) {
+        setPanel(null);
+        setPanelOpen(false);
+      }
+
+      setDockOpen(false);
     });
+
+    const closeDockOnMove = () => {
+      if (isMobileRef.current) setDockOpen(false);
+    };
+    map.on("dragstart", closeDockOnMove);
+    map.on("zoomstart", closeDockOnMove);
+    map.on("pitchstart", closeDockOnMove);
+    map.on("rotatestart", closeDockOnMove);
 
     map.on("zoom", () => {
       updateGpsData(map, gpsRef.current, gpsOnRef.current);
@@ -1973,6 +2000,7 @@ export default function MapPage() {
   }, []);
 
   useEffect(() => {
+    isMobileRef.current = isMobile;
     if (isMobile) setDockOpen(false);
   }, [isMobile]);
 
@@ -2015,6 +2043,7 @@ export default function MapPage() {
       <div
         ref={mapContainerRef}
         onClick={() => {
+          if (panel !== null) setPanel(null);
           if (panelOpen) setPanelOpen(false);
           if (mobileMenuOpen) setMobileMenuOpen(false);
           if (mobileSearchOpen) setMobileSearchOpen(false);
@@ -2051,13 +2080,59 @@ export default function MapPage() {
       {/* DOCK */}
       <div
         className="dockWrap"
-        style={isMobile && mobileMenuOpen ? { display: "none" } : undefined}
+        style={
+          isMobile
+            ? {
+                display: mobileMenuOpen ? "none" : undefined,
+                flexDirection: "column",
+                alignItems: "stretch",
+              }
+            : undefined
+        }
         onMouseEnter={() => {
+          if (isMobile) return;
           setDockOpen(true);
           bumpDockAutoHide();
         }}
-        onMouseMove={() => bumpDockAutoHide()}
+        onMouseMove={() => {
+          if (isMobile) return;
+          bumpDockAutoHide();
+        }}
       >
+        {showBairros && selectedBairro && selectedBairroStats && (
+          <div
+            className="dock"
+            style={isMobile ? { width: "100%", maxWidth: 360 } : { minWidth: 220 }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div className="dockTitle" style={{ marginBottom: 0 }}>Resumo</div>
+              <button
+                className="btnGhost"
+                onClick={() => setSelectedBairro("")}
+                style={{ width: 28, height: 28, padding: 0, borderRadius: 999, lineHeight: 1 }}
+                title="Fechar resumo"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="dockNote" style={{ lineHeight: 1.4, marginTop: 6 }}>
+              <div style={{ fontSize: 13, marginBottom: 4 }}>
+                <strong>
+                  {selectedBairro} - Total:{" "}
+                  {selectedBairroStats.cameras +
+                    selectedBairroStats.inteligentes +
+                    selectedBairroStats.lpr +
+                    selectedBairroStats.radares}
+                </strong>
+              </div>
+              <div>Câmeras: {selectedBairroStats.cameras}</div>
+              <div>Inteligentes: {selectedBairroStats.inteligentes}</div>
+              <div>LPR: {selectedBairroStats.lpr}</div>
+              <div>Radares: {selectedBairroStats.radares}</div>
+            </div>
+          </div>
+        )}
+
         {!dockOpen && (
           <div
             className="dockHandle"
@@ -2072,14 +2147,16 @@ export default function MapPage() {
         )}
 
         {dockOpen && (
-          <div className="dock">
-            <div className="dockTitle">Camadas</div>
+          <>
+            <div className="dock">
+              <div className="dockTitle">Camadas</div>
 
             <button
               className={`dockChip ${showCameras ? "dockChipOn" : ""}`}
               onClick={() => {
                 setShowCameras((v) => !v);
                 bumpDockAutoHide();
+                closeDockUnlessBairros();
               }}
               title={showCameras ? "Câmeras ON" : "Câmeras OFF"}
             >
@@ -2098,6 +2175,7 @@ export default function MapPage() {
               onClick={() => {
                 setShowCamerasIntel((v) => !v);
                 bumpDockAutoHide();
+                closeDockUnlessBairros();
               }}
               title={showCamerasIntel ? "Inteligentes ON" : "Inteligentes OFF"}
             >
@@ -2116,6 +2194,7 @@ export default function MapPage() {
               onClick={() => {
                 setShowCamerasLpr((v) => !v);
                 bumpDockAutoHide();
+                closeDockUnlessBairros();
               }}
               title={showCamerasLpr ? "LPR ON" : "LPR OFF"}
             >
@@ -2134,6 +2213,7 @@ export default function MapPage() {
               onClick={() => {
                 setShowRadares((v) => !v);
                 bumpDockAutoHide();
+                closeDockUnlessBairros();
               }}
               title={showRadares ? "Radares ON" : "Radares OFF"}
             >
@@ -2162,72 +2242,6 @@ export default function MapPage() {
               </span>
               <span className="chipState">{showBairros ? "ON" : "OFF"}</span>
             </button>
-
-            <button
-              className={`dockChip ${showRisp ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowRisp((v) => !v);
-                bumpDockAutoHide();
-              }}
-              title={showRisp ? "RISP ON" : "RISP OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>R</span>
-                <span>RISP</span>
-                <span className="chipDot" style={{ background: showRisp ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showRisp ? "ON" : "OFF"}</span>
-            </button>
-            {showRisp && multiCodeWarnings.risp.length > 0 && (
-              <div className="dockNote">
-                Aviso: {multiCodeWarnings.risp.length} bairros com mais de uma RISP não foram coloridos. Ex.:{" "}
-                {multiCodeWarnings.risp.slice(0, 4).join(", ")}
-              </div>
-            )}
-
-            <button
-              className={`dockChip ${showAisp ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowAisp((v) => !v);
-                bumpDockAutoHide();
-              }}
-              title={showAisp ? "AISP ON" : "AISP OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>A</span>
-                <span>AISP</span>
-                <span className="chipDot" style={{ background: showAisp ? "#3b82f6" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
-            </button>
-            {showAisp && multiCodeWarnings.aisp.length > 0 && (
-              <div className="dockNote">
-                Aviso: {multiCodeWarnings.aisp.length} bairros com mais de uma AISP não foram coloridos. Ex.:{" "}
-                {multiCodeWarnings.aisp.slice(0, 4).join(", ")}
-              </div>
-            )}
-
-            <button
-              className={`dockChip ${showCisp ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowCisp((v) => !v);
-                bumpDockAutoHide();
-              }}
-              title={showCisp ? "CISP ON" : "CISP OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>C</span>
-                <span>CISP</span>
-                <span className="chipDot" style={{ background: showCisp ? "#f59e0b" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
-            </button>
-            {showCisp && multiCodeWarnings.cisp.length > 0 && (
-              <div className="dockNote">
-                Aviso: {multiCodeWarnings.cisp.length} bairros com mais de uma CISP não foram coloridos. Ex.:{" "}
-                {multiCodeWarnings.cisp.slice(0, 4).join(", ")}
-              </div>
-            )}
 
             {showBairros && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2280,6 +2294,7 @@ export default function MapPage() {
                       onClick={() => {
                         setSelectedBairro(nome);
                         setBairroQuery("");
+                        setDockOpen(false);
                       }}
                       style={{
                         textAlign: "left",
@@ -2298,23 +2313,97 @@ export default function MapPage() {
                 ) : null}
                 {loadingBairros && <div className="dockNote">Carregando bairros...</div>}
                 {bairrosErr && <div className="dockNote">{bairrosErr}</div>}
-                {selectedBairro && selectedBairroStats && (
-                  <div className="dockNote" style={{ lineHeight: 1.4 }}>
-                    <div style={{ fontSize: 13 }}>
-                      <strong>
-                        {selectedBairro} - Total:{" "}
-                        {selectedBairroStats.cameras +
-                          selectedBairroStats.inteligentes +
-                          selectedBairroStats.lpr +
-                          selectedBairroStats.radares}
-                      </strong>
-                    </div>
-                    <div>Câmeras: {selectedBairroStats.cameras}</div>
-                    <div>Inteligentes: {selectedBairroStats.inteligentes}</div>
-                    <div>LPR: {selectedBairroStats.lpr}</div>
-                    <div>Radares: {selectedBairroStats.radares}</div>
-                  </div>
-                )}
+                
+              </div>
+            )}
+
+            <button
+              className={`dockChip ${showRisp ? "dockChipOn" : ""}`}
+              onClick={() => {
+                setShowRisp((v) => {
+                  const next = !v;
+                  if (next) {
+                    setShowAisp(false);
+                    setShowCisp(false);
+                  }
+                  return next;
+                });
+                bumpDockAutoHide();
+                closeDockUnlessBairros();
+              }}
+              title={showRisp ? "RISP ON" : "RISP OFF"}
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 11 }}>R</span>
+                <span>RISP</span>
+                <span className="chipDot" style={{ background: showRisp ? "#22c55e" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{showRisp ? "ON" : "OFF"}</span>
+            </button>
+            {showRisp && multiCodeWarnings.risp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.risp.length} bairros com mais de uma RISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.risp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
+            <button
+              className={`dockChip ${showAisp ? "dockChipOn" : ""}`}
+              onClick={() => {
+                setShowAisp((v) => {
+                  const next = !v;
+                  if (next) {
+                    setShowRisp(false);
+                    setShowCisp(false);
+                  }
+                  return next;
+                });
+                bumpDockAutoHide();
+                closeDockUnlessBairros();
+              }}
+              title={showAisp ? "AISP ON" : "AISP OFF"}
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 11 }}>A</span>
+                <span>AISP</span>
+                <span className="chipDot" style={{ background: showAisp ? "#3b82f6" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
+            </button>
+            {showAisp && multiCodeWarnings.aisp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.aisp.length} bairros com mais de uma AISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.aisp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
+            <button
+              className={`dockChip ${showCisp ? "dockChipOn" : ""}`}
+              onClick={() => {
+                setShowCisp((v) => {
+                  const next = !v;
+                  if (next) {
+                    setShowRisp(false);
+                    setShowAisp(false);
+                  }
+                  return next;
+                });
+                bumpDockAutoHide();
+                closeDockUnlessBairros();
+              }}
+              title={showCisp ? "CISP ON" : "CISP OFF"}
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 11 }}>C</span>
+                <span>CISP</span>
+                <span className="chipDot" style={{ background: showCisp ? "#f59e0b" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
+            </button>
+            {showCisp && multiCodeWarnings.cisp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.cisp.length} bairros com mais de uma CISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.cisp.slice(0, 4).join(", ")}
               </div>
             )}
 
@@ -2323,6 +2412,7 @@ export default function MapPage() {
               onClick={() => {
                 if (gpsErr) return;
                 toggleGps();
+                closeDockUnlessBairros();
               }}
               title={gpsOn ? "GPS ON" : "GPS OFF"}
             >
@@ -2362,6 +2452,7 @@ export default function MapPage() {
               Esconder
             </button>
           </div>
+          </>
         )}
       </div>
 
@@ -2956,11 +3047,13 @@ export default function MapPage() {
             alignItems: "center",
             gap: 10,
             justifyContent: "space-between",
-            height: 48,
+            height: 56,
+            paddingLeft: 10,
+            paddingRight: 10,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={civitasLogo} alt="Civitas" style={{ height: 34, width: 145 }} />
+            <img src={civitasLogo} alt="Civitas" style={{ height: 32, width: "auto", maxWidth: 150 }} />
           </div>
 
           <div style={{ position: "relative" }}>
@@ -2968,8 +3061,8 @@ export default function MapPage() {
               className="btnGhost"
               onClick={() => setMobileMenuOpen((v) => !v)}
               style={{
-                width: 40,
-                height: 32,
+                width: 44,
+                height: 36,
                 padding: 0,
                 borderRadius: 10,
                 display: "grid",
@@ -3035,7 +3128,28 @@ export default function MapPage() {
         </div>
 
         {panelOpen && (
-          <div className="mobileDrawer glassStrong" style={{ padding: 12, color: "#0b0b0f" }}>
+          <div
+            ref={mobileDrawerRef}
+            className="mobileDrawer glassStrong"
+            style={{ padding: 12, color: "#0b0b0f" }}
+            onTouchStart={(e) => {
+              touchStartYRef.current = e.touches[0]?.clientY ?? null;
+            }}
+            onTouchEnd={() => {
+              touchStartYRef.current = null;
+            }}
+            onTouchMove={(e) => {
+              const startY = touchStartYRef.current;
+              if (startY === null) return;
+              const currentY = e.touches[0]?.clientY ?? startY;
+              const dy = currentY - startY;
+              const atTop = (mobileDrawerRef.current?.scrollTop ?? 0) <= 0;
+              if (dy > 70 && atTop) {
+                setPanelOpen(false);
+                touchStartYRef.current = null;
+              }
+            }}
+          >
             <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
               <button
                 className={`tabBtn ${panel === "map" ? "tabBtnActive" : ""}`}
@@ -3367,8 +3481,26 @@ export default function MapPage() {
 
             {panel === "profile" && (
               <>
-                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>Trocar senha</div>
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.90)",
+                    border: "1px solid rgba(0,0,0,0.10)",
+                    marginBottom: 12,
+                  }}
+                >
+                  <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>Dados do usuário</div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900 }}>Nome</div>
+                    <div style={{ fontSize: 13 }}>{me?.full_name || "-"}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
+                    <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
+                  </div>
+                </div>
+
                 <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2 }}>Trocar senha</div>
                   <input
                     value={pwOld}
                     onChange={(e) => setPwOld(e.target.value)}
@@ -3403,7 +3535,7 @@ export default function MapPage() {
                       fontWeight: 900,
                     }}
                   >
-                    {pwLoading ? "Salvando..." : "Salvar"}
+                    {pwLoading ? "Salvando..." : "Salvar nova senha"}
                   </button>
                   {pwMsg && (
                     <div

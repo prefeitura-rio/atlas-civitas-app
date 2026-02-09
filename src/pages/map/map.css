@@ -265,6 +265,7 @@
     top: auto;
     right: 12px;
     bottom: 72px;
+    max-width: calc(100vw - 24px);
   }
   .dockHandle {
     height: 32px;
@@ -277,6 +278,8 @@
     gap: 6px;
     min-width: 150px;
     border-radius: 16px;
+    max-height: 70vh;
+    overflow: auto;
   }
   .dockTitle {
     font-size: 11px;
