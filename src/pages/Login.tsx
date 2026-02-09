@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../app/auth";
 
-import civitasLogo from "@/assets/civitas_icon.png";
+import civitasLogo from "@/assets/civitas_icon2.png";
+import civitasMapLogo from "@/assets/civitasmap_logo.png";
 import prefeituraLogo from "@/assets/prefeitura_icon.png";
-import disqueDenunciaLogo from "@/assets/logo_disque_denuncia.png";
 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -204,15 +204,6 @@ export default function Login() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 180 }}>
           <img
-            src={civitasLogo}
-            alt="Civitas Rio"
-            className="loginLogo"
-            style={{ height: 34, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
-          />
-        </div>
-
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <img
             src={prefeituraLogo}
             alt="Prefeitura do Rio"
             className="loginLogo"
@@ -220,12 +211,14 @@ export default function Login() {
           />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", minWidth: 180 }}>
+        <div style={{ flex: 1 }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 180, justifyContent: "flex-end" }}>
           <img
-            src={disqueDenunciaLogo}
-            alt="Disque Denúncia"
+            src={civitasLogo}
+            alt="Civitas Rio"
             className="loginLogo"
-            style={{ height: 38, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
+            style={{ height: 34, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
       </header>
@@ -242,15 +235,17 @@ export default function Login() {
             padding: 18,
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
-            boxShadow: "0 18px 50px rgba(0,0,0,0.45)",
-            color: "#f5f5f5",
+            boxShadow: "0 18px 50px rgba(56, 56, 56, 0.6)",
+            color: "#ffffff",
             backdropFilter: "blur(18px) saturate(160%)",
           }}
         >
-          <div style={{ marginBottom: 18, textAlign: "center" }}>
-            <h2 className="loginTitle" style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>
-              CIVITAS Map
-            </h2>
+          <div style={{ marginBottom: 38, textAlign: "center" }}>
+            <img
+              src={civitasMapLogo}
+              alt="CIVITAS Map"
+              style={{ height: 50, width: "auto", margin: "0 auto 6px", display: "block"}}
+            />
             <p style={{ margin: "6px 0 0", opacity: 0.7, fontSize: 13 }}>
               
             </p>
@@ -333,7 +328,8 @@ export default function Login() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full border border-white/30 bg-white/20 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-white/30 hover:text-white"
+              className="w-full border border-white/30 bg-white/20 text-black shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-white/30 hover:text-black"
+              style={{ color: "#000" }}
             >
               {loading ? "Entrando..." : "Login"}
             </Button>

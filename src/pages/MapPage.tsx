@@ -1,138 +1,30 @@
 // src/pages/MapPage.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
-import type { FeatureCollection, Feature, Point } from "geojson";
+import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useAuth } from "../app/auth";
-
-import prefeituraLogo from "@/assets/prefeitura_icon.png";
+import { fetchJson, inputStyle } from "./map/shared";
+import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
+import "./map/map.css";
+import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
 import radarIcon from "@/assets/radar-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
 import civitasLogo from "@/assets/civitas_icon.png";
+import { AdminUsersPanel } from "./map/AdminUsersPanel";
+import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
+import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
+import { AdminLogsPanel } from "./map/AdminLogsPanel";
 
-type Camera = {
-  id?: string;
-  name: string;
-  code: string;
-  lat: number;
-  lng: number;
-  address: string;
-  city: string;
-  uf: string;
-  stream_url?: string;
-  is_active: boolean;
-};
-
-type CameraIntel = {
-  id?: string;
-  ip?: string | null;
-  code: string;
-  name: string;
-  lat: number;
-  lng: number;
-  direction?: string | null;
-  is_active?: boolean;
-  source_file?: string | null;
-  last_seen_at?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
-type CameraLpr = {
-  id?: string;
-  ip?: string | null;
-  code: string;
-  name: string;
-  lat: number;
-  lng: number;
-  direction?: string | null;
-  is_active?: boolean;
-  source_file?: string | null;
-  last_seen_at?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
-type Radar = {
-  id?: string;
-  codcet: string;
-
-  lat?: number | null;
-  lng?: number | null;
-
-  empresa?: string | null;
-  bairro?: string | null;
-  logradouro?: string | null;
-  localidade?: string | null;
-  sentido?: string | null;
-
-  velofisc?: number | null;
-  numero_equipamento?: string | null;
-
-  status?: string | null;
-  is_active?: boolean;
-
-  updated_at?: string | null;
-  data_atualizacao?: string | null;
-};
 
 type TabKey = "map" | "profile" | "admin";
 type PanelKey = TabKey | null;
 
 type AdminTab = "users" | "logs" | "cameras" | "radares";
 
-type Me = {
-  id: string;
-  email: string;
-  full_name: string;
-  role: string;
-  is_active: boolean;
-  expires_at?: string | null;
-  last_login_at?: string | null;
-};
-
-type AdminUser = {
-  id: string;
-  email: string;
-  full_name?: string | null;
-  role: string;
-  cpf?: string | null;
-  birth_date?: string | null;
-  matricula?: string | null;
-  unidade?: string | null;
-  orgao?: string | null;
-  is_active: boolean;
-  created_at?: string;
-  expires_at?: string | null;
-  last_login_at?: string | null;
-};
-
-type AdminLog = {
-  id: string;
-  created_at: string;
-  user_id?: string | null;
-  user_email?: string | null;
-  user_name?: string | null;
-
-  action: string;
-  entity_type?: string | null;
-  entity_id?: string | null;
-
-  meta?: any;
-  ip?: string | null;
-  user_agent?: string | null;
-
-  message: string;
-  target?: {
-    email?: string;
-    name?: string;
-    code?: string;
-    codcet?: string;
-  } | null;
-};
 
 const API_BASE =
   (import.meta as any).env?.VITE_API_BASE_URL?.toString() || "http://localhost:8000";
@@ -142,13 +34,13 @@ const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN?.toString() || 
 // só dark streets
 const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11" as const;
 const PAGE_SIZE = 50;
-const ADMIN_PAGE_SIZE = 50;
 
 // IDs fixos
 const SOURCES = {
   pois: "src-pois",
   gps: "src-gps",
   search: "src-search",
+  bairros: "src-bairros",
 } as const;
 
 const LAYERS = {
@@ -161,6 +53,10 @@ const LAYERS = {
   gps_point: "lyr-gps-point",
   gps_accuracy: "lyr-gps-accuracy",
   search_pin: "lyr-search-pin",
+  bairros_fill: "lyr-bairros-fill",
+  bairros_line: "lyr-bairros-line",
+  bairros_selected_fill: "lyr-bairros-selected-fill",
+  bairros_selected_line: "lyr-bairros-selected-line",
 } as const;
 
 const IMAGES = {
@@ -171,433 +67,9 @@ const IMAGES = {
   search_pin: "search_pin_icon",
 } as const;
 
-// ✅ CSS INLINE (pra você NÃO quebrar com crase de novo)
-const INLINE_CSS = `
-  .glass {
-    background: rgba(255,255,255,0.70);
-    border: 1px solid rgba(0,0,0,0.10);
-    box-shadow: 0 18px 50px rgba(0,0,0,0.15);
-    backdrop-filter: blur(14px) saturate(180%);
-    -webkit-backdrop-filter: blur(14px) saturate(180%);
-    border-radius: 18px;
-  }
-  .glassStrong {
-    background: rgba(255,255,255,0.82);
-    border: 1px solid rgba(0,0,0,0.10);
-    box-shadow: 0 18px 60px rgba(0,0,0,0.18);
-    backdrop-filter: blur(18px) saturate(180%);
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    border-radius: 18px;
-  }
-  .btnGhost {
-    appearance: none;
-    border: 1px solid rgba(0,0,0,0.12);
-    background: rgba(255,255,255,0.65);
-    color: rgba(0,0,0,0.85);
-    padding: 8px 10px;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: transform .12s ease, background .12s ease;
-    font-weight: 900;
-    font-size: 13px;
-  }
-  .btnGhost:hover { background: rgba(255,255,255,0.85); transform: translateY(-1px); }
-  .btnGhost:active { transform: translateY(0px); }
-
-  .selectWrap {
-    position: relative;
-    width: 100%;
-  }
-
-  .customSelect {
-    position: relative;
-    width: 100%;
-  }
-  .customSelectBtn {
-    appearance: none;
-    width: 100%;
-    padding: 10px 36px 10px 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(0,0,0,0.10);
-    outline: none;
-    background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,245,245,0.92));
-    color: rgba(0,0,0,0.88);
-    font-weight: 800;
-    font-family: inherit;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    cursor: pointer;
-  }
-  .customSelectBtn:focus {
-    border-color: rgba(0,0,0,0.20);
-    box-shadow: 0 8px 22px rgba(0,0,0,0.12);
-  }
-  .customSelectChevron {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid rgba(0,0,0,0.55);
-    transform: translateY(-30%);
-    pointer-events: none;
-  }
-  .customSelectMenu {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% + 6px);
-    background: rgba(255,255,255,0.98);
-    border: 1px solid rgba(0,0,0,0.10);
-    border-radius: 14px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.18);
-    padding: 6px;
-    z-index: 20;
-    display: grid;
-    gap: 4px;
-  }
-  .customSelectItem {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    text-align: left;
-    padding: 8px 10px;
-    border-radius: 10px;
-    font-weight: 800;
-    font-family: inherit;
-    color: rgba(0,0,0,0.82);
-    cursor: pointer;
-  }
-  .customSelectItem:hover {
-    background: rgba(0,0,0,0.06);
-  }
-  .customSelectItemActive {
-    background: rgba(0,0,0,0.08);
-    color: rgba(0,0,0,0.95);
-  }
-
-  .tabBtn {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: rgba(0,0,0,0.80);
-    padding: 10px 12px;
-    border-radius: 12px;
-    cursor: pointer;
-    font-weight: 900;
-    font-size: 13px;
-  }
-  .tabBtnActive {
-    background: rgba(0,0,0,0.06);
-    border: 1px solid rgba(0,0,0,0.10);
-    color: rgba(0,0,0,0.92);
-  }
-  .subTab {
-    appearance: none;
-    border: 1px solid rgba(0,0,0,0.10);
-    background: rgba(255,255,255,0.70);
-    color: rgba(0,0,0,0.85);
-    padding: 8px 10px;
-    border-radius: 12px;
-    cursor: pointer;
-    font-weight: 900;
-    font-size: 12px;
-  }
-  .subTabActive {
-    background: rgba(0,0,0,0.86);
-    color: white;
-    border: 1px solid rgba(0,0,0,0.12);
-  }
-  .listItem {
-    border: 1px solid rgba(0,0,0,0.08);
-    background: rgba(255,255,255,0.88);
-    border-radius: 14px;
-    padding: 10px 12px;
-    cursor: pointer;
-    transition: transform .12s ease, background .12s ease;
-    color: rgba(0,0,0,0.88);
-  }
-  .listItem:hover { background: rgba(255,255,255,0.98); transform: translateY(-1px); }
-
-  .panelCard{
-    background: rgba(255,255,255,0.92);
-    border: 1px solid rgba(0,0,0,0.08);
-    box-shadow: 0 22px 60px rgba(0,0,0,0.22);
-    border-radius: 18px;
-    backdrop-filter: blur(16px) saturate(160%);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
-  }
-  .panelHeader{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    padding-bottom:8px;
-    border-bottom: 1px solid rgba(0,0,0,0.06);
-  }
-  .panelTitle{
-    font-weight: 900;
-    font-size: 14px;
-  }
-  .panelCount{
-    font-size: 12px;
-    color: rgba(0,0,0,0.55);
-    font-weight: 700;
-  }
-  .panelTabs{
-    display:flex;
-    gap:6px;
-    flex-wrap:wrap;
-  }
-  .panelSearch{
-    display:flex;
-    gap:10px;
-    margin: 10px 0 12px;
-  }
-
-  .muted { opacity: .75; }
-  .title { font-weight: 900; letter-spacing: -0.02em; color: rgba(0,0,0,0.92); }
-  .kbd {
-    padding: 2px 7px;
-    border-radius: 8px;
-    border: 1px solid rgba(0,0,0,0.12);
-    background: rgba(255,255,255,0.70);
-    font-size: 12px;
-    font-weight: 900;
-    opacity: .95;
-    color: rgba(0,0,0,0.85);
-  }
-  .desktopPanels { display: block; }
-  .mobileBar { display: none; }
-
-  @media (max-width: 860px) {
-    .desktopPanels { display: none !important; }
-    .mobileBar { display: flex !important; }
-    .mobileDrawer {
-      position: fixed;
-      left: 12px;
-      right: 12px;
-      bottom: 12px;
-      max-height: 72vh;
-      overflow: auto;
-      transform: translateY(0);
-      transition: transform .18s ease;
-      z-index: 20;
-    }
-    .tabBtn {
-      padding: 8px 10px;
-      font-size: 12px;
-    }
-    .subTab {
-      padding: 7px 9px;
-      font-size: 11px;
-    }
-    .adminGrid2 { grid-template-columns: 1fr !important; }
-    .adminRow { flex-wrap: wrap; }
-    .adminRowBtn { width: 100%; }
-    .adminCard { max-width: 100%; overflow: hidden; }
-    .adminLabelWrap { flex-wrap: wrap; line-height: 1.2; }
-    .dockWrap {
-      position: fixed;
-      top: auto;
-      right: 12px;
-      bottom: 72px;
-    }
-    .dockHandle {
-      height: 32px;
-      padding: 0 10px;
-      font-size: 11px;
-      border-radius: 999px;
-    }
-    .dock {
-      padding: 10px;
-      gap: 6px;
-      min-width: 150px;
-      border-radius: 16px;
-    }
-    .dockTitle { font-size: 11px; }
-    .dockChip { padding: 7px 9px; font-size: 12px; }
-    .dockFab { width: 40px; height: 40px; font-size: 16px; }
-    .menuOpen .dockWrap { display: none; }
-  }
-
-  .mapboxgl-map { position: absolute; inset: 0; }
-
-  .dockWrap{
-    position:absolute;
-    top:96px;
-    right:16px;
-    z-index:26;
-    display:flex;
-    align-items:flex-start;
-    gap:10px;
-  }
-  .dockHandle{
-    height:36px;
-    padding:0 12px;
-    border-radius:999px;
-    background: rgba(255,255,255,0.92);
-    border: 1px solid rgba(0,0,0,0.10);
-    box-shadow: 0 12px 30px rgba(0,0,0,0.20);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    user-select:none;
-    font-weight:900;
-    font-size:12px;
-    color: rgba(0,0,0,0.78);
-  }
-  .dock{
-    padding:12px;
-    border-radius:18px;
-    background: rgba(255,255,255,0.96);
-    border: 1px solid rgba(0,0,0,0.10);
-    box-shadow: 0 18px 50px rgba(0,0,0,0.22);
-    backdrop-filter: blur(16px) saturate(200%);
-    -webkit-backdrop-filter: blur(16px) saturate(200%);
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-    min-width: 180px;
-  }
-  .dockTitle{
-    font-size:12px;
-    font-weight:900;
-    color: rgba(0,0,0,0.72);
-    letter-spacing: .02em;
-    text-transform: uppercase;
-    margin-bottom:4px;
-  }
-  .dockChip{
-    width:100%;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:10px;
-    padding:8px 10px;
-    border-radius:999px;
-    border: 1px solid rgba(0,0,0,0.08);
-    background: rgba(0,0,0,0.04);
-    cursor:pointer;
-    font-weight:900;
-    color: rgba(0,0,0,0.82);
-    transition: transform .12s ease, background .12s ease, border-color .12s ease;
-  }
-  .dockChip:hover{ transform: translateY(-1px); background: rgba(0,0,0,0.06); }
-  .dockChipOn{
-    background: rgba(0,0,0,0.10);
-    border-color: rgba(0,0,0,0.14);
-  }
-  .dockChipDisabled{
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-  .chipLeft{
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
-  .chipIcon{
-    width:22px;
-    height:22px;
-    border-radius:50%;
-    background: rgba(0,0,0,0.10);
-    display:grid;
-    place-items:center;
-    font-size:13px;
-  }
-  .chipDot{
-    width:8px;
-    height:8px;
-    border-radius:999px;
-    box-shadow: 0 6px 14px rgba(0,0,0,.18);
-  }
-  .chipState{
-    font-size:11px;
-    font-weight:900;
-    color: rgba(0,0,0,0.65);
-  }
-  .dockDivider{
-    height:1px;
-    background: rgba(0,0,0,0.08);
-    margin:4px 0;
-  }
-  .dockFab{
-    width:44px;
-    height:44px;
-    border-radius:999px;
-    border: 1px solid rgba(0,0,0,0.14);
-    background: linear-gradient(180deg, rgba(20,20,20,0.98), rgba(0,0,0,0.92));
-    color: #fff;
-    display:grid;
-    place-items:center;
-    cursor:pointer;
-    box-shadow: 0 14px 34px rgba(0,0,0,0.28);
-    align-self:flex-end;
-    transition: transform .12s ease, filter .12s ease;
-    font-weight: 900;
-    font-size: 18px;
-  }
-  .dockFab:hover{ transform: translateY(-1px); filter: brightness(1.05); }
-  .dockFab:active{ transform: translateY(0px) scale(0.98); }
-  .dockNote{
-    font-size:11px;
-    color: rgba(0,0,0,0.65);
-    margin-top:4px;
-  }
-`;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-async function fetchJson<T>(url: string, opts: RequestInit = {}) {
-  const res = await fetch(url, opts);
-  const text = await res.text().catch(() => "");
-  let data: any = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
-  if (!res.ok) {
-    if (res.status === 401) {
-      localStorage.setItem(
-        "auth_toast",
-        "Sua sessão expirou. Faça login novamente para continuar."
-      );
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("user_role");
-      try {
-        window.location.href = "/login";
-      } catch {}
-    }
-    const msg =
-      typeof data === "string"
-        ? data
-        : data?.detail || data?.message || res.statusText || "Erro";
-    throw new Error(`${res.status} - ${msg}`);
-  }
-  return data as T;
-}
-
-function inputStyle(): React.CSSProperties {
-  return {
-    width: "100%",
-    padding: "10px 12px",
-    borderRadius: 14,
-    border: "1px solid rgba(0,0,0,0.10)",
-    outline: "none",
-    background: "rgba(255,255,255,0.95)",
-    color: "rgba(0,0,0,0.88)",
-  };
 }
 
 function escapeHtml(s: string) {
@@ -619,6 +91,73 @@ function loadImagePromise(map: mapboxgl.Map, url: string) {
       resolve(image as any);
     });
   });
+}
+
+type BairrosFeature = Feature<Polygon | MultiPolygon, { NOME?: string } & Record<string, any>>;
+
+function extendBboxFromCoords(coords: any, bbox: { minX: number; minY: number; maxX: number; maxY: number }) {
+  if (!coords) return;
+  if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+    const x = coords[0];
+    const y = coords[1];
+    if (x < bbox.minX) bbox.minX = x;
+    if (y < bbox.minY) bbox.minY = y;
+    if (x > bbox.maxX) bbox.maxX = x;
+    if (y > bbox.maxY) bbox.maxY = y;
+    return;
+  }
+  for (const c of coords) extendBboxFromCoords(c, bbox);
+}
+
+function getGeometryBbox(geom: Polygon | MultiPolygon) {
+  const bbox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  extendBboxFromCoords(geom.coordinates, bbox);
+  if (!Number.isFinite(bbox.minX) || !Number.isFinite(bbox.minY)) return null;
+  return bbox;
+}
+
+function pointInRing(point: [number, number], ring: number[][]) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+
+    const intersect = yi > point[1] !== yj > point[1] && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi + 0.0) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygon(point: [number, number], polygon: Polygon) {
+  const rings = polygon.coordinates;
+  if (!rings.length) return false;
+  if (!pointInRing(point, rings[0])) return false;
+  for (let i = 1; i < rings.length; i++) {
+    if (pointInRing(point, rings[i])) return false;
+  }
+  return true;
+}
+
+function pointInMultiPolygon(point: [number, number], multi: MultiPolygon) {
+  for (const poly of multi.coordinates) {
+    if (!poly.length) continue;
+    if (!pointInRing(point, poly[0])) continue;
+    let inHole = false;
+    for (let i = 1; i < poly.length; i++) {
+      if (pointInRing(point, poly[i])) {
+        inHole = true;
+        break;
+      }
+    }
+    if (!inHole) return true;
+  }
+  return false;
+}
+
+function pointInGeometry(point: [number, number], geom: Polygon | MultiPolygon) {
+  return geom.type === "Polygon" ? pointInPolygon(point, geom) : pointInMultiPolygon(point, geom);
 }
 
 async function addImageOnce(map: mapboxgl.Map, id: string, url: string) {
@@ -758,6 +297,13 @@ export default function MapPage() {
   const [showCamerasIntel, setShowCamerasIntel] = useState(true);
   const [showCamerasLpr, setShowCamerasLpr] = useState(true);
   const [showRadares, setShowRadares] = useState(true);
+  const [showBairros, setShowBairros] = useState(false);
+
+  const [loadingBairros, setLoadingBairros] = useState(false);
+  const [bairrosGeo, setBairrosGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const [bairrosErr, setBairrosErr] = useState<string | null>(null);
+  const [selectedBairro, setSelectedBairro] = useState<string>("");
+  const [bairroQuery, setBairroQuery] = useState<string>("");
 
   const [listMode, setListMode] = useState<"cameras" | "inteligentes" | "lpr" | "radares">("cameras");
   const [query, setQuery] = useState("");
@@ -804,6 +350,7 @@ export default function MapPage() {
   }, [gpsOn]);
 
   const [dockOpen, setDockOpen] = useState(true);
+  const DOCK_AUTOHIDE_MS = 0;
   const dockTimerRef = useRef<number | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -813,9 +360,10 @@ export default function MapPage() {
 
   function bumpDockAutoHide() {
     if (dockTimerRef.current) window.clearTimeout(dockTimerRef.current);
+    if (DOCK_AUTOHIDE_MS <= 0) return;
     dockTimerRef.current = window.setTimeout(() => {
       setDockOpen(false);
-    }, 2600);
+    }, DOCK_AUTOHIDE_MS);
   }
 
   useEffect(() => {
@@ -871,6 +419,13 @@ export default function MapPage() {
 
     if (!map.getSource(SOURCES.search)) {
       map.addSource(SOURCES.search, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.bairros)) {
+      map.addSource(SOURCES.bairros, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
@@ -1023,6 +578,76 @@ export default function MapPage() {
         },
       });
     }
+
+    if (!map.getLayer(LAYERS.bairros_fill)) {
+      map.addLayer({
+        id: LAYERS.bairros_fill,
+        type: "fill",
+        source: SOURCES.bairros,
+        paint: {
+          "fill-color": "#22c55e",
+          "fill-opacity": 0,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.bairros_line)) {
+      map.addLayer({
+        id: LAYERS.bairros_line,
+        type: "line",
+        source: SOURCES.bairros,
+        paint: {
+          "line-color": "#9d18e1",
+          "line-width": 2.5,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.bairros_selected_fill)) {
+      map.addLayer({
+        id: LAYERS.bairros_selected_fill,
+        type: "fill",
+        source: SOURCES.bairros,
+        filter: ["==", ["get", "NOME"], ""],
+        paint: {
+          "fill-color": "#22c55e",
+          "fill-opacity": 0.35,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.bairros_selected_line)) {
+      map.addLayer({
+        id: LAYERS.bairros_selected_line,
+        type: "line",
+        source: SOURCES.bairros,
+        filter: ["==", ["get", "NOME"], ""],
+        paint: {
+          "line-color": "#9d18e1",
+          "line-width": 3.5,
+        },
+      });
+    }
+
+    // Garante que pontos (câmeras/radares) fiquem acima dos bairros
+    const aboveBairros = [
+      LAYERS.clusters,
+      LAYERS.cluster_count,
+      LAYERS.cameras_points,
+      LAYERS.cameras_intel_points,
+      LAYERS.cameras_lpr_points,
+      LAYERS.radares_points,
+      LAYERS.search_pin,
+      LAYERS.gps_accuracy,
+      LAYERS.gps_point,
+    ];
+    for (const id of aboveBairros) {
+      if (map.getLayer(id)) {
+        try {
+          map.moveLayer(id);
+        } catch {}
+      }
+    }
   }
 
   function updatePoisData(map: mapboxgl.Map, geo: FeatureCollection<Point, any>) {
@@ -1048,6 +673,33 @@ export default function MapPage() {
     } else {
       searchMarkerRef.current.setLngLat([pin.lng, pin.lat]);
     }
+  }
+
+  function updateBairrosData(
+    map: mapboxgl.Map,
+    data: FeatureCollection<Polygon | MultiPolygon, any>
+  ) {
+    const src: any = map.getSource(SOURCES.bairros);
+    if (src && typeof src.setData === "function") src.setData(data);
+  }
+
+  function applyBairrosVisibility(map: mapboxgl.Map, visible: boolean, selected: string) {
+    const baseVisibility = visible ? "visible" : "none";
+    if (map.getLayer(LAYERS.bairros_fill)) map.setLayoutProperty(LAYERS.bairros_fill, "visibility", baseVisibility);
+    if (map.getLayer(LAYERS.bairros_line)) map.setLayoutProperty(LAYERS.bairros_line, "visibility", baseVisibility);
+
+    const hasSelected = visible && !!selected;
+    const selectedVisibility = hasSelected ? "visible" : "none";
+    if (map.getLayer(LAYERS.bairros_selected_fill)) {
+      map.setLayoutProperty(LAYERS.bairros_selected_fill, "visibility", selectedVisibility);
+    }
+    if (map.getLayer(LAYERS.bairros_selected_line)) {
+      map.setLayoutProperty(LAYERS.bairros_selected_line, "visibility", selectedVisibility);
+    }
+
+    const filter = selected ? ["==", ["get", "NOME"], selected] : ["==", ["get", "NOME"], ""];
+    if (map.getLayer(LAYERS.bairros_selected_fill)) map.setFilter(LAYERS.bairros_selected_fill, filter as any);
+    if (map.getLayer(LAYERS.bairros_selected_line)) map.setFilter(LAYERS.bairros_selected_line, filter as any);
   }
 
   function metersToPixelsAtLat(meters: number, lat: number, zoom: number) {
@@ -1330,6 +982,42 @@ export default function MapPage() {
   }, [accessToken]);
 
   useEffect(() => {
+    let active = true;
+    async function loadBairros() {
+      setLoadingBairros(true);
+      setBairrosErr(null);
+
+      const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
+      const candidates = [
+        `${baseUrl}GeojsonBairros.json`,
+        "/GeojsonBairros.json",
+        "./GeojsonBairros.json",
+      ];
+
+      for (const url of candidates) {
+        try {
+          const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
+          if (!active) return;
+          setBairrosGeo(data);
+          setLoadingBairros(false);
+          return;
+        } catch (e) {
+          console.warn("Falha ao carregar bairros de", url, e);
+        }
+      }
+
+      if (!active) return;
+      setBairrosErr("Não foi possível carregar o GeoJSON dos bairros.");
+      setLoadingBairros(false);
+    }
+
+    loadBairros();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!mapContainerRef.current) return;
     if (!MAPBOX_TOKEN) return;
 
@@ -1378,6 +1066,10 @@ export default function MapPage() {
         showRadares
       );
       updatePoisData(map, poisGeoInit);
+      if (bairrosGeo) {
+        updateBairrosData(map, bairrosGeo);
+      }
+      applyBairrosVisibility(map, showBairros, selectedBairro);
       updateGpsData(map, gps, gpsOnRef.current);
       updateSearchPin(map, searchPin);
     });
@@ -1594,6 +1286,57 @@ export default function MapPage() {
     [cameras, camerasIntel, camerasLpr, radares, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
   );
 
+  const bairrosList = useMemo(() => {
+    if (!bairrosGeo?.features?.length) return [];
+    const names = new Set<string>();
+    for (const f of bairrosGeo.features as BairrosFeature[]) {
+      const nome = (f.properties?.NOME || "").trim();
+      if (nome) names.add(nome);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [bairrosGeo]);
+
+  const bairrosFiltered = useMemo(() => {
+    if (!bairroQuery) return bairrosList;
+    const q = bairroQuery.trim().toLowerCase();
+    if (!q) return bairrosList;
+    return bairrosList.filter((nome) => nome.toLowerCase().includes(q));
+  }, [bairrosList, bairroQuery]);
+
+  const selectedBairroFeature = useMemo(() => {
+    if (!selectedBairro || !bairrosGeo) return null;
+    return (bairrosGeo.features as BairrosFeature[]).find(
+      (f) => (f.properties?.NOME || "").trim() === selectedBairro
+    ) || null;
+  }, [bairrosGeo, selectedBairro]);
+
+  const selectedBairroStats = useMemo(() => {
+    if (!selectedBairroFeature?.geometry) return null;
+    const geom = selectedBairroFeature.geometry;
+    const bbox = getGeometryBbox(geom);
+    if (!bbox) return null;
+
+    const inBbox = (lng: number, lat: number) =>
+      lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
+
+    const countPoints = (points: Array<{ lng: number; lat: number }>) => {
+      let count = 0;
+      for (const p of points) {
+        if (!Number.isFinite(p.lng) || !Number.isFinite(p.lat)) continue;
+        if (!inBbox(p.lng, p.lat)) continue;
+        if (pointInGeometry([p.lng, p.lat], geom)) count++;
+      }
+      return count;
+    };
+
+    return {
+      cameras: countPoints(cameras),
+      inteligentes: countPoints(camerasIntel),
+      lpr: countPoints(camerasLpr),
+      radares: countPoints(radares),
+    };
+  }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -1607,12 +1350,76 @@ export default function MapPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (!bairrosGeo) return;
+
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updateBairrosData(map, bairrosGeo);
+      return;
+    }
+
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updateBairrosData(map, bairrosGeo);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bairrosGeo]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      applyBairrosVisibility(map, showBairros, selectedBairro);
+      return;
+    }
+
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      applyBairrosVisibility(map, showBairros, selectedBairro);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showBairros, selectedBairro]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
     if (!map.isStyleLoaded()) return;
 
     ensureSourcesAndLayers(map);
     updateGpsData(map, gps, gpsOn);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gps, gpsOn]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!selectedBairro || !bairrosGeo) return;
+
+    const feature = (bairrosGeo.features as BairrosFeature[]).find(
+      (f) => (f.properties?.NOME || "").trim() === selectedBairro
+    );
+    if (!feature || !feature.geometry) return;
+
+    const bbox = getGeometryBbox(feature.geometry);
+    if (!bbox) return;
+
+    map.fitBounds(
+      [
+        [bbox.minX, bbox.minY],
+        [bbox.maxX, bbox.maxY],
+      ],
+      { padding: 40, duration: 700, maxZoom: 14 }
+    );
+  }, [selectedBairro, bairrosGeo]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1658,9 +1465,42 @@ export default function MapPage() {
     setSearchQuery("");
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
 
-    const rjBbox = { west: -44.9, south: -24.5, east: -40.7, north: -20.7 };
-    function isInRJ(lat: number, lng: number) {
-      return lng >= rjBbox.west && lng <= rjBbox.east && lat >= rjBbox.south && lat <= rjBbox.north;
+    const rioPolygon: Array<[number, number]> = [
+      [-43.96293645275085, -22.666692475162534],
+      [-43.884929495808876, -22.718091155985434],
+      [-43.888946945991904, -22.926195556353818],
+      [-43.85791336804897, -23.065250194960612],
+      [-43.39949819817687, -23.13645724119617],
+      [-43.05720475179976, -23.03661712622869],
+      [-43.146005892019474, -22.905245763708123],
+      [-43.164977854649806, -22.772348252429836],
+      [-43.25074750522708, -22.67994636421203],
+      [-43.964442925943644, -22.665299931237172],
+      [-43.949320000203244, -22.67576140032547],
+    ];
+
+    const rioBbox = rioPolygon.reduce(
+      (acc, [lng, lat]) => ({
+        west: Math.min(acc.west, lng),
+        south: Math.min(acc.south, lat),
+        east: Math.max(acc.east, lng),
+        north: Math.max(acc.north, lat),
+      }),
+      { west: Infinity, south: Infinity, east: -Infinity, north: -Infinity }
+    );
+
+    function isInRio(lat: number, lng: number) {
+      // Ray-casting point in polygon
+      let inside = false;
+      for (let i = 0, j = rioPolygon.length - 1; i < rioPolygon.length; j = i++) {
+        const [xi, yi] = rioPolygon[i];
+        const [xj, yj] = rioPolygon[j];
+        const intersect =
+          yi > lat !== yj > lat &&
+          lng < ((xj - xi) * (lat - yi)) / (yj - yi + 0.0) + xi;
+        if (intersect) inside = !inside;
+      }
+      return inside;
     }
 
     const coordMatch = q.match(
@@ -1670,8 +1510,8 @@ export default function MapPage() {
       const lat = Number(coordMatch[1]);
       const lng = Number(coordMatch[2]);
       if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-        if (!isInRJ(lat, lng)) {
-          setSearchErr("Somente endereços/coords no RJ.");
+        if (!isInRio(lat, lng)) {
+          setSearchErr("Somente município do Rio de Janeiro.");
           return;
         }
         setSearchPin({ lng, lat });
@@ -1689,7 +1529,7 @@ export default function MapPage() {
     try {
       const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
         q
-      )}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=pt&country=BR&bbox=${rjBbox.west},${rjBbox.south},${rjBbox.east},${rjBbox.north}`;
+      )}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=pt&country=BR&bbox=${rioBbox.west},${rioBbox.south},${rioBbox.east},${rioBbox.north}`;
       const data = await fetchJson<any>(url);
       const f = data?.features?.[0];
       if (!f || !Array.isArray(f.center)) {
@@ -1701,8 +1541,8 @@ export default function MapPage() {
         setSearchErr("Resultado inválido.");
         return;
       }
-      if (!isInRJ(lat, lng)) {
-        setSearchErr("Somente endereços no RJ.");
+      if (!isInRio(lat, lng)) {
+        setSearchErr("Somente município do Rio de Janeiro.");
         return;
       }
       setSearchPin({ lng, lat });
@@ -1843,9 +1683,6 @@ export default function MapPage() {
       className={panelOpen || mobileMenuOpen ? "menuOpen" : undefined}
       style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden" }}
     >
-      {/* ✅ CSS CORRETO */}
-      <style>{INLINE_CSS}</style>
-
       <div
         ref={mapContainerRef}
         onClick={() => {
@@ -1982,6 +1819,111 @@ export default function MapPage() {
             </button>
 
             <button
+              className={`dockChip ${showBairros ? "dockChipOn" : ""}`}
+              onClick={() => {
+                setShowBairros((v) => !v);
+                bumpDockAutoHide();
+              }}
+              title={showBairros ? "Bairros ON" : "Bairros OFF"}
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 12 }}>BA</span>
+                <span>Bairros</span>
+                <span className="chipDot" style={{ background: showBairros ? "#22c55e" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{showBairros ? "ON" : "OFF"}</span>
+            </button>
+
+            {showBairros && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(0,0,0,0.65)" }}>
+                  Buscar bairro
+                </label>
+                <input
+                  value={bairroQuery}
+                  onChange={(e) => setBairroQuery(e.target.value)}
+                  placeholder="Digite para buscar..."
+                  style={{ ...inputStyle(), padding: "8px 10px", borderRadius: 12 }}
+                />
+                <div
+                  style={{
+                    border: "1px solid rgba(0,0,0,0.08)",
+                    borderRadius: 12,
+                    background: "rgba(255,255,255,0.85)",
+                    maxHeight: 180,
+                    overflowY: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    padding: 6,
+                  }}
+                >
+                  <button
+                    className="btnGhost"
+                    onClick={() => {
+                      setSelectedBairro("");
+                    }}
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      background: selectedBairro ? "transparent" : "rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    Todos os bairros
+                  </button>
+                  {bairrosFiltered.length === 0 && (
+                    <div className="dockNote" style={{ padding: "4px 6px" }}>
+                      Nenhum bairro encontrado
+                    </div>
+                  )}
+                  {bairrosFiltered.map((nome) => (
+                    <button
+                      key={nome}
+                      className="btnGhost"
+                      onClick={() => {
+                        setSelectedBairro(nome);
+                        setBairroQuery("");
+                      }}
+                      style={{
+                        textAlign: "left",
+                        padding: "6px 8px",
+                        borderRadius: 10,
+                        fontWeight: 800,
+                        background: selectedBairro === nome ? "rgba(0,0,0,0.08)" : "transparent",
+                      }}
+                    >
+                      {nome}
+                    </button>
+                  ))}
+                </div>
+                {bairrosGeo?.features?.length ? (
+                  <div className="dockNote">Bairros carregados: {bairrosGeo.features.length}</div>
+                ) : null}
+                {loadingBairros && <div className="dockNote">Carregando bairros...</div>}
+                {bairrosErr && <div className="dockNote">{bairrosErr}</div>}
+                {selectedBairro && selectedBairroStats && (
+                  <div className="dockNote" style={{ lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 13 }}>
+                      <strong>
+                        {selectedBairro} - Total:{" "}
+                        {selectedBairroStats.cameras +
+                          selectedBairroStats.inteligentes +
+                          selectedBairroStats.lpr +
+                          selectedBairroStats.radares}
+                      </strong>
+                    </div>
+                    <div>Câmeras: {selectedBairroStats.cameras}</div>
+                    <div>Inteligentes: {selectedBairroStats.inteligentes}</div>
+                    <div>LPR: {selectedBairroStats.lpr}</div>
+                    <div>Radares: {selectedBairroStats.radares}</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
               className={`dockChip ${gpsOn ? "dockChipOn" : ""} ${gpsErr ? "dockChipDisabled" : ""}`}
               onClick={() => {
                 if (gpsErr) return;
@@ -2053,7 +1995,7 @@ export default function MapPage() {
             minWidth: 150,
           }}
         >
-          <img src={civitasLogo} alt="Civitas" style={{ height: 32, width: 120 }} />
+          <img src={civitasLogo} alt="Civitas" style={{ height: 32, width: 145 }} />
         </div>
 
         <div
@@ -2102,7 +2044,7 @@ export default function MapPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSearch();
               }}
-              placeholder="Buscar rua ou coordenadas"
+              placeholder="Buscar rua ou coordenadas no RJ"
               style={{ ...inputStyle(), maxWidth: 320, padding: "8px 10px" }}
             />
             <button className="btnGhost" onClick={handleSearch} title="Buscar">
@@ -2616,7 +2558,7 @@ export default function MapPage() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={civitasLogo} alt="Civitas" style={{ height: 34, width: 120 }} />
+            <img src={civitasLogo} alt="Civitas" style={{ height: 34, width: 145 }} />
           </div>
 
           <div style={{ position: "relative" }}>
@@ -3157,7 +3099,7 @@ export default function MapPage() {
                 setMobileSearchOpen(false);
               }
             }}
-            placeholder="Buscar rua ou coordenadas"
+            placeholder="Buscar rua ou coordenadas no RJ"
             style={{ ...inputStyle(), flex: 1 }}
           />
           <button
@@ -3199,1657 +3141,6 @@ export default function MapPage() {
           {searchErr}
         </div>
       )}
-    </div>
-  );
-}
-
-/* ===========================
-   ADMIN: USERS CRUD (inline)
-=========================== */
-function AdminUsersPanel({
-  apiBase,
-  token,
-  isMobile,
-}: {
-  apiBase: string;
-  token: string;
-  isMobile: boolean;
-}) {
-  const USERS_URL = `${apiBase}/api/v1/users`;
-
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [items, setItems] = useState<AdminUser[]>([]);
-
-  const [id, setId] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [matricula, setMatricula] = useState("");
-  const [unidade, setUnidade] = useState("");
-  const [orgao, setOrgao] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState("user");
-  const [isActive, setIsActive] = useState(true);
-  const [roleOpen, setRoleOpen] = useState(false);
-  const roleWrapRef = useRef<HTMLDivElement | null>(null);
-  const [page, setPage] = useState(1);
-  const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
-
-  function resetForm() {
-    setId(null);
-    setEmail("");
-    setFullName("");
-    setCpf("");
-    setBirthDate("");
-    setMatricula("");
-    setUnidade("");
-    setOrgao("");
-    setPassword("");
-    setRole("user");
-    setIsActive(true);
-  }
-
-  async function load() {
-    setErr(null);
-    setLoading(true);
-    try {
-      const data = await fetchJson<any>(USERS_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const list: AdminUser[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-
-      setItems(list);
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao carregar usuários");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-    setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length]);
-
-  useEffect(() => {
-    function handleDocClick(e: MouseEvent) {
-      const el = roleWrapRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) setRoleOpen(false);
-    }
-
-    document.addEventListener("mousedown", handleDocClick);
-    return () => document.removeEventListener("mousedown", handleDocClick);
-  }, []);
-
-  function pick(u: AdminUser) {
-    setId(u.id);
-    setEmail(u.email || "");
-    setFullName(u.full_name || "");
-    setCpf(u.cpf || "");
-    setBirthDate(u.birth_date || "");
-    setMatricula(u.matricula || "");
-    setUnidade(u.unidade || "");
-    setOrgao(u.orgao || "");
-    setPassword("");
-    setRole((u.role || "user").toLowerCase());
-    setIsActive(!!u.is_active);
-  }
-
-  function normalizeCpf(v: string) {
-    return v.replace(/\D/g, "").slice(0, 11);
-  }
-
-  async function save() {
-    setErr(null);
-
-    const emailV = email.trim();
-    const fullNameV = fullName.trim();
-    const roleV = role.trim().toLowerCase();
-    const cpfV = normalizeCpf(cpf.trim());
-    const birthDateV = birthDate.trim();
-    const matriculaV = matricula.trim();
-    const unidadeV = unidade.trim();
-    const orgaoV = orgao.trim();
-
-    if (!emailV) return setErr("Email é obrigatório.");
-    if (!fullNameV || fullNameV.length < 3) return setErr("Nome completo inválido.");
-    if (!roleV) return setErr("Role é obrigatório (admin/user).");
-    if (!/^(admin|user)$/.test(roleV)) return setErr("Role deve ser admin ou user.");
-    if (!matriculaV) return setErr("Matrícula é obrigatória.");
-    if (!orgaoV) return setErr("Órgão é obrigatório.");
-
-    if (!id) {
-      if (cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
-      if (!birthDateV) return setErr("Data de nascimento é obrigatória.");
-      if (!password || password.length < 8) return setErr("Senha mínima: 8 caracteres.");
-    }
-
-    try {
-      if (!id) {
-        await fetchJson(USERS_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            email: emailV,
-            full_name: fullNameV,
-            cpf: cpfV,
-            birth_date: birthDateV,
-            matricula: matriculaV,
-            unidade: unidadeV || null,
-            orgao: orgaoV,
-            password,
-            role: roleV,
-          }),
-        });
-      } else {
-        const payload: any = { is_active: isActive };
-        if (emailV) payload.email = emailV;
-        if (fullNameV) payload.full_name = fullNameV;
-        if (roleV) payload.role = roleV;
-        if (cpfV) payload.cpf = cpfV;
-        if (birthDateV) payload.birth_date = birthDateV;
-        if (matriculaV) payload.matricula = matriculaV;
-        payload.unidade = unidadeV || null;
-        if (orgaoV) payload.orgao = orgaoV;
-
-        await fetchJson(`${USERS_URL}/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
-      }
-
-      resetForm();
-      load();
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao salvar usuário");
-    }
-  }
-
-  async function deactivate(userId: string) {
-    const ok = confirm("Desativar usuário? Ele não entra mais no sistema.");
-    if (!ok) return;
-    setErr(null);
-    try {
-      await fetchJson(`${USERS_URL}/${userId}/deactivate`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (id === userId) resetForm();
-      load();
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao desativar usuário");
-    }
-  }
-
-  async function reactivate(userId: string) {
-    const ok = confirm("Reativar usuário?");
-    if (!ok) return;
-    setErr(null);
-    try {
-      await fetchJson(`${USERS_URL}/${userId}/reactivate`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      load();
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao reativar usuário");
-    }
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
-        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>
-          {id ? "Editar usuário" : "Criar usuário"}
-        </div>
-
-        <div className="adminGrid2" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" style={inputStyle()} />
-          <input
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="nome completo"
-            style={inputStyle()}
-          />
-
-          <input
-            value={cpf}
-            onChange={(e) => setCpf(normalizeCpf(e.target.value))}
-            placeholder="cpf (11 dígitos)"
-            style={inputStyle()}
-          />
-          <input
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-            type="date"
-            placeholder="data de nascimento"
-            style={inputStyle()}
-          />
-
-          <input
-            value={matricula}
-            onChange={(e) => setMatricula(e.target.value)}
-            placeholder="matrícula"
-            style={inputStyle()}
-          />
-          <input
-            value={unidade}
-            onChange={(e) => setUnidade(e.target.value)}
-            placeholder="unidade (opcional)"
-            style={inputStyle()}
-          />
-
-          <input
-            value={orgao}
-            onChange={(e) => setOrgao(e.target.value)}
-            placeholder="órgão"
-            style={inputStyle()}
-          />
-
-          <div className="customSelect" ref={roleWrapRef}>
-            <button type="button" className="customSelectBtn" onClick={() => setRoleOpen((v) => !v)}>
-              <span>{role === "admin" ? "Administrador" : "Usuário"}</span>
-              <span className="customSelectChevron" />
-            </button>
-            {roleOpen && (
-              <div className="customSelectMenu">
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "user" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("user");
-                    setRoleOpen(false);
-                  }}
-                >
-                  Usuário
-                </button>
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "admin" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("admin");
-                    setRoleOpen(false);
-                  }}
-                >
-                  Administrador
-                </button>
-              </div>
-            )}
-          </div>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={id ? "senha (só na criação)" : "senha (mín 8)"}
-            type="password"
-            disabled={!!id}
-            style={{
-              ...inputStyle(),
-              opacity: id ? 0.6 : 1,
-              cursor: id ? "not-allowed" : "text",
-            }}
-          />
-
-          <label
-            className="adminLabelWrap"
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.10)",
-              background: "rgba(255,255,255,0.95)",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.82)",
-              gridColumn: "1 / span 2",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              style={{ transform: "scale(1.1)" }}
-            />
-            Ativo
-          </label>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-          <button
-            onClick={save}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(0,0,0,0.86)",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 900,
-            }}
-          >
-            {id ? "Salvar alterações" : "Criar usuário"}
-          </button>
-
-          <button
-            onClick={resetForm}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
-              cursor: "pointer",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
-            }}
-          >
-            Limpar
-          </button>
-
-          <button
-            onClick={load}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
-              cursor: "pointer",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
-            }}
-          >
-            Recarregar
-          </button>
-        </div>
-
-        {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
-      </div>
-
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <div style={{ fontWeight: 900, fontSize: 13 }}>Usuários</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
-        </div>
-
-        <div
-          style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-          onScroll={(e) => {
-            if (!isMobile) return;
-            const el = e.currentTarget;
-            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-              setMobileCount((v) => v + ADMIN_PAGE_SIZE);
-            }
-          }}
-        >
-          {(isMobile ? items.slice(0, mobileCount) : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)).map(
-            (u) => (
-            <div
-              key={u.id}
-              className="adminRow"
-              style={{
-                border: "1px solid rgba(0,0,0,0.10)",
-                borderRadius: 14,
-                padding: 10,
-                background: "rgba(255,255,255,0.75)",
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontWeight: 900,
-                    fontSize: 13,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {u.email}{" "}
-                  <span style={{ opacity: 0.6, fontWeight: 800 }}>• {String(u.role).toUpperCase()}</span>
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  {u.full_name || "-"} • {u.is_active ? "ATIVO" : "INATIVO"}
-                  {u.cpf ? ` • CPF: ${u.cpf}` : ""}
-                  {u.matricula ? ` • Matrícula: ${u.matricula}` : ""}
-                  {u.unidade ? ` • Unidade: ${u.unidade}` : ""}
-                  {u.orgao ? ` • Órgão: ${u.orgao}` : ""}
-                </div>
-              </div>
-
-              <button
-                onClick={() => pick(u)}
-                className="adminRowBtn"
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  background: "rgba(255,255,255,0.90)",
-                  cursor: "pointer",
-                  fontWeight: 900,
-                }}
-              >
-                Editar
-              </button>
-
-              {u.is_active ? (
-                <button
-                  onClick={() => deactivate(u.id)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(0,0,0,0.86)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                  }}
-                >
-                  Desativar
-                </button>
-              ) : (
-                <button
-                  onClick={() => reactivate(u.id)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(34,197,94,.14)",
-                    color: "#15803d",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                  }}
-                >
-                  Reativar
-                </button>
-              )}
-            </div>
-          ))}
-
-          {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum usuário encontrado.</div>}
-        </div>
-
-        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-            <button
-              className="btnGhost"
-              onClick={() => setPage((v) => Math.max(1, v - 1))}
-              disabled={page <= 1}
-              style={{ opacity: page <= 1 ? 0.5 : 1 }}
-            >
-              Anterior
-            </button>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
-            </div>
-            <button
-              className="btnGhost"
-              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
-              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
-              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
-            >
-              Próxima
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ===========================
-   ADMIN: CAMERAS CRUD + SYNC
-=========================== */
-function AdminCamerasPanel({
-  apiBase,
-  token,
-  onSynced,
-  isMobile,
-}: {
-  apiBase: string;
-  token: string;
-  onSynced?: () => void;
-  isMobile: boolean;
-}) {
-  const CAMS_URL = `${apiBase}/api/v1/cameras`;
-  const SYNC_CAMERAS_URL = `${apiBase}/api/v1/sync/cameras`;
-  const SYNC_CIVITAS_URL = `${apiBase}/api/v1/sync/civitas`;
-  const CAMS_INTEL_URL = `${apiBase}/api/v1/cameras-inteligentes`;
-  const CAMS_LPR_URL = `${apiBase}/api/v1/cameras-lpr`;
-
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [items, setItems] = useState<Camera[]>([]);
-  const [intelLoading, setIntelLoading] = useState(false);
-  const [intelItems, setIntelItems] = useState<CameraIntel[]>([]);
-  const [lprLoading, setLprLoading] = useState(false);
-  const [lprItems, setLprItems] = useState<CameraLpr[]>([]);
-
-  const [deactivateMissing, setDeactivateMissing] = useState(true);
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [camTab, setCamTab] = useState<"cameras" | "civitas">("cameras");
-  const [civitasTab, setCivitasTab] = useState<"inteligentes" | "lpr">("inteligentes");
-  const [pageCams, setPageCams] = useState(1);
-  const [pageIntel, setPageIntel] = useState(1);
-  const [pageLpr, setPageLpr] = useState(1);
-  const [mobileCountCams, setMobileCountCams] = useState(ADMIN_PAGE_SIZE);
-  const [mobileCountIntel, setMobileCountIntel] = useState(ADMIN_PAGE_SIZE);
-  const [mobileCountLpr, setMobileCountLpr] = useState(ADMIN_PAGE_SIZE);
-
-  const [id, setId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [city, setCity] = useState("");
-  const [uf, setUf] = useState("");
-  const [address, setAddress] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
-  const [streamUrl, setStreamUrl] = useState("");
-  const [isActive, setIsActive] = useState(true);
-
-  function resetForm() {
-    setId(null);
-    setName("");
-    setCode("");
-    setCity("");
-    setUf("");
-    setAddress("");
-    setLat("");
-    setLng("");
-    setStreamUrl("");
-    setIsActive(true);
-  }
-
-  async function load() {
-    setErr(null);
-    setLoading(true);
-    try {
-      const data = await fetchJson<any>(CAMS_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const list: Camera[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-      setItems(list);
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao carregar câmeras");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadIntel() {
-    setIntelLoading(true);
-    try {
-      const data = await fetchJson<any>(CAMS_INTEL_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const list: CameraIntel[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-      const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
-      setIntelItems(normalized);
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao carregar câmeras inteligentes");
-    } finally {
-      setIntelLoading(false);
-    }
-  }
-
-  async function loadLpr() {
-    setLprLoading(true);
-    try {
-      const data = await fetchJson<any>(CAMS_LPR_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const list: CameraLpr[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-      const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
-      setLprItems(normalized);
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao carregar câmeras LPR");
-    } finally {
-      setLprLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (camTab !== "civitas") return;
-    if (civitasTab === "inteligentes") loadIntel();
-    if (civitasTab === "lpr") loadLpr();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camTab, civitasTab]);
-
-  useEffect(() => {
-    setPageCams(1);
-    setPageIntel(1);
-    setPageLpr(1);
-    setMobileCountCams(ADMIN_PAGE_SIZE);
-    setMobileCountIntel(ADMIN_PAGE_SIZE);
-    setMobileCountLpr(ADMIN_PAGE_SIZE);
-  }, [camTab, civitasTab, items.length, intelItems.length, lprItems.length]);
-
-  async function runSyncCameras() {
-    setSyncMsg(null);
-    setErr(null);
-
-    setSyncLoading(true);
-    try {
-      const resp = await fetchJson<any>(SYNC_CAMERAS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          deactivate_missing: !!deactivateMissing,
-        }),
-      });
-
-      setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
-          resp?.result?.deactivated ?? "-"
-        })`
-      );
-
-      await load();
-      onSynced?.();
-    } catch (e: any) {
-      setSyncMsg(null);
-      setErr(e?.message || "Erro no sync CÂMERAS");
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function runSyncCivitas() {
-    setSyncMsg(null);
-    setErr(null);
-
-    setSyncLoading(true);
-    try {
-      const resp = await fetchJson<any>(SYNC_CIVITAS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          deactivate_missing: !!deactivateMissing,
-        }),
-      });
-
-      setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
-          resp?.result?.deactivated ?? "-"
-        })`
-      );
-
-      if (civitasTab === "inteligentes") await loadIntel();
-      if (civitasTab === "lpr") await loadLpr();
-    } catch (e: any) {
-      setSyncMsg(null);
-      setErr(e?.message || "Erro no sync CÂMERAS CIVITAS");
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function save() {
-    setErr(null);
-    if (!name.trim()) return setErr("Nome é obrigatório.");
-    if (!code.trim()) return setErr("Código é obrigatório.");
-    const latN = Number(lat);
-    const lngN = Number(lng);
-    if (!Number.isFinite(latN) || !Number.isFinite(lngN)) return setErr("Lat/Lng inválidos.");
-
-    try {
-      const payload = {
-        name: name.trim(),
-        code: code.trim(),
-        city: city.trim() || null,
-        uf: uf.trim() || null,
-        address: address.trim() || null,
-        lat: latN,
-        lng: lngN,
-        stream_url: streamUrl.trim() || null,
-        is_active: isActive,
-      };
-
-      if (!id) {
-        await fetchJson(CAMS_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetchJson(`${CAMS_URL}/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
-      }
-
-      resetForm();
-      load();
-      onSynced?.();
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao salvar câmera");
-    }
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button className={`subTab ${camTab === "cameras" ? "subTabActive" : ""}`} onClick={() => setCamTab("cameras")}>
-          Câmeras
-        </button>
-        <button className={`subTab ${camTab === "civitas" ? "subTabActive" : ""}`} onClick={() => setCamTab("civitas")}>
-          Câmeras Civitas
-        </button>
-      </div>
-
-      {camTab === "civitas" && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            className={`subTab ${civitasTab === "inteligentes" ? "subTabActive" : ""}`}
-            onClick={() => setCivitasTab("inteligentes")}
-          >
-            Inteligentes
-          </button>
-          <button className={`subTab ${civitasTab === "lpr" ? "subTabActive" : ""}`} onClick={() => setCivitasTab("lpr")}>
-            LPR
-          </button>
-        </div>
-      )}
-
-      {camTab === "cameras" && (
-        <>
-          <div
-            className="adminCard"
-            style={{
-              padding: 12,
-              borderRadius: 16,
-              background: "rgba(255,255,255,0.90)",
-              border: "1px solid rgba(0,0,0,0.10)",
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Câmeras (SYNC)</div>
-
-            <div style={{ display: "grid", gap: 10 }}>
-              <button
-                onClick={runSyncCameras}
-                disabled={syncLoading}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  background: "rgba(0,0,0,0.86)",
-                  color: "#fff",
-                  cursor: syncLoading ? "not-allowed" : "pointer",
-                  fontWeight: 900,
-                  opacity: syncLoading ? 0.7 : 1,
-                }}
-              >
-                {syncLoading ? "Sincronizando..." : "SYNC CÂMERAS"}
-              </button>
-
-              <label
-                className="adminLabelWrap"
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  background: "rgba(255,255,255,0.95)",
-                  fontWeight: 900,
-                  color: "rgba(0,0,0,0.82)",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={deactivateMissing}
-                  onChange={(e) => setDeactivateMissing(e.target.checked)}
-                  style={{ transform: "scale(1.1)" }}
-                />
-                Desativar no banco as que sumirem da fonte (deactivate_missing)
-              </label>
-            </div>
-
-            {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
-            {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
-
-            
-          </div>
-
-          <div
-            className="adminCard"
-            style={{
-              padding: 12,
-              borderRadius: 16,
-              background: "rgba(255,255,255,0.90)",
-              border: "1px solid rgba(0,0,0,0.10)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
-            </div>
-
-            <div
-              style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-              onScroll={(e) => {
-                if (!isMobile) return;
-                const el = e.currentTarget;
-                if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-                  setMobileCountCams((v) => v + ADMIN_PAGE_SIZE);
-                }
-              }}
-            >
-              {(isMobile
-                ? items.slice(0, mobileCountCams)
-                : items.slice((pageCams - 1) * ADMIN_PAGE_SIZE, pageCams * ADMIN_PAGE_SIZE)
-              ).map((c) => (
-                <div
-                  key={c.id || c.code}
-                  className="adminRow"
-                  style={{
-                    border: "1px solid rgba(0,0,0,0.10)",
-                    borderRadius: 14,
-                    padding: 10,
-                    background: "rgba(255,255,255,0.75)",
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        fontSize: 13,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.75 }}>
-                      {c.city} - {c.uf} • {c.is_active ? "ATIVA" : "INATIVA"}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {!items.length && !loading && (
-                <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera encontrada.</div>
-              )}
-            </div>
-
-            {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                <button
-                  className="btnGhost"
-                  onClick={() => setPageCams((v) => Math.max(1, v - 1))}
-                  disabled={pageCams <= 1}
-                  style={{ opacity: pageCams <= 1 ? 0.5 : 1 }}
-                >
-                  Anterior
-                </button>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  Página {pageCams} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
-                </div>
-                <button
-                  className="btnGhost"
-                  onClick={() => setPageCams((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
-                  disabled={pageCams >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
-                  style={{ opacity: pageCams >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
-                >
-                  Próxima
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-      {camTab === "civitas" && (
-        <div
-          className="adminCard"
-          style={{
-            padding: 12,
-            borderRadius: 16,
-            background: "rgba(255,255,255,0.90)",
-            border: "1px solid rgba(0,0,0,0.10)",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Câmeras Civitas (SYNC)</div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <button
-              onClick={runSyncCivitas}
-              disabled={syncLoading}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.12)",
-                background: "rgba(0,0,0,0.86)",
-                color: "#fff",
-                cursor: syncLoading ? "not-allowed" : "pointer",
-                fontWeight: 900,
-                opacity: syncLoading ? 0.7 : 1,
-              }}
-            >
-              {syncLoading ? "Sincronizando..." : "SYNC CÂMERAS CIVITAS"}
-            </button>
-
-            <label
-              className="adminLabelWrap"
-              style={{
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.10)",
-                background: "rgba(255,255,255,0.95)",
-                fontWeight: 900,
-                color: "rgba(0,0,0,0.82)",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={deactivateMissing}
-                onChange={(e) => setDeactivateMissing(e.target.checked)}
-                style={{ transform: "scale(1.1)" }}
-              />
-              Desativar no banco as que sumirem da fonte (deactivate_missing)
-            </label>
-          </div>
-
-          {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
-          {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
-        </div>
-      )}
-
-      {camTab === "civitas" && civitasTab === "inteligentes" && (
-        <div
-          className="adminCard"
-          style={{
-            padding: 12,
-            borderRadius: 16,
-            background: "rgba(255,255,255,0.90)",
-            border: "1px solid rgba(0,0,0,0.10)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras Inteligentes</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {intelLoading ? "Carregando..." : `${intelItems.length} itens`}
-            </div>
-          </div>
-          <div
-            style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-            onScroll={(e) => {
-              if (!isMobile) return;
-              const el = e.currentTarget;
-              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-                setMobileCountIntel((v) => v + ADMIN_PAGE_SIZE);
-              }
-            }}
-          >
-            {(isMobile
-              ? intelItems.slice(0, mobileCountIntel)
-              : intelItems.slice((pageIntel - 1) * ADMIN_PAGE_SIZE, pageIntel * ADMIN_PAGE_SIZE)
-            ).map((c) => (
-              <div
-                key={c.id || c.code}
-                className="adminRow"
-                style={{
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  borderRadius: 14,
-                  padding: 10,
-                  background: "rgba(255,255,255,0.75)",
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 13,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>
-                    IP: {c.ip || "-"} • Direção: {c.direction || "-"}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {!intelItems.length && !intelLoading && (
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma Super Câmera Inteligente encontrada.</div>
-            )}
-          </div>
-
-          {!isMobile && intelItems.length > ADMIN_PAGE_SIZE && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-              <button
-                className="btnGhost"
-                onClick={() => setPageIntel((v) => Math.max(1, v - 1))}
-                disabled={pageIntel <= 1}
-                style={{ opacity: pageIntel <= 1 ? 0.5 : 1 }}
-              >
-                Anterior
-              </button>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Página {pageIntel} de {Math.max(1, Math.ceil(intelItems.length / ADMIN_PAGE_SIZE))}
-              </div>
-              <button
-                className="btnGhost"
-                onClick={() => setPageIntel((v) => Math.min(Math.ceil(intelItems.length / ADMIN_PAGE_SIZE), v + 1))}
-                disabled={pageIntel >= Math.ceil(intelItems.length / ADMIN_PAGE_SIZE)}
-                style={{ opacity: pageIntel >= Math.ceil(intelItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
-              >
-                Próxima
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {camTab === "civitas" && civitasTab === "lpr" && (
-        <div
-          className="adminCard"
-          style={{
-            padding: 12,
-            borderRadius: 16,
-            background: "rgba(255,255,255,0.90)",
-            border: "1px solid rgba(0,0,0,0.10)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras LPR</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {lprLoading ? "Carregando..." : `${lprItems.length} itens`}
-            </div>
-          </div>
-          <div
-            style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-            onScroll={(e) => {
-              if (!isMobile) return;
-              const el = e.currentTarget;
-              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-                setMobileCountLpr((v) => v + ADMIN_PAGE_SIZE);
-              }
-            }}
-          >
-            {(isMobile
-              ? lprItems.slice(0, mobileCountLpr)
-              : lprItems.slice((pageLpr - 1) * ADMIN_PAGE_SIZE, pageLpr * ADMIN_PAGE_SIZE)
-            ).map((c) => (
-              <div
-                key={c.id || c.code}
-                className="adminRow"
-                style={{
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  borderRadius: 14,
-                  padding: 10,
-                  background: "rgba(255,255,255,0.75)",
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 13,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>
-                    IP: {c.ip || "-"} • Direção: {c.direction || "-"}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {!lprItems.length && !lprLoading && (
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera LPR encontrada.</div>
-            )}
-          </div>
-
-          {!isMobile && lprItems.length > ADMIN_PAGE_SIZE && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-              <button
-                className="btnGhost"
-                onClick={() => setPageLpr((v) => Math.max(1, v - 1))}
-                disabled={pageLpr <= 1}
-                style={{ opacity: pageLpr <= 1 ? 0.5 : 1 }}
-              >
-                Anterior
-              </button>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Página {pageLpr} de {Math.max(1, Math.ceil(lprItems.length / ADMIN_PAGE_SIZE))}
-              </div>
-              <button
-                className="btnGhost"
-                onClick={() => setPageLpr((v) => Math.min(Math.ceil(lprItems.length / ADMIN_PAGE_SIZE), v + 1))}
-                disabled={pageLpr >= Math.ceil(lprItems.length / ADMIN_PAGE_SIZE)}
-                style={{ opacity: pageLpr >= Math.ceil(lprItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
-              >
-                Próxima
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ===========================
-   ADMIN: RADARES (LIST + SYNC)
-=========================== */
-function AdminRadaresPanel({
-  apiBase,
-  token,
-  onSynced,
-  isMobile,
-}: {
-  apiBase: string;
-  token: string;
-  onSynced?: () => void;
-  isMobile: boolean;
-}) {
-  const RADARES_URL = `${apiBase}/api/v1/radares`;
-  const SYNC_RADARES_URL = `${apiBase}/api/v1/sync/radares`;
-
-  const [loading, setLoading] = useState(false);
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [items, setItems] = useState<Radar[]>([]);
-  const [deactivateMissing, setDeactivateMissing] = useState(true);
-  const [page, setPage] = useState(1);
-  const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
-
-  async function load() {
-    setErr(null);
-    setLoading(true);
-    try {
-      const data = await fetchJson<any>(RADARES_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const list: Radar[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-
-      const normalized = list
-        .map((r) => ({
-          ...r,
-          lat: r.lat === undefined || r.lat === null ? null : Number(r.lat),
-          lng: r.lng === undefined || r.lng === null ? null : Number(r.lng),
-        }))
-        .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any));
-
-      setItems(normalized);
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao carregar radares");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function runSyncRadares() {
-    setErr(null);
-    setSyncMsg(null);
-
-    setSyncLoading(true);
-    try {
-      const resp = await fetchJson<any>(SYNC_RADARES_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          deactivate_missing: !!deactivateMissing,
-        }),
-      });
-
-      setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
-          resp?.result?.deactivated ?? "-"
-        })`
-      );
-
-      await load();
-      onSynced?.();
-    } catch (e: any) {
-      setErr(e?.message || "Erro no sync RADARES");
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-    setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length]);
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
-        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>AtualizarRadares (SYNC)</div>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          <button
-            onClick={runSyncRadares}
-            disabled={syncLoading}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(0,0,0,0.86)",
-              color: "#fff",
-              cursor: syncLoading ? "not-allowed" : "pointer",
-              fontWeight: 900,
-              opacity: syncLoading ? 0.7 : 1,
-            }}
-          >
-            {syncLoading ? "Sincronizando..." : "SYNC RADARES"}
-          </button>
-
-          <label
-            className="adminLabelWrap"
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.10)",
-              background: "rgba(255,255,255,0.95)",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.82)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={deactivateMissing}
-              onChange={(e) => setDeactivateMissing(e.target.checked)}
-              style={{ transform: "scale(1.1)" }}
-            />
-            Desativar no banco os que sumirem da fonte (deactivate_missing)
-          </label>
-
-          <button
-            onClick={load}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
-              cursor: "pointer",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
-            }}
-          >
-            Recarregar lista
-          </button>
-        </div>
-
-        {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
-        {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
-      </div>
-
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <div style={{ fontWeight: 900, fontSize: 13 }}>Radares</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
-        </div>
-
-        <div
-          style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-          onScroll={(e) => {
-            if (!isMobile) return;
-            const el = e.currentTarget;
-            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-              setMobileCount((v) => v + ADMIN_PAGE_SIZE);
-            }
-          }}
-        >
-          {(isMobile ? items.slice(0, mobileCount) : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)).map(
-            (r) => (
-            <div
-              key={r.id || r.codcet}
-              style={{
-                border: "1px solid rgba(0,0,0,0.10)",
-                borderRadius: 14,
-                padding: 10,
-                background: "rgba(255,255,255,0.75)",
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 13 }}>
-                Radar <span style={{ opacity: 0.65 }}>({r.codcet})</span>
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>
-                {r.bairro || "-"} • {r.logradouro || r.localidade || "-"} • {r.sentido || "-"}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>
-                Empresa: {r.empresa || "-"} • Vel: {r.velofisc ?? "-"} • Equip: {r.numero_equipamento || "-"} • Status:{" "}
-                {r.status || (r.is_active !== false ? "ATIVO" : "INATIVO")}
-              </div>
-            </div>
-          ))}
-
-          {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum radar encontrado.</div>}
-        </div>
-
-        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-            <button
-              className="btnGhost"
-              onClick={() => setPage((v) => Math.max(1, v - 1))}
-              disabled={page <= 1}
-              style={{ opacity: page <= 1 ? 0.5 : 1 }}
-            >
-              Anterior
-            </button>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
-            </div>
-            <button
-              className="btnGhost"
-              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
-              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
-              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
-            >
-              Próxima
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ===========================
-   ADMIN: LOGS
-=========================== */
-function AdminLogsPanel({
-  apiBase,
-  token,
-  isMobile,
-}: {
-  apiBase: string;
-  token: string;
-  isMobile: boolean;
-}) {
-  const LOGS_URL = `${apiBase}/api/v1/logs`;
-
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [items, setItems] = useState<AdminLog[]>([]);
-  const [page, setPage] = useState(1);
-  const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
-
-  async function load() {
-    setErr(null);
-    setLoading(true);
-    try {
-      const data = await fetchJson<any>(LOGS_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const list: AdminLog[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-      setItems(list);
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao carregar logs");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-    setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length]);
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 900, fontSize: 13 }}>Logs</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={load}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
-              cursor: "pointer",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
-            }}
-          >
-            Recarregar
-          </button>
-        </div>
-
-        {err && <div style={{ marginTop: 10, fontSize: 12, color: "#991b1b" }}>{err}</div>}
-      </div>
-
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(66, 66, 66, 0.1)",
-        }}
-      >
-        <div
-          style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-          onScroll={(e) => {
-            if (!isMobile) return;
-            const el = e.currentTarget;
-            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-              setMobileCount((v) => v + ADMIN_PAGE_SIZE);
-            }
-          }}
-        >
-          {(isMobile
-            ? items.slice(0, mobileCount)
-            : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
-          ).map((l, idx) => (
-            <div
-              key={l.id || idx}
-              style={{
-                border: "1px solid rgba(0,0,0,0.10)",
-                borderRadius: 14,
-                padding: 10,
-                background: "rgba(255,255,255,0.75)",
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 12 }}>
-                {l.message || `${l.user_email || "Usuário"} • ${l.action}`}
-              </div>
-
-              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                {l.created_at ? new Date(l.created_at).toLocaleString("pt-BR") : "-"}
-                {l.entity_type ? ` • ${l.entity_type}` : ""}
-                {l.target?.code ? ` • ${l.target.code}` : ""}
-                {l.target?.codcet ? ` • ${l.target.codcet}` : ""}
-                {l.target?.email ? ` • ${l.target.email}` : ""}
-              </div>
-            </div>
-          ))}
-
-          {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Sem logs ainda.</div>}
-        </div>
-
-        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-            <button
-              className="btnGhost"
-              onClick={() => setPage((v) => Math.max(1, v - 1))}
-              disabled={page <= 1}
-              style={{ opacity: page <= 1 ? 0.5 : 1 }}
-            >
-              Anterior
-            </button>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
-            </div>
-            <button
-              className="btnGhost"
-              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
-              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
-              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
-            >
-              Próxima
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
