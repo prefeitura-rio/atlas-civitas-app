@@ -2383,25 +2383,28 @@ export default function MapPage() {
         <div
           className="glass"
           style={{
-            padding: 12,
+            padding: 0,
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 12,
-            minWidth: 150,
+            width: 160,
+            height: 50,
           }}
         >
-          <img src={civitasLogo} alt="Civitas" style={{ height: 36, width: 145 }} />
+          <img src={civitasLogo} alt="Civitas" style={{ height: 34, width: 145 }} />
         </div>
 
         <div
           className="glass"
           style={{
             flex: 1,
-            padding: 10,
+            padding: "0 10px",
             display: "flex",
             alignItems: "center",
             gap: 10,
             flexWrap: "wrap",
+            height: 53,
           }}
         >
           <button
@@ -2452,13 +2455,16 @@ export default function MapPage() {
         <div
           className="glass"
           style={{
-            padding: "10px 12px",
+            padding: "0 8px",
             display: "flex",
             alignItems: "center",
-            gap: 10,
+            gap: 6,
+            height: 50
           }}
         >
-          <img src={prefeituraLogo} alt="Prefeitura" style={{ height: 26, width: 56 }} />
+          <div style={{ width: 72, height: 48, display: "grid", placeItems: "center" }}>
+            <img src={prefeituraLogo} alt="Prefeitura" style={{ height: 28, width: "auto" }} />
+          </div>
           <button className="btnGhost" onClick={() => auth?.logout?.()}>
             Sair
           </button>
@@ -2944,12 +2950,13 @@ export default function MapPage() {
           className="glass"
           style={{
             width: "100%",
-            padding: 10,
+            padding: 0,
             color: "#0b0b0f",
             display: "flex",
             alignItems: "center",
             gap: 10,
             justifyContent: "space-between",
+            height: 48,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
