@@ -57,6 +57,15 @@ const LAYERS = {
   bairros_line: "lyr-bairros-line",
   bairros_selected_fill: "lyr-bairros-selected-fill",
   bairros_selected_line: "lyr-bairros-selected-line",
+  risp_fill: "lyr-risp-fill",
+  risp_line: "lyr-risp-line",
+  aisp_fill: "lyr-aisp-fill",
+  aisp_line: "lyr-aisp-line",
+  cisp_fill: "lyr-cisp-fill",
+  cisp_line: "lyr-cisp-line",
+  risp_label: "lyr-risp-label",
+  aisp_label: "lyr-aisp-label",
+  cisp_label: "lyr-cisp-label",
 } as const;
 
 const IMAGES = {
@@ -158,6 +167,68 @@ function pointInMultiPolygon(point: [number, number], multi: MultiPolygon) {
 
 function pointInGeometry(point: [number, number], geom: Polygon | MultiPolygon) {
   return geom.type === "Polygon" ? pointInPolygon(point, geom) : pointInMultiPolygon(point, geom);
+}
+
+function normalizeBairroName(name: string, stripParens: boolean) {
+  let n = (name || "").trim();
+  if (stripParens) n = n.replace(/\s*\(.*?\)\s*/g, " ");
+  n = n
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return n;
+}
+
+function colorForIndex(i: number) {
+  const palette = [
+    "#22c55e",
+    "#3b82f6",
+    "#f59e0b",
+    "#ef4444",
+    "#14b8a6",
+    "#8b5cf6",
+    "#eab308",
+    "#06b6d4",
+    "#f97316",
+    "#10b981",
+    "#a855f7",
+    "#84cc16",
+  ];
+  return palette[i % palette.length];
+}
+
+function buildMatchExpr(key: string, values: number[]) {
+  const expr: any[] = ["match", ["to-number", ["get", key]]];
+  values.forEach((v, i) => {
+    expr.push(v, colorForIndex(i));
+  });
+  expr.push("rgba(0,0,0,0)");
+  return expr;
+}
+
+function parseMultiCodes(value: any) {
+  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined);
+  if (typeof value === "string") {
+    const parts = value.split(/[;,/]/).map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1) return parts;
+  }
+  return null;
+}
+
+function applyCodeColors(
+  map: mapboxgl.Map,
+  rispExpr: any,
+  aispExpr: any,
+  cispExpr: any
+) {
+  if (map.getLayer(LAYERS.risp_fill)) map.setPaintProperty(LAYERS.risp_fill, "fill-color", rispExpr);
+  if (map.getLayer(LAYERS.risp_line)) map.setPaintProperty(LAYERS.risp_line, "line-color", rispExpr);
+  if (map.getLayer(LAYERS.aisp_fill)) map.setPaintProperty(LAYERS.aisp_fill, "fill-color", aispExpr);
+  if (map.getLayer(LAYERS.aisp_line)) map.setPaintProperty(LAYERS.aisp_line, "line-color", aispExpr);
+  if (map.getLayer(LAYERS.cisp_fill)) map.setPaintProperty(LAYERS.cisp_fill, "fill-color", cispExpr);
+  if (map.getLayer(LAYERS.cisp_line)) map.setPaintProperty(LAYERS.cisp_line, "line-color", cispExpr);
 }
 
 async function addImageOnce(map: mapboxgl.Map, id: string, url: string) {
@@ -298,6 +369,9 @@ export default function MapPage() {
   const [showCamerasLpr, setShowCamerasLpr] = useState(true);
   const [showRadares, setShowRadares] = useState(true);
   const [showBairros, setShowBairros] = useState(false);
+  const [showRisp, setShowRisp] = useState(false);
+  const [showAisp, setShowAisp] = useState(false);
+  const [showCisp, setShowCisp] = useState(false);
 
   const [loadingBairros, setLoadingBairros] = useState(false);
   const [bairrosGeo, setBairrosGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
@@ -629,6 +703,158 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getLayer(LAYERS.risp_fill)) {
+      map.addLayer({
+        id: LAYERS.risp_fill,
+        type: "fill",
+        source: SOURCES.bairros,
+        layout: { visibility: "none" },
+        filter: ["has", "RISP"],
+        paint: {
+          "fill-color": "#22c55e",
+          "fill-opacity": 0.28,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.risp_line)) {
+      map.addLayer({
+        id: LAYERS.risp_line,
+        type: "line",
+        source: SOURCES.bairros,
+        layout: { visibility: "none" },
+        filter: ["has", "RISP"],
+        paint: {
+          "line-color": "#16a34a",
+          "line-width": 2,
+          "line-opacity": 0.9,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.risp_label)) {
+      map.addLayer({
+        id: LAYERS.risp_label,
+        type: "symbol",
+        source: SOURCES.bairros,
+        filter: ["has", "RISP"],
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["to-string", ["get", "RISP"]], "ª RISP"],
+          "text-size": 12,
+          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#111827",
+          "text-halo-color": "rgba(255,255,255,0.85)",
+          "text-halo-width": 1.2,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.aisp_fill)) {
+      map.addLayer({
+        id: LAYERS.aisp_fill,
+        type: "fill",
+        source: SOURCES.bairros,
+        layout: { visibility: "none" },
+        filter: ["has", "AISP"],
+        paint: {
+          "fill-color": "#3b82f6",
+          "fill-opacity": 0.28,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.aisp_line)) {
+      map.addLayer({
+        id: LAYERS.aisp_line,
+        type: "line",
+        source: SOURCES.bairros,
+        layout: { visibility: "none" },
+        filter: ["has", "AISP"],
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 2,
+          "line-opacity": 0.9,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.aisp_label)) {
+      map.addLayer({
+        id: LAYERS.aisp_label,
+        type: "symbol",
+        source: SOURCES.bairros,
+        filter: ["has", "AISP"],
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["to-string", ["get", "AISP"]], "ª AISP"],
+          "text-size": 12,
+          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#111827",
+          "text-halo-color": "rgba(255,255,255,0.85)",
+          "text-halo-width": 1.2,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.cisp_fill)) {
+      map.addLayer({
+        id: LAYERS.cisp_fill,
+        type: "fill",
+        source: SOURCES.bairros,
+        layout: { visibility: "none" },
+        filter: ["has", "CISP"],
+        paint: {
+          "fill-color": "#f59e0b",
+          "fill-opacity": 0.28,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.cisp_line)) {
+      map.addLayer({
+        id: LAYERS.cisp_line,
+        type: "line",
+        source: SOURCES.bairros,
+        layout: { visibility: "none" },
+        filter: ["has", "CISP"],
+        paint: {
+          "line-color": "#d97706",
+          "line-width": 2,
+          "line-opacity": 0.9,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.cisp_label)) {
+      map.addLayer({
+        id: LAYERS.cisp_label,
+        type: "symbol",
+        source: SOURCES.bairros,
+        filter: ["has", "CISP"],
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["to-string", ["get", "CISP"]], "ª CISP"],
+          "text-size": 12,
+          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#111827",
+          "text-halo-color": "rgba(255,255,255,0.85)",
+          "text-halo-width": 1.2,
+        },
+      });
+    }
+
+    applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
+
     // Garante que pontos (câmeras/radares) fiquem acima dos bairros
     const aboveBairros = [
       LAYERS.clusters,
@@ -700,6 +926,19 @@ export default function MapPage() {
     const filter = selected ? ["==", ["get", "NOME"], selected] : ["==", ["get", "NOME"], ""];
     if (map.getLayer(LAYERS.bairros_selected_fill)) map.setFilter(LAYERS.bairros_selected_fill, filter as any);
     if (map.getLayer(LAYERS.bairros_selected_line)) map.setFilter(LAYERS.bairros_selected_line, filter as any);
+  }
+
+  function applyCodeVisibility(
+    map: mapboxgl.Map,
+    visible: boolean,
+    fillId: string,
+    lineId: string,
+    labelId?: string
+  ) {
+    const v = visible ? "visible" : "none";
+    if (map.getLayer(fillId)) map.setLayoutProperty(fillId, "visibility", v);
+    if (map.getLayer(lineId)) map.setLayoutProperty(lineId, "visibility", v);
+    if (labelId && map.getLayer(labelId)) map.setLayoutProperty(labelId, "visibility", v);
   }
 
   function metersToPixelsAtLat(meters: number, lat: number, zoom: number) {
@@ -989,9 +1228,9 @@ export default function MapPage() {
 
       const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
       const candidates = [
-        `${baseUrl}GeojsonBairros.json`,
-        "/GeojsonBairros.json",
-        "./GeojsonBairros.json",
+        `${baseUrl}GeojsonBairros_com_RISP_AISP_CISP.geojson`,
+        "/GeojsonBairros_com_RISP_AISP_CISP.geojson",
+        "./GeojsonBairros_com_RISP_AISP_CISP.geojson",
       ];
 
       for (const url of candidates) {
@@ -1070,6 +1309,9 @@ export default function MapPage() {
         updateBairrosData(map, bairrosGeo);
       }
       applyBairrosVisibility(map, showBairros, selectedBairro);
+      applyCodeVisibility(map, showRisp, LAYERS.risp_fill, LAYERS.risp_line, LAYERS.risp_label);
+      applyCodeVisibility(map, showAisp, LAYERS.aisp_fill, LAYERS.aisp_line, LAYERS.aisp_label);
+      applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
       updateGpsData(map, gps, gpsOnRef.current);
       updateSearchPin(map, searchPin);
     });
@@ -1296,6 +1538,66 @@ export default function MapPage() {
     return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [bairrosGeo]);
 
+  const rispValues = useMemo(() => {
+    const set = new Set<number>();
+    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
+    if (!feats) return [];
+    for (const f of feats) {
+      const v = Number((f.properties as any)?.RISP);
+      if (Number.isFinite(v)) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [bairrosGeo]);
+
+  const aispValues = useMemo(() => {
+    const set = new Set<number>();
+    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
+    if (!feats) return [];
+    for (const f of feats) {
+      const v = Number((f.properties as any)?.AISP);
+      if (Number.isFinite(v)) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [bairrosGeo]);
+
+  const cispValues = useMemo(() => {
+    const set = new Set<number>();
+    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
+    if (!feats) return [];
+    for (const f of feats) {
+      const v = Number((f.properties as any)?.CISP);
+      if (Number.isFinite(v)) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [bairrosGeo]);
+
+  const multiCodeWarnings = useMemo(() => {
+    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
+    const risp: string[] = [];
+    const aisp: string[] = [];
+    const cisp: string[] = [];
+    if (!feats) return { risp, aisp, cisp };
+
+    for (const f of feats) {
+      const nome = (f.properties?.NOME || "").trim();
+      if (!nome) continue;
+
+      const r = parseMultiCodes((f.properties as any)?.RISP);
+      const a = parseMultiCodes((f.properties as any)?.AISP);
+      const c = parseMultiCodes((f.properties as any)?.CISP);
+
+      if (r && r.length > 1) risp.push(nome);
+      if (a && a.length > 1) aisp.push(nome);
+      if (c && c.length > 1) cisp.push(nome);
+    }
+
+    return { risp, aisp, cisp };
+  }, [bairrosGeo]);
+
+  const rispColorExpr = useMemo(() => buildMatchExpr("RISP", rispValues), [rispValues]);
+  const aispColorExpr = useMemo(() => buildMatchExpr("AISP", aispValues), [aispValues]);
+  const cispColorExpr = useMemo(() => buildMatchExpr("CISP", cispValues), [cispValues]);
+
   const bairrosFiltered = useMemo(() => {
     if (!bairroQuery) return bairrosList;
     const q = bairroQuery.trim().toLowerCase();
@@ -1375,19 +1677,25 @@ export default function MapPage() {
     if (map.isStyleLoaded()) {
       ensureSourcesAndLayers(map);
       applyBairrosVisibility(map, showBairros, selectedBairro);
+      applyCodeVisibility(map, showRisp, LAYERS.risp_fill, LAYERS.risp_line, LAYERS.risp_label);
+      applyCodeVisibility(map, showAisp, LAYERS.aisp_fill, LAYERS.aisp_line, LAYERS.aisp_label);
+      applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
       return;
     }
 
     const handleLoad = () => {
       ensureSourcesAndLayers(map);
       applyBairrosVisibility(map, showBairros, selectedBairro);
+      applyCodeVisibility(map, showRisp, LAYERS.risp_fill, LAYERS.risp_line, LAYERS.risp_label);
+      applyCodeVisibility(map, showAisp, LAYERS.aisp_fill, LAYERS.aisp_line, LAYERS.aisp_label);
+      applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
     };
     map.once("load", handleLoad);
     return () => {
       map.off("load", handleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showBairros, selectedBairro]);
+  }, [showBairros, selectedBairro, showRisp, showAisp, showCisp]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1420,6 +1728,27 @@ export default function MapPage() {
       { padding: 40, duration: 700, maxZoom: 14 }
     );
   }, [selectedBairro, bairrosGeo]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
+      return;
+    }
+
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rispColorExpr, aispColorExpr, cispColorExpr]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1834,6 +2163,72 @@ export default function MapPage() {
               <span className="chipState">{showBairros ? "ON" : "OFF"}</span>
             </button>
 
+            <button
+              className={`dockChip ${showRisp ? "dockChipOn" : ""}`}
+              onClick={() => {
+                setShowRisp((v) => !v);
+                bumpDockAutoHide();
+              }}
+              title={showRisp ? "RISP ON" : "RISP OFF"}
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 11 }}>R</span>
+                <span>RISP</span>
+                <span className="chipDot" style={{ background: showRisp ? "#22c55e" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{showRisp ? "ON" : "OFF"}</span>
+            </button>
+            {showRisp && multiCodeWarnings.risp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.risp.length} bairros com mais de uma RISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.risp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
+            <button
+              className={`dockChip ${showAisp ? "dockChipOn" : ""}`}
+              onClick={() => {
+                setShowAisp((v) => !v);
+                bumpDockAutoHide();
+              }}
+              title={showAisp ? "AISP ON" : "AISP OFF"}
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 11 }}>A</span>
+                <span>AISP</span>
+                <span className="chipDot" style={{ background: showAisp ? "#3b82f6" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
+            </button>
+            {showAisp && multiCodeWarnings.aisp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.aisp.length} bairros com mais de uma AISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.aisp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
+            <button
+              className={`dockChip ${showCisp ? "dockChipOn" : ""}`}
+              onClick={() => {
+                setShowCisp((v) => !v);
+                bumpDockAutoHide();
+              }}
+              title={showCisp ? "CISP ON" : "CISP OFF"}
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 11 }}>C</span>
+                <span>CISP</span>
+                <span className="chipDot" style={{ background: showCisp ? "#f59e0b" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
+            </button>
+            {showCisp && multiCodeWarnings.cisp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.cisp.length} bairros com mais de uma CISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.cisp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
             {showBairros && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(0,0,0,0.65)" }}>
@@ -1995,7 +2390,7 @@ export default function MapPage() {
             minWidth: 150,
           }}
         >
-          <img src={civitasLogo} alt="Civitas" style={{ height: 32, width: 145 }} />
+          <img src={civitasLogo} alt="Civitas" style={{ height: 36, width: 145 }} />
         </div>
 
         <div
@@ -2031,7 +2426,7 @@ export default function MapPage() {
               onClick={() => togglePanel("admin")}
               title="Clique de novo pra fechar"
             >
-              Admin
+              Administrador
             </button>
           )}
 
@@ -2469,7 +2864,7 @@ export default function MapPage() {
           {panel === "admin" && isAdmin && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <div style={{ fontWeight: 900, fontSize: 14 }}>Admin</div>
+                <div style={{ fontWeight: 900, fontSize: 14 }}>Administrador</div>
                 <div className="muted" style={{ fontSize: 12 }}>
                   gerenciamento completo (inline)
                 </div>
@@ -2672,7 +3067,7 @@ export default function MapPage() {
                     });
                   }}
                 >
-                  Admin
+                  Administrador
                 </button>
               )}
 
