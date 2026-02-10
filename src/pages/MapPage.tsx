@@ -41,6 +41,9 @@ const SOURCES = {
   gps: "src-gps",
   search: "src-search",
   bairros: "src-bairros",
+  risp: "src-risp",
+  aisp: "src-aisp",
+  cisp: "src-cisp",
 } as const;
 
 const LAYERS = {
@@ -377,6 +380,9 @@ export default function MapPage() {
   const [loadingBairros, setLoadingBairros] = useState(false);
   const [bairrosGeo, setBairrosGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [bairrosErr, setBairrosErr] = useState<string | null>(null);
+  const [rispGeo, setRispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const [aispGeo, setAispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const [cispGeo, setCispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [selectedBairro, setSelectedBairro] = useState<string>("");
   const [bairroQuery, setBairroQuery] = useState<string>("");
 
@@ -512,6 +518,27 @@ export default function MapPage() {
 
     if (!map.getSource(SOURCES.bairros)) {
       map.addSource(SOURCES.bairros, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.risp)) {
+      map.addSource(SOURCES.risp, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.aisp)) {
+      map.addSource(SOURCES.aisp, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.cisp)) {
+      map.addSource(SOURCES.cisp, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
@@ -719,9 +746,9 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.risp_fill,
         type: "fill",
-        source: SOURCES.bairros,
+        source: SOURCES.risp,
         layout: { visibility: "none" },
-        filter: ["has", "RISP"],
+        filter: ["has", "name"],
         paint: {
           "fill-color": "#22c55e",
           "fill-opacity": 0.28,
@@ -733,9 +760,9 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.risp_line,
         type: "line",
-        source: SOURCES.bairros,
+        source: SOURCES.risp,
         layout: { visibility: "none" },
-        filter: ["has", "RISP"],
+        filter: ["has", "name"],
         paint: {
           "line-color": "#16a34a",
           "line-width": 2,
@@ -748,11 +775,11 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.risp_label,
         type: "symbol",
-        source: SOURCES.bairros,
-        filter: ["has", "RISP"],
+        source: SOURCES.risp,
+        filter: ["has", "name"],
         layout: {
           visibility: "none",
-          "text-field": ["concat", ["to-string", ["get", "RISP"]], "ª RISP"],
+          "text-field": ["concat", ["to-string", ["get", "name"]], "ª RISP"],
           "text-size": 12,
           "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
           "text-allow-overlap": false,
@@ -769,9 +796,9 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.aisp_fill,
         type: "fill",
-        source: SOURCES.bairros,
+        source: SOURCES.aisp,
         layout: { visibility: "none" },
-        filter: ["has", "AISP"],
+        filter: ["has", "name"],
         paint: {
           "fill-color": "#3b82f6",
           "fill-opacity": 0.28,
@@ -783,9 +810,9 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.aisp_line,
         type: "line",
-        source: SOURCES.bairros,
+        source: SOURCES.aisp,
         layout: { visibility: "none" },
-        filter: ["has", "AISP"],
+        filter: ["has", "name"],
         paint: {
           "line-color": "#2563eb",
           "line-width": 2,
@@ -798,11 +825,11 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.aisp_label,
         type: "symbol",
-        source: SOURCES.bairros,
-        filter: ["has", "AISP"],
+        source: SOURCES.aisp,
+        filter: ["has", "name"],
         layout: {
           visibility: "none",
-          "text-field": ["concat", ["to-string", ["get", "AISP"]], "ª AISP"],
+          "text-field": ["concat", ["to-string", ["get", "name"]], "ª AISP"],
           "text-size": 12,
           "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
           "text-allow-overlap": false,
@@ -819,9 +846,9 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.cisp_fill,
         type: "fill",
-        source: SOURCES.bairros,
+        source: SOURCES.cisp,
         layout: { visibility: "none" },
-        filter: ["has", "CISP"],
+        filter: ["has", "name"],
         paint: {
           "fill-color": "#f59e0b",
           "fill-opacity": 0.28,
@@ -833,9 +860,9 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.cisp_line,
         type: "line",
-        source: SOURCES.bairros,
+        source: SOURCES.cisp,
         layout: { visibility: "none" },
-        filter: ["has", "CISP"],
+        filter: ["has", "name"],
         paint: {
           "line-color": "#d97706",
           "line-width": 2,
@@ -848,11 +875,11 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.cisp_label,
         type: "symbol",
-        source: SOURCES.bairros,
-        filter: ["has", "CISP"],
+        source: SOURCES.cisp,
+        filter: ["has", "name"],
         layout: {
           visibility: "none",
-          "text-field": ["concat", ["to-string", ["get", "CISP"]], "ª CISP"],
+          "text-field": ["concat", ["to-string", ["get", "name"]], "ª CISP"],
           "text-size": 12,
           "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
           "text-allow-overlap": false,
@@ -918,6 +945,30 @@ export default function MapPage() {
     data: FeatureCollection<Polygon | MultiPolygon, any>
   ) {
     const src: any = map.getSource(SOURCES.bairros);
+    if (src && typeof src.setData === "function") src.setData(data);
+  }
+
+  function updateRispData(
+    map: mapboxgl.Map,
+    data: FeatureCollection<Polygon | MultiPolygon, any>
+  ) {
+    const src: any = map.getSource(SOURCES.risp);
+    if (src && typeof src.setData === "function") src.setData(data);
+  }
+
+  function updateAispData(
+    map: mapboxgl.Map,
+    data: FeatureCollection<Polygon | MultiPolygon, any>
+  ) {
+    const src: any = map.getSource(SOURCES.aisp);
+    if (src && typeof src.setData === "function") src.setData(data);
+  }
+
+  function updateCispData(
+    map: mapboxgl.Map,
+    data: FeatureCollection<Polygon | MultiPolygon, any>
+  ) {
+    const src: any = map.getSource(SOURCES.cisp);
     if (src && typeof src.setData === "function") src.setData(data);
   }
 
@@ -1255,9 +1306,9 @@ export default function MapPage() {
 
       const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
       const candidates = [
-        `${baseUrl}GeojsonBairros_com_RISP_AISP_CISP.geojson`,
-        "/GeojsonBairros_com_RISP_AISP_CISP.geojson",
-        "./GeojsonBairros_com_RISP_AISP_CISP.geojson",
+        `${baseUrl}GeojsonBairros.geojson`,
+        "/GeojsonBairros.geojson",
+        "./GeojsonBairros.geojson",
       ];
 
       for (const url of candidates) {
@@ -1278,6 +1329,78 @@ export default function MapPage() {
     }
 
     loadBairros();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadRisp() {
+      const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
+      const candidates = [`${baseUrl}risp.geojson`, "/risp.geojson", "./risp.geojson"];
+
+      for (const url of candidates) {
+        try {
+          const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
+          if (!active) return;
+          setRispGeo(data);
+          return;
+        } catch (e) {
+          console.warn("Falha ao carregar RISP de", url, e);
+        }
+      }
+    }
+
+    loadRisp();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadAisp() {
+      const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
+      const candidates = [`${baseUrl}aisp.geojson`, "/aisp.geojson", "./aisp.geojson"];
+
+      for (const url of candidates) {
+        try {
+          const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
+          if (!active) return;
+          setAispGeo(data);
+          return;
+        } catch (e) {
+          console.warn("Falha ao carregar AISP de", url, e);
+        }
+      }
+    }
+
+    loadAisp();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadCisp() {
+      const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
+      const candidates = [`${baseUrl}cisp.geojson`, "/cisp.geojson", "./cisp.geojson"];
+
+      for (const url of candidates) {
+        try {
+          const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
+          if (!active) return;
+          setCispGeo(data);
+          return;
+        } catch (e) {
+          console.warn("Falha ao carregar CISP de", url, e);
+        }
+      }
+    }
+
+    loadCisp();
     return () => {
       active = false;
     };
@@ -1334,6 +1457,15 @@ export default function MapPage() {
       updatePoisData(map, poisGeoInit);
       if (bairrosGeo) {
         updateBairrosData(map, bairrosGeo);
+      }
+      if (rispGeo) {
+        updateRispData(map, rispGeo);
+      }
+      if (aispGeo) {
+        updateAispData(map, aispGeo);
+      }
+      if (cispGeo) {
+        updateCispData(map, cispGeo);
       }
       applyBairrosVisibility(map, showBairros, selectedBairro);
       applyCodeVisibility(map, showRisp, LAYERS.risp_fill, LAYERS.risp_line, LAYERS.risp_label);
@@ -1567,63 +1699,47 @@ export default function MapPage() {
 
   const rispValues = useMemo(() => {
     const set = new Set<number>();
-    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
+    const feats = rispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.RISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.RISP);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
-  }, [bairrosGeo]);
+  }, [rispGeo]);
 
   const aispValues = useMemo(() => {
     const set = new Set<number>();
-    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
+    const feats = aispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.AISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.AISP);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
-  }, [bairrosGeo]);
+  }, [aispGeo]);
 
   const cispValues = useMemo(() => {
     const set = new Set<number>();
-    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
+    const feats = cispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.CISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.CISP);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
-  }, [bairrosGeo]);
+  }, [cispGeo]);
 
   const multiCodeWarnings = useMemo(() => {
-    const feats = bairrosGeo?.features as BairrosFeature[] | undefined;
     const risp: string[] = [];
     const aisp: string[] = [];
     const cisp: string[] = [];
-    if (!feats) return { risp, aisp, cisp };
-
-    for (const f of feats) {
-      const nome = (f.properties?.NOME || "").trim();
-      if (!nome) continue;
-
-      const r = parseMultiCodes((f.properties as any)?.RISP);
-      const a = parseMultiCodes((f.properties as any)?.AISP);
-      const c = parseMultiCodes((f.properties as any)?.CISP);
-
-      if (r && r.length > 1) risp.push(nome);
-      if (a && a.length > 1) aisp.push(nome);
-      if (c && c.length > 1) cisp.push(nome);
-    }
-
     return { risp, aisp, cisp };
-  }, [bairrosGeo]);
+  }, []);
 
-  const rispColorExpr = useMemo(() => buildMatchExpr("RISP", rispValues), [rispValues]);
-  const aispColorExpr = useMemo(() => buildMatchExpr("AISP", aispValues), [aispValues]);
-  const cispColorExpr = useMemo(() => buildMatchExpr("CISP", cispValues), [cispValues]);
+  const rispColorExpr = useMemo(() => buildMatchExpr("name", rispValues), [rispValues]);
+  const aispColorExpr = useMemo(() => buildMatchExpr("name", aispValues), [aispValues]);
+  const cispColorExpr = useMemo(() => buildMatchExpr("name", cispValues), [cispValues]);
 
   const bairrosFiltered = useMemo(() => {
     if (!bairroQuery) return bairrosList;
@@ -1697,6 +1813,72 @@ export default function MapPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bairrosGeo]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!rispGeo) return;
+
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updateRispData(map, rispGeo);
+      return;
+    }
+
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updateRispData(map, rispGeo);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rispGeo]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!aispGeo) return;
+
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updateAispData(map, aispGeo);
+      return;
+    }
+
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updateAispData(map, aispGeo);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aispGeo]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!cispGeo) return;
+
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updateCispData(map, cispGeo);
+      return;
+    }
+
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updateCispData(map, cispGeo);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cispGeo]);
 
   useEffect(() => {
     const map = mapRef.current;
