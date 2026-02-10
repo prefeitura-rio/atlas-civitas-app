@@ -6,6 +6,7 @@ import { useAuth } from "../app/auth";
 import civitasLogo from "@/assets/civitas_icon2.png";
 import civitasMapLogo from "@/assets/civitasmap_logo.png";
 import prefeituraLogo from "@/assets/prefeitura_icon.png";
+import disqueDenunciaLogo from "@/assets/logo_disque_denuncia.png";
 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -202,7 +203,7 @@ export default function Login() {
           backdropFilter: "blur(8px)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 180 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", flex: 1 }}>
           <img
             src={prefeituraLogo}
             alt="Prefeitura do Rio"
@@ -211,9 +212,7 @@ export default function Login() {
           />
         </div>
 
-        <div style={{ flex: 1 }} />
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 180, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, minWidth: 180 }}>
           <img
             src={civitasLogo}
             alt="Civitas Rio"
@@ -221,6 +220,7 @@ export default function Login() {
             style={{ height: 34, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
+        
       </header>
 
       {/* CONTENT */}
