@@ -57,13 +57,7 @@ export function AdminUsersPanel({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const list: AdminUser[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: AdminUser[] = Array.isArray(data) ? data : [];
 
       setItems(list);
     } catch (e: any) {
@@ -98,7 +92,7 @@ export function AdminUsersPanel({
     setId(u.id);
     setEmail(u.email || "");
     setFullName(u.full_name || "");
-    setCpf(u.cpf || "");
+    setCpf(formatCpf(u.cpf || ""));
     setBirthDate(u.birth_date || "");
     setMatricula(u.matricula || "");
     setUnidade(u.unidade || "");
@@ -110,6 +104,19 @@ export function AdminUsersPanel({
 
   function normalizeCpf(v: string) {
     return v.replace(/\D/g, "").slice(0, 11);
+  }
+
+  function formatCpf(v: string) {
+    const d = normalizeCpf(v);
+    const p1 = d.slice(0, 3);
+    const p2 = d.slice(3, 6);
+    const p3 = d.slice(6, 9);
+    const p4 = d.slice(9, 11);
+    let out = p1;
+    if (p2) out += `.${p2}`;
+    if (p3) out += `.${p3}`;
+    if (p4) out += `-${p4}`;
+    return out;
   }
 
   async function save() {
@@ -242,7 +249,7 @@ export function AdminUsersPanel({
 
           <input
             value={cpf}
-            onChange={(e) => setCpf(normalizeCpf(e.target.value))}
+            onChange={(e) => setCpf(formatCpf(e.target.value))}
             placeholder="cpf (11 dígitos)"
             style={inputStyle()}
           />

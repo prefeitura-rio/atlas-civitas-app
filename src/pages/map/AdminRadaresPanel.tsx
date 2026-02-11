@@ -35,13 +35,7 @@ export function AdminRadaresPanel({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const list: Radar[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: Radar[] = Array.isArray(data) ? data : [];
 
       const normalized = list
         .map((r) => ({
