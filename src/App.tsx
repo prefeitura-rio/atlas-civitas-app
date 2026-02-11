@@ -1,10 +1,8 @@
-import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
-import { useAuth } from "./app/auth";
 
 import Login from "./pages/Login";
 import MapPage from "./pages/MapPage";
-import AdminUsers from "./pages/AdminUsers";
 
 
 export default function App() {
@@ -21,15 +19,6 @@ export default function App() {
           element={
             <ProtectedRoute>
               <MapPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/users"
-          element={
-            <ProtectedRoute>
-              <AdminUsers />
             </ProtectedRoute>
           }
         />

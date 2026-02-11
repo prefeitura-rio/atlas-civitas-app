@@ -172,18 +172,6 @@ function pointInGeometry(point: [number, number], geom: Polygon | MultiPolygon) 
   return geom.type === "Polygon" ? pointInPolygon(point, geom) : pointInMultiPolygon(point, geom);
 }
 
-function normalizeBairroName(name: string, stripParens: boolean) {
-  let n = (name || "").trim();
-  if (stripParens) n = n.replace(/\s*\(.*?\)\s*/g, " ");
-  n = n
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  return n;
-}
-
 function colorForIndex(i: number) {
   const palette = [
     "#22c55e",
@@ -209,15 +197,6 @@ function buildMatchExpr(key: string, values: number[]) {
   });
   expr.push("rgba(0,0,0,0)");
   return expr;
-}
-
-function parseMultiCodes(value: any) {
-  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined);
-  if (typeof value === "string") {
-    const parts = value.split(/[;,/]/).map((s) => s.trim()).filter(Boolean);
-    if (parts.length > 1) return parts;
-  }
-  return null;
 }
 
 function applyCodeColors(
@@ -398,9 +377,6 @@ export default function MapPage() {
   const [mobileCountRadares, setMobileCountRadares] = useState(PAGE_SIZE);
 
   const [me, setMe] = useState<Me | null>(null);
-  const [loadingMe, setLoadingMe] = useState(false);
-  const [meErr, setMeErr] = useState<string | null>(null);
-
   const [pwOld, setPwOld] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwNew2, setPwNew2] = useState("");
@@ -1268,14 +1244,11 @@ export default function MapPage() {
   }
 
   async function loadMe() {
-    setMeErr(null);
-
     if (!accessToken) {
       setMe(null);
       return;
     }
 
-    setLoadingMe(true);
     try {
       const data = await fetchJson<Me>(`${API_BASE}/api/v1/auth/me`, {
         headers: {
@@ -1287,9 +1260,6 @@ export default function MapPage() {
     } catch (e: any) {
       console.error(e);
       setMe(null);
-      setMeErr(e?.message || "Erro ao carregar usuário");
-    } finally {
-      setLoadingMe(false);
     }
   }
 
@@ -1740,12 +1710,16 @@ export default function MapPage() {
     const inBbox = (lng: number, lat: number) =>
       lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
 
-    const countPoints = (points: Array<{ lng: number; lat: number }>) => {
+    const countPoints = (
+      points: Array<{ lng?: number | string | null; lat?: number | string | null }>
+    ) => {
       let count = 0;
       for (const p of points) {
-        if (!Number.isFinite(p.lng) || !Number.isFinite(p.lat)) continue;
-        if (!inBbox(p.lng, p.lat)) continue;
-        if (pointInGeometry([p.lng, p.lat], geom)) count++;
+        const lng = Number(p.lng);
+        const lat = Number(p.lat);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+        if (!inBbox(lng, lat)) continue;
+        if (pointInGeometry([lng, lat], geom)) count++;
       }
       return count;
     };

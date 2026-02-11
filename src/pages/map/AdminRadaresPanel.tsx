@@ -106,7 +106,7 @@ export function AdminRadaresPanel({
           border: "1px solid rgba(0,0,0,0.10)",
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>AtualizarRadares (SYNC)</div>
+        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Radares (SYNC)</div>
 
         <div style={{ display: "grid", gap: 10 }}>
           <button
