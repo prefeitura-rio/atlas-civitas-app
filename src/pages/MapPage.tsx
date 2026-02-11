@@ -2258,7 +2258,7 @@ export default function MapPage() {
                 </strong>
               </div>
               <div>Câmeras: {selectedBairroStats.cameras}</div>
-              <div>Inteligentes: {selectedBairroStats.inteligentes}</div>
+              <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
               <div>LPR: {selectedBairroStats.lpr}</div>
               <div>Radares: {selectedBairroStats.radares}</div>
             </div>
