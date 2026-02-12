@@ -74,13 +74,7 @@ export function AdminCamerasPanel({
       const data = await fetchJson<any>(CAMS_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const list: Camera[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: Camera[] = Array.isArray(data) ? data : [];
       setItems(list);
     } catch (e: any) {
       setErr(e?.message || "Erro ao carregar câmeras");
@@ -95,13 +89,7 @@ export function AdminCamerasPanel({
       const data = await fetchJson<any>(CAMS_INTEL_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const list: CameraIntel[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: CameraIntel[] = Array.isArray(data) ? data : [];
       const normalized = list
         .map((c) => ({
           ...c,
@@ -123,13 +111,7 @@ export function AdminCamerasPanel({
       const data = await fetchJson<any>(CAMS_LPR_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const list: CameraLpr[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: CameraLpr[] = Array.isArray(data) ? data : [];
       const normalized = list
         .map((c) => ({
           ...c,

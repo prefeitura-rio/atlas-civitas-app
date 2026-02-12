@@ -28,13 +28,7 @@ export function AdminLogsPanel({
       const data = await fetchJson<any>(LOGS_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const list: AdminLog[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: AdminLog[] = Array.isArray(data) ? data : [];
       setItems(list);
     } catch (e: any) {
       setErr(e?.message || "Erro ao carregar logs");

@@ -37,13 +37,7 @@ export function AdminRadaresPanel({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const list: Radar[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: Radar[] = Array.isArray(data) ? data : [];
 
       const normalized = list
         .map((r) => ({
@@ -114,7 +108,7 @@ export function AdminRadaresPanel({
           border: "1px solid rgba(0,0,0,0.10)",
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>AtualizarRadares (SYNC)</div>
+        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Radares (SYNC)</div>
 
         <div style={{ display: "grid", gap: 10 }}>
           <button

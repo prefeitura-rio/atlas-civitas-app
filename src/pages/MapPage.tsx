@@ -20,7 +20,7 @@ import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
 
 
-type TabKey = "map" | "profile" | "admin";
+type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
 type AdminTab = "users" | "logs" | "cameras" | "radares";
@@ -172,18 +172,6 @@ function pointInGeometry(point: [number, number], geom: Polygon | MultiPolygon) 
   return geom.type === "Polygon" ? pointInPolygon(point, geom) : pointInMultiPolygon(point, geom);
 }
 
-function normalizeBairroName(name: string, stripParens: boolean) {
-  let n = (name || "").trim();
-  if (stripParens) n = n.replace(/\s*\(.*?\)\s*/g, " ");
-  n = n
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  return n;
-}
-
 function colorForIndex(i: number) {
   const palette = [
     "#22c55e",
@@ -209,15 +197,6 @@ function buildMatchExpr(key: string, values: number[]) {
   });
   expr.push("rgba(0,0,0,0)");
   return expr;
-}
-
-function parseMultiCodes(value: any) {
-  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined);
-  if (typeof value === "string") {
-    const parts = value.split(/[;,/]/).map((s) => s.trim()).filter(Boolean);
-    if (parts.length > 1) return parts;
-  }
-  return null;
 }
 
 function applyCodeColors(
@@ -398,9 +377,6 @@ export default function MapPage() {
   const [mobileCountRadares, setMobileCountRadares] = useState(PAGE_SIZE);
 
   const [me, setMe] = useState<Me | null>(null);
-  const [loadingMe, setLoadingMe] = useState(false);
-  const [meErr, setMeErr] = useState<string | null>(null);
-
   const [pwOld, setPwOld] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwNew2, setPwNew2] = useState("");
@@ -1268,14 +1244,11 @@ export default function MapPage() {
   }
 
   async function loadMe() {
-    setMeErr(null);
-
     if (!accessToken) {
       setMe(null);
       return;
     }
 
-    setLoadingMe(true);
     try {
       const data = await fetchJson<Me>(`${API_BASE}/api/v1/auth/me`, {
         headers: {
@@ -1287,9 +1260,6 @@ export default function MapPage() {
     } catch (e: any) {
       console.error(e);
       setMe(null);
-      setMeErr(e?.message || "Erro ao carregar usuário");
-    } finally {
-      setLoadingMe(false);
     }
   }
 
@@ -1498,13 +1468,7 @@ export default function MapPage() {
         },
       });
 
-      const list: Camera[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: Camera[] = Array.isArray(data) ? data : [];
 
       const normalized = list
         .map((c) => ({
@@ -1533,13 +1497,7 @@ export default function MapPage() {
         },
       });
 
-      const list: CameraIntel[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: CameraIntel[] = Array.isArray(data) ? data : [];
 
       const normalized = list
         .map((c) => ({
@@ -1568,13 +1526,7 @@ export default function MapPage() {
         },
       });
 
-      const list: CameraLpr[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: CameraLpr[] = Array.isArray(data) ? data : [];
 
       const normalized = list
         .map((c) => ({
@@ -1603,13 +1555,7 @@ export default function MapPage() {
         },
       });
 
-      const list: Radar[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      const list: Radar[] = Array.isArray(data) ? data : [];
 
       const normalized = list
         .map((r) => ({
@@ -1764,12 +1710,16 @@ export default function MapPage() {
     const inBbox = (lng: number, lat: number) =>
       lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
 
-    const countPoints = (points: Array<{ lng: number; lat: number }>) => {
+    const countPoints = (
+      points: Array<{ lng?: number | string | null; lat?: number | string | null }>
+    ) => {
       let count = 0;
       for (const p of points) {
-        if (!Number.isFinite(p.lng) || !Number.isFinite(p.lat)) continue;
-        if (!inBbox(p.lng, p.lat)) continue;
-        if (pointInGeometry([p.lng, p.lat], geom)) count++;
+        const lng = Number(p.lng);
+        const lat = Number(p.lat);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+        if (!inBbox(lng, lat)) continue;
+        if (pointInGeometry([lng, lat], geom)) count++;
       }
       return count;
     };
@@ -2215,7 +2165,7 @@ export default function MapPage() {
   }, [selectedRadar, radares]);
 
   const panelWidth = panel === "admin" ? 820 : 520;
-  const panelMaxHeight = panel === "admin" ? "74vh" : "56vh";
+  const panelMaxHeight = panel === "admin" || panel === "civitas" ? "74vh" : "56vh";
 
   return (
     <div
@@ -2308,7 +2258,7 @@ export default function MapPage() {
                 </strong>
               </div>
               <div>Câmeras: {selectedBairroStats.cameras}</div>
-              <div>Inteligentes: {selectedBairroStats.inteligentes}</div>
+              <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
               <div>LPR: {selectedBairroStats.lpr}</div>
               <div>Radares: {selectedBairroStats.radares}</div>
             </div>
@@ -2346,7 +2296,10 @@ export default function MapPage() {
                 <span className="chipIcon">
                   <img src={cameraIcon} alt="" style={{ width: 16, height: 16 }} />
                 </span>
-                <span>Câmeras</span>
+                <span className="chipText">
+                  <span>Câmeras</span>
+                  <span className="chipLegend">Gravação de imagens</span>
+                </span>
                 <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#ef4444" }} />
               </span>
               <span className="chipState">{showCameras ? "ON" : "OFF"}</span>
@@ -2365,7 +2318,10 @@ export default function MapPage() {
                 <span className="chipIcon">
                   <img src={cameraIntelIcon} alt="" style={{ width: 16, height: 16 }} />
                 </span>
-                <span>Super Câmeras Inteligentes</span>
+                <span className="chipText">
+                  <span>Super Câmeras Inteligentes</span>
+                  <span className="chipLegend">Gravações e analíticos de IA</span>
+                </span>
                 <span className="chipDot" style={{ background: showCamerasIntel ? "#f59e0b" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCamerasIntel ? "ON" : "OFF"}</span>
@@ -2384,7 +2340,10 @@ export default function MapPage() {
                 <span className="chipIcon">
                   <img src={cameraLprIcon} alt="" style={{ width: 16, height: 16 }} />
                 </span>
-                <span>LPR</span>
+                <span className="chipText">
+                  <span>LPR</span>
+                  <span className="chipLegend">Leitura de radar</span>
+                </span>
                 <span className="chipDot" style={{ background: showCamerasLpr ? "#22d3ee" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCamerasLpr ? "ON" : "OFF"}</span>
@@ -2403,7 +2362,10 @@ export default function MapPage() {
                 <span className="chipIcon">
                   <img src={radarIcon} alt="" style={{ width: 16, height: 16 }} />
                 </span>
-                <span>Radares</span>
+                <span className="chipText">
+                  <span>Radares</span>
+                  <span className="chipLegend">Leitura de radar</span>
+                </span>
                 <span className="chipDot" style={{ background: showRadares ? "#3b82f6" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showRadares ? "ON" : "OFF"}</span>
@@ -2517,7 +2479,10 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon" style={{ fontSize: 11 }}>R</span>
-                <span>RISP</span>
+                <span className="chipText">
+                  <span>RISP</span>
+                  <span className="chipLegend">Regiões Integradas de Segurança Pública</span>
+                </span>
                 <span className="chipDot" style={{ background: showRisp ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showRisp ? "ON" : "OFF"}</span>
@@ -2547,7 +2512,10 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon" style={{ fontSize: 11 }}>A</span>
-                <span>AISP</span>
+                <span className="chipText">
+                  <span>AISP</span>
+                  <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
+                </span>
                 <span className="chipDot" style={{ background: showAisp ? "#3b82f6" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
@@ -2577,7 +2545,10 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon" style={{ fontSize: 11 }}>C</span>
-                <span>CISP</span>
+                <span className="chipText">
+                  <span>CISP</span>
+                  <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>
+                </span>
                 <span className="chipDot" style={{ background: showCisp ? "#f59e0b" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
@@ -2694,6 +2665,14 @@ export default function MapPage() {
             title="Clique de novo pra fechar"
           >
             Perfil
+          </button>
+
+          <button
+            className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
+            onClick={() => togglePanel("civitas")}
+            title="Clique de novo pra fechar"
+          >
+            Recursos
           </button>
 
           {isAdmin && (
@@ -3140,12 +3119,144 @@ export default function MapPage() {
             </>
           )}
 
+          {panel === "civitas" && (
+            <>
+              <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>
+                Ferramentas da CIVITAS e Como Solicitar as Informações
+              </div>
+
+              <div style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.95)",
+                    border: "1px solid rgba(0,0,0,0.10)",
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
+                    Quadro-resumo das ferramentas da CIVITAS
+                  </div>
+                  <div style={{ width: "100%", overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Pontos de Detecção</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais
+                            específicos.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios
+                            de clonagem.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Busca por Radar</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Identificar veículos que passaram em determinado local e período.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Quando não há placa definida, mas há local e horário da ocorrência.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Lista cronológica de placas detectadas em radar ou conjunto de radares.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Conjuntas</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Identificar veículos que trafegam junto com uma placa monitorada.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Correlatas</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Identificar vínculos e padrões entre diferentes veículos monitorados.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Investigações com múltiplos veículos ou análise de conexões entre ocorrências.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Grafo de conexões entre veículos e tabela ordenada por nível de correlação.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.95)",
+                    border: "1px solid rgba(0,0,0,0.10)",
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
+                    Como solicitar o uso das funcionalidades da CIVITAS
+                  </div>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
+                    Para usufruir das funcionalidades disponíveis no App CIVITAS e dos relatórios analíticos associados ao
+                    cerco eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em
+                    lei,{" "}
+                    <a
+                      href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#1d4ed8", textDecoration: "underline" }}
+                    >
+                      DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
+                    </a>
+                    .
+                  </div>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
+                    As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade
+                    competente do órgão e enviado ao endereço{" "}
+                    <strong style={{ fontWeight: 900 }}>civitas@dados.rio</strong>. O documento deve conter o número e a data
+                    do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável (e-mail e
+                    telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
+                    demais elementos relevantes para a análise da demanda.
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <a
+                      href="/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf"
+                      download
+                      className="btnGhost"
+                      style={{ display: "inline-block", padding: "8px 12px", borderRadius: 10 }}
+                    >
+                    Modelo de ofício para solicitar informações (baixar PDF)
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
           {panel === "admin" && isAdmin && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                 <div style={{ fontWeight: 900, fontSize: 14 }}>Administrador</div>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  gerenciamento completo (inline)
+                  Gerenciamento completo
                 </div>
 
                 <div style={{ flex: 1 }} />
@@ -3241,7 +3352,14 @@ export default function MapPage() {
           <div style={{ position: "relative" }}>
             <button
               className="btnGhost"
-              onClick={() => setMobileMenuOpen((v) => !v)}
+              onClick={() => {
+                if (panelOpen) {
+                  setPanelOpen(false);
+                  setMobileMenuOpen(true);
+                  return;
+                }
+                setMobileMenuOpen((v) => !v);
+              }}
               style={{
                 width: 44,
                 height: 36,
@@ -3357,6 +3475,19 @@ export default function MapPage() {
                 }}
               >
                 Perfil
+              </button>
+
+              <button
+                className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
+                onClick={() => {
+                  setPanel((cur) => {
+                    const next = cur === "civitas" ? null : "civitas";
+                    if (next === null) setPanelOpen(false);
+                    return next;
+                  });
+                }}
+              >
+                Recursos
               </button>
 
               {isAdmin && (
@@ -3733,6 +3864,137 @@ export default function MapPage() {
                       {pwMsg}
                     </div>
                   )}
+                </div>
+              </>
+            )}
+
+            {panel === "civitas" && (
+              <>
+                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>
+                  Ferramentas da CIVITAS e Como Solicitar as Informações
+                </div>
+
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.95)",
+                    border: "1px solid rgba(0,0,0,0.10)",
+                    marginBottom: 12,
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
+                    Quadro-resumo das ferramentas da CIVITAS
+                  </div>
+                  <div style={{ width: "100%", overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
+                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Pontos de Detecção</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais
+                            específicos.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios
+                            de clonagem.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Busca por Radar</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Identificar veículos que passaram em determinado local e período.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Quando não há placa definida, mas há local e horário da ocorrência.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Lista cronológica de placas detectadas em radar ou conjunto de radares.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Conjuntas</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Identificar veículos que trafegam junto com uma placa monitorada.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Correlatas</td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Identificar vínculos e padrões entre diferentes veículos monitorados.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Investigações com múltiplos veículos ou análise de conexões entre ocorrências.
+                          </td>
+                          <td style={{ border: "1px solid #000", padding: 8 }}>
+                            Grafo de conexões entre veículos e tabela ordenada por nível de correlação.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.95)",
+                    border: "1px solid rgba(0,0,0,0.10)",
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
+                    Como solicitar o uso das funcionalidades da CIVITAS
+                  </div>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
+                    Para usufruir das funcionalidades disponíveis no App CIVITAS e dos relatórios analíticos associados ao
+                    cerco eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em
+                    lei,{" "}
+                    <a
+                      href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#1d4ed8", textDecoration: "underline" }}
+                    >
+                      DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
+                    </a>
+                    .
+                  </div>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
+                    As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade
+                    competente do órgão e enviado ao endereço{" "}
+                    <strong style={{ fontWeight: 900 }}>civitas@dados.rio</strong>. O documento deve conter o número e a data
+                    do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável (e-mail e
+                    telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
+                    demais elementos relevantes para a análise da demanda.
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <a
+                      href="/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf"
+                      download
+                      className="btnGhost"
+                      style={{ display: "inline-block", padding: "8px 12px", borderRadius: 10 }}
+                    >
+                      Modelo de ofício para solicitar informações (baixar PDF)
+                    </a>
+                  </div>
                 </div>
               </>
             )}

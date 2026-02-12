@@ -6,8 +6,6 @@ import { useAuth } from "../app/auth";
 import civitasLogo from "@/assets/civitas_icon2.png";
 import civitasMapLogo from "@/assets/civitasmap_logo.png";
 import prefeituraLogo from "@/assets/prefeitura_icon.png";
-import disqueDenunciaLogo from "@/assets/logo_disque_denuncia.png";
-
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
