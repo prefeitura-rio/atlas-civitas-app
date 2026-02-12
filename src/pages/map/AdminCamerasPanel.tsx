@@ -41,30 +41,6 @@ export function AdminCamerasPanel({
   const [mobileCountIntel, setMobileCountIntel] = useState(ADMIN_PAGE_SIZE);
   const [mobileCountLpr, setMobileCountLpr] = useState(ADMIN_PAGE_SIZE);
 
-  const [id, setId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [city, setCity] = useState("");
-  const [uf, setUf] = useState("");
-  const [address, setAddress] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
-  const [streamUrl, setStreamUrl] = useState("");
-  const [isActive, setIsActive] = useState(true);
-
-  function resetForm() {
-    setId(null);
-    setName("");
-    setCode("");
-    setCity("");
-    setUf("");
-    setAddress("");
-    setLat("");
-    setLng("");
-    setStreamUrl("");
-    setIsActive(true);
-  }
-
   async function load() {
     setErr(null);
     setLoading(true);
@@ -212,55 +188,6 @@ export function AdminCamerasPanel({
     }
   }
 
-  async function save() {
-    setErr(null);
-    if (!name.trim()) return setErr("Nome é obrigatório.");
-    if (!code.trim()) return setErr("Código é obrigatório.");
-    const latN = Number(lat);
-    const lngN = Number(lng);
-    if (!Number.isFinite(latN) || !Number.isFinite(lngN)) return setErr("Lat/Lng inválidos.");
-
-    try {
-      const payload = {
-        name: name.trim(),
-        code: code.trim(),
-        city: city.trim() || null,
-        uf: uf.trim() || null,
-        address: address.trim() || null,
-        lat: latN,
-        lng: lngN,
-        stream_url: streamUrl.trim() || null,
-        is_active: isActive,
-      };
-
-      if (!id) {
-        await fetchJson(CAMS_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetchJson(`${CAMS_URL}/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
-      }
-
-      resetForm();
-      load();
-      onSynced?.();
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao salvar câmera");
-    }
-  }
-
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -344,22 +271,6 @@ export function AdminCamerasPanel({
             {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
             {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
 
-            <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-              <button
-                onClick={save}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  background: "rgba(0,0,0,0.86)",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontWeight: 900,
-                }}
-              >
-                Salvar (exemplo)
-              </button>
-            </div>
           </div>
 
           <div

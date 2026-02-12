@@ -227,6 +227,10 @@ function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
       kind: "camera",
       code: c.code,
       name: c.name,
+      zona_camera: (c as any).zona_camera ?? "",
+      sistema_origem: (c as any).sistema_origem ?? "",
+      responsavel: (c as any).responsavel ?? "",
+      streaming_url: (c as any).streaming_url ?? c.stream_url ?? "",
       city: c.city,
       uf: c.uf,
       address: c.address || "",
@@ -323,6 +327,8 @@ export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
+  const hoverPreviewTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   const handlersBoundRef = useRef(false);
@@ -421,6 +427,15 @@ export default function MapPage() {
   useEffect(() => {
     panelRef.current = panel;
   }, [panel]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverPreviewTimerRef.current) {
+        window.clearTimeout(hoverPreviewTimerRef.current);
+      }
+      hoverPreviewPopupRef.current?.remove();
+    };
+  }, []);
 
   function bumpDockAutoHide() {
     if (dockTimerRef.current) window.clearTimeout(dockTimerRef.current);
@@ -1025,7 +1040,27 @@ export default function MapPage() {
     if (!popupRef.current) {
       popupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true });
     }
+    if (!hoverPreviewPopupRef.current) {
+      hoverPreviewPopupRef.current = new mapboxgl.Popup({
+        offset: 14,
+        closeButton: false,
+        closeOnClick: false,
+        className: "cameraHoverPreviewPopup",
+      });
+    }
     const popup = popupRef.current;
+    const hoverPreviewPopup = hoverPreviewPopupRef.current;
+
+    function clearHoverPreviewTimer() {
+      if (!hoverPreviewTimerRef.current) return;
+      window.clearTimeout(hoverPreviewTimerRef.current);
+      hoverPreviewTimerRef.current = null;
+    }
+
+    function hideHoverPreview() {
+      clearHoverPreviewTimer();
+      hoverPreviewPopup?.remove();
+    }
 
     function setCursorPointer() {
       map.getCanvas().style.cursor = "pointer";
@@ -1034,19 +1069,56 @@ export default function MapPage() {
       map.getCanvas().style.cursor = "";
     }
 
-    const hoverLayerIds = [
-      LAYERS.cameras_points,
-      LAYERS.cameras_intel_points,
-      LAYERS.cameras_lpr_points,
-      LAYERS.radares_points,
-      LAYERS.clusters,
-    ];
+    const hoverLayerIds = [LAYERS.cameras_intel_points, LAYERS.cameras_lpr_points, LAYERS.radares_points, LAYERS.clusters];
     for (const lid of hoverLayerIds) {
       map.on("mouseenter", lid, setCursorPointer);
       map.on("mouseleave", lid, setCursorDefault);
     }
 
+    map.on("mouseenter", LAYERS.cameras_points, (e) => {
+      setCursorPointer();
+      clearHoverPreviewTimer();
+      const f: any = e.features?.[0];
+      if (!f) return;
+
+      const p = f.properties || {};
+      const rawStreamingUrl = (p.streaming_url || p.stream_url || "").toString().trim();
+      if (!rawStreamingUrl) return;
+      const streamingUrl = /^https?:\/\//i.test(rawStreamingUrl) ? rawStreamingUrl : `https://${rawStreamingUrl}`;
+      const coords = (f.geometry as any).coordinates as [number, number];
+
+      hoverPreviewTimerRef.current = window.setTimeout(() => {
+        hoverPreviewPopup
+          ?.setLngLat(coords)
+          .setHTML(`
+            <div style="width:360px;background:#000;">
+              <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
+                <iframe
+                  src="${escapeHtml(streamingUrl)}"
+                  title="Preview câmera"
+                  loading="lazy"
+                  referrerpolicy="no-referrer"
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                  scrolling="no"
+                  style="position:absolute;top:0;left:0;width:1600px;height:900px;border:0;background:#000;transform:scale(0.225);transform-origin:top left;"
+                ></iframe>
+              </div>
+              <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
+                Para abrir a imagem maior, clique na c&acirc;mera e abra o link.
+              </div>
+            </div>
+          `)
+          .addTo(map);
+      }, 120);
+    });
+
+    map.on("mouseleave", LAYERS.cameras_points, () => {
+      setCursorDefault();
+      hideHoverPreview();
+    });
+
     map.on("click", LAYERS.clusters, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
       const coords = (f.geometry as any).coordinates;
@@ -1061,6 +1133,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.cameras_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
@@ -1075,15 +1148,22 @@ export default function MapPage() {
         ?.setLngLat(coords)
         .setHTML(`
           <div style="font-family: system-ui; min-width: 240px;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              📷 ${escapeHtml(p.name || "")}
-              <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
+            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px; max-width: calc(100% - 56px); overflow-wrap: anywhere; word-break: break-word;">
+              📷 <span style="overflow-wrap: anywhere; word-break: break-word;">${escapeHtml(p.name || "")}</span>
+              <span style="opacity:.65;font-weight:700; overflow-wrap: anywhere; word-break: break-word;"> (${escapeHtml(
+                p.code || ""
+              )})</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
-              ${escapeHtml(p.city || "")} - ${escapeHtml(p.uf || "")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              ${escapeHtml(p.address || "")}
+            <div style="font-size: 12px; opacity:.85;">
+              <div><strong>Código da câmera:</strong> ${escapeHtml(p.code || "-")}</div>
+              <div><strong>Zona da câmera:</strong> ${escapeHtml(p.zona_camera || "-")}</div>
+              <div><strong>Streaming URL:</strong> ${
+                p.streaming_url
+                  ? `<a href="${escapeHtml(p.streaming_url)}" target="_blank" rel="noreferrer">${escapeHtml(
+                      p.streaming_url
+                    )}</a>`
+                  : "-"
+              }</div>
             </div>
           </div>
         `)
@@ -1091,6 +1171,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
@@ -1124,6 +1205,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
@@ -1157,6 +1239,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.radares_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
@@ -1170,20 +1253,20 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 270px;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
+          <div style="font-family: system-ui; min-width: 0; max-width: 240px;">
+            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px; overflow-wrap: anywhere; word-break: break-word;">
               📡 Radar <span style="opacity:.75">(${escapeHtml(p.codcet || "")})</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
+            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px; overflow-wrap: anywhere; word-break: break-word;">
               ${escapeHtml(p.logradouro || "-")}
             </div>
-            <div style="font-size: 12px; opacity:.8;">
+            <div style="font-size: 12px; opacity:.8; overflow-wrap: anywhere; word-break: break-word;">
               Bairro: ${escapeHtml(p.bairro || "-")} • Sentido: ${escapeHtml(p.sentido || "-")}
             </div>
-            <div style="font-size: 12px; opacity:.8; margin-top:6px;">
-              Empresa: ${escapeHtml(p.empresa || "-")}
-              • Vel: ${p.velofisc ?? "-"}
-              • Equip: ${escapeHtml(p.numero_equipamento || "-")}
+            <div style="font-size: 12px; opacity:.8; margin-top:6px; overflow-wrap: anywhere; word-break: break-word;">
+              <div>Empresa: ${escapeHtml(p.empresa || "-")}</div>
+              <div>Vel: ${p.velofisc ?? "-"}</div>
+              <div>Equip: ${escapeHtml(p.numero_equipamento || "-")}</div>
             </div>
           </div>
         `)
@@ -1191,6 +1274,7 @@ export default function MapPage() {
     });
 
     map.on("click", (e) => {
+      hideHoverPreview();
       const features = map.queryRenderedFeatures(e.point, {
         layers: [
           LAYERS.cameras_points,
@@ -1211,6 +1295,7 @@ export default function MapPage() {
     });
 
     const closeDockOnMove = () => {
+      hideHoverPreview();
       if (isMobileRef.current) setDockOpen(false);
     };
     map.on("dragstart", closeDockOnMove);
