@@ -1074,7 +1074,7 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 240px;">
+          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
             <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
               📷 ${escapeHtml(p.name || "")}
               <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
@@ -1104,7 +1104,7 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 240px;">
+          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
             <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
               🟠 Super Câmera Inteligente
               <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
@@ -1137,7 +1137,7 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 240px;">
+          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
             <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
               🟢 Câmera LPR
               <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
@@ -1170,7 +1170,7 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 270px;">
+          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
             <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
               📡 Radar <span style="opacity:.75">(${escapeHtml(p.codcet || "")})</span>
             </div>
