@@ -1,8 +1,42 @@
 import { useEffect, useRef, useState } from "react";
+import { Copy } from "lucide-react";
 import type { AdminUser } from "./types";
 import { fetchJson, inputStyle } from "./shared";
 
 const ADMIN_PAGE_SIZE = 50;
+const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const LOWER = "abcdefghijklmnopqrstuvwxyz";
+const PASSWORD_CHARS = `${UPPER}${LOWER}`;
+const SUGGESTED_PASSWORD_SIZE = 10;
+
+function randomIndex(max: number) {
+  if (max <= 0) return 0;
+  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+    const buf = new Uint32Array(1);
+    window.crypto.getRandomValues(buf);
+    return buf[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+
+function generateStrongPassword(size = SUGGESTED_PASSWORD_SIZE) {
+  const safeSize = Math.max(2, size);
+  const chars = [
+    UPPER[randomIndex(UPPER.length)],
+    LOWER[randomIndex(LOWER.length)],
+  ];
+
+  for (let i = chars.length; i < safeSize; i++) {
+    chars.push(PASSWORD_CHARS[randomIndex(PASSWORD_CHARS.length)]);
+  }
+
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomIndex(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join("");
+}
 
 export function AdminUsersPanel({
   apiBase,
@@ -28,10 +62,14 @@ export function AdminUsersPanel({
   const [unidade, setUnidade] = useState("");
   const [orgao, setOrgao] = useState("");
   const [password, setPassword] = useState("");
+  const [suggestedPassword, setSuggestedPassword] = useState("");
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const [role, setRole] = useState("user");
   const [isActive, setIsActive] = useState(true);
   const [roleOpen, setRoleOpen] = useState(false);
   const roleWrapRef = useRef<HTMLDivElement | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
+  const passwordCopiedTimerRef = useRef<number | null>(null);
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
 
@@ -45,6 +83,8 @@ export function AdminUsersPanel({
     setUnidade("");
     setOrgao("");
     setPassword("");
+    setSuggestedPassword("");
+    setPasswordCopied(false);
     setRole("user");
     setIsActive(true);
   }
@@ -88,6 +128,14 @@ export function AdminUsersPanel({
     return () => document.removeEventListener("mousedown", handleDocClick);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (!passwordCopiedTimerRef.current) return;
+      window.clearTimeout(passwordCopiedTimerRef.current);
+      passwordCopiedTimerRef.current = null;
+    };
+  }, []);
+
   function pick(u: AdminUser) {
     setId(u.id);
     setEmail(u.email || "");
@@ -98,8 +146,54 @@ export function AdminUsersPanel({
     setUnidade(u.unidade || "");
     setOrgao(u.orgao || "");
     setPassword("");
+    setSuggestedPassword("");
+    setPasswordCopied(false);
     setRole((u.role || "user").toLowerCase());
     setIsActive(!!u.is_active);
+  }
+
+  function refreshPasswordSuggestion() {
+    if (id) return;
+    setSuggestedPassword(generateStrongPassword());
+  }
+
+  function applySuggestedPassword() {
+    if (!suggestedPassword || id) return;
+    setPassword(suggestedPassword);
+    setPasswordCopied(false);
+    setErr(null);
+    passwordInputRef.current?.focus();
+  }
+
+  async function copyPassword() {
+    if (id) return;
+    if (!password) {
+      setErr("Digite uma senha para copiar.");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(password);
+      } else {
+        const temp = document.createElement("textarea");
+        temp.value = password;
+        temp.setAttribute("readonly", "true");
+        temp.style.position = "fixed";
+        temp.style.opacity = "0";
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand("copy");
+        document.body.removeChild(temp);
+      }
+      setPasswordCopied(true);
+      if (passwordCopiedTimerRef.current) window.clearTimeout(passwordCopiedTimerRef.current);
+      passwordCopiedTimerRef.current = window.setTimeout(() => {
+        setPasswordCopied(false);
+      }, 1500);
+    } catch {
+      setErr("Não foi possível copiar a senha.");
+    }
   }
 
   function normalizeCpf(v: string) {
@@ -306,18 +400,81 @@ export function AdminUsersPanel({
               </div>
             )}
           </div>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={id ? "senha (só na criação)" : "senha (mín 8)"}
-            type="password"
-            disabled={!!id}
-            style={{
-              ...inputStyle(),
-              opacity: id ? 0.6 : 1,
-              cursor: id ? "not-allowed" : "text",
-            }}
-          />
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ position: "relative" }}>
+              <input
+                ref={passwordInputRef}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordCopied(false);
+                }}
+                onClick={refreshPasswordSuggestion}
+                placeholder={id ? "senha (só na criação)" : "senha (mín 8)"}
+                type="password"
+                disabled={!!id}
+                style={{
+                  ...inputStyle(),
+                  paddingRight: id ? 12 : 40,
+                  opacity: id ? 0.6 : 1,
+                  cursor: id ? "not-allowed" : "text",
+                }}
+              />
+              {!id && (
+                <button
+                  type="button"
+                  onClick={copyPassword}
+                  disabled={!password}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2,
+                    width: 26,
+                    height: 26,
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    background: "rgba(255,255,255,0.92)",
+                    color: passwordCopied ? "#15803d" : "rgba(0,0,0,0.78)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 8,
+                    padding: 0,
+                    cursor: password ? "pointer" : "not-allowed",
+                    opacity: password ? 1 : 0.7,
+                  }}
+                  title={password ? "Copiar senha" : "Digite uma senha para copiar"}
+                  aria-label={password ? "Copiar senha" : "Digite uma senha para copiar"}
+                >
+                  <Copy size={14} strokeWidth={2.2} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            {!id && suggestedPassword && (
+              <button
+                type="button"
+                onClick={applySuggestedPassword}
+                style={{
+                  justifySelf: "start",
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  borderRadius: 10,
+                  padding: "5px 8px",
+                  background: "rgba(255,255,255,0.92)",
+                  color: "rgba(0,0,0,0.82)",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+                title="Usar senha sugerida"
+              >
+                Sugerida:{" "}
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                  {suggestedPassword}
+                </span>
+              </button>
+            )}
+          </div>
 
           <label
             className="adminLabelWrap"

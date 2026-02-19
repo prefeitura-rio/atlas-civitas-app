@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
@@ -386,6 +387,9 @@ export default function MapPage() {
   const [pwOld, setPwOld] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwNew2, setPwNew2] = useState("");
+  const [showPwOld, setShowPwOld] = useState(false);
+  const [showPwNew, setShowPwNew] = useState(false);
+  const [showPwNew2, setShowPwNew2] = useState(false);
   const [pwLoading, setPwLoading] = useState(false);
   const [pwMsg, setPwMsg] = useState<string | null>(null);
 
@@ -3146,29 +3150,107 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
+                <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
                 <div style={{ fontSize: 13, fontWeight: 900 }}>Trocar senha</div>
-                <input
-                  value={pwOld}
-                  onChange={(e) => setPwOld(e.target.value)}
-                  type="password"
-                  placeholder="Senha atual"
-                  style={inputStyle()}
-                />
-                <input
-                  value={pwNew}
-                  onChange={(e) => setPwNew(e.target.value)}
-                  type="password"
-                  placeholder="Nova senha"
-                  style={inputStyle()}
-                />
-                <input
-                  value={pwNew2}
-                  onChange={(e) => setPwNew2(e.target.value)}
-                  type="password"
-                  placeholder="Confirmar nova senha"
-                  style={inputStyle()}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={pwOld}
+                    onChange={(e) => setPwOld(e.target.value)}
+                    type={showPwOld ? "text" : "password"}
+                    placeholder="Senha atual"
+                    style={{ ...inputStyle(), paddingRight: 44 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwOld((v) => !v)}
+                    aria-label={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                    title={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      border: "none",
+                      background: "transparent",
+                      color: "rgba(0,0,0,0.72)",
+                      padding: 0,
+                      width: 20,
+                      height: 20,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showPwOld ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={pwNew}
+                    onChange={(e) => setPwNew(e.target.value)}
+                    type={showPwNew ? "text" : "password"}
+                    placeholder="Nova senha"
+                    style={{ ...inputStyle(), paddingRight: 44 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwNew((v) => !v)}
+                    aria-label={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                    title={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      border: "none",
+                      background: "transparent",
+                      color: "rgba(0,0,0,0.72)",
+                      padding: 0,
+                      width: 20,
+                      height: 20,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showPwNew ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={pwNew2}
+                    onChange={(e) => setPwNew2(e.target.value)}
+                    type={showPwNew2 ? "text" : "password"}
+                    placeholder="Confirmar nova senha"
+                    style={{ ...inputStyle(), paddingRight: 44 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwNew2((v) => !v)}
+                    aria-label={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                    title={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      border: "none",
+                      background: "transparent",
+                      color: "rgba(0,0,0,0.72)",
+                      padding: 0,
+                      width: 20,
+                      height: 20,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showPwNew2 ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
+                </div>
 
                 <button
                   onClick={changePassword}
@@ -3899,27 +3981,105 @@ export default function MapPage() {
 
                 <div style={{ display: "grid", gap: 10 }}>
                   <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2 }}>Trocar senha</div>
-                  <input
-                    value={pwOld}
-                    onChange={(e) => setPwOld(e.target.value)}
-                    type="password"
-                    placeholder="Senha atual"
-                    style={inputStyle()}
-                  />
-                  <input
-                    value={pwNew}
-                    onChange={(e) => setPwNew(e.target.value)}
-                    type="password"
-                    placeholder="Nova senha"
-                    style={inputStyle()}
-                  />
-                  <input
-                    value={pwNew2}
-                    onChange={(e) => setPwNew2(e.target.value)}
-                    type="password"
-                    placeholder="Confirmar nova senha"
-                    style={inputStyle()}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      value={pwOld}
+                      onChange={(e) => setPwOld(e.target.value)}
+                      type={showPwOld ? "text" : "password"}
+                      placeholder="Senha atual"
+                      style={{ ...inputStyle(), paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwOld((v) => !v)}
+                      aria-label={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                      title={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        border: "none",
+                        background: "transparent",
+                        color: "rgba(0,0,0,0.72)",
+                        padding: 0,
+                        width: 20,
+                        height: 20,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showPwOld ? <Eye size={16} /> : <EyeOff size={16} />}
+                    </button>
+                  </div>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      value={pwNew}
+                      onChange={(e) => setPwNew(e.target.value)}
+                      type={showPwNew ? "text" : "password"}
+                      placeholder="Nova senha"
+                      style={{ ...inputStyle(), paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwNew((v) => !v)}
+                      aria-label={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                      title={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        border: "none",
+                        background: "transparent",
+                        color: "rgba(0,0,0,0.72)",
+                        padding: 0,
+                        width: 20,
+                        height: 20,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showPwNew ? <Eye size={16} /> : <EyeOff size={16} />}
+                    </button>
+                  </div>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      value={pwNew2}
+                      onChange={(e) => setPwNew2(e.target.value)}
+                      type={showPwNew2 ? "text" : "password"}
+                      placeholder="Confirmar nova senha"
+                      style={{ ...inputStyle(), paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwNew2((v) => !v)}
+                      aria-label={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                      title={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        border: "none",
+                        background: "transparent",
+                        color: "rgba(0,0,0,0.72)",
+                        padding: 0,
+                        width: 20,
+                        height: 20,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showPwNew2 ? <Eye size={16} /> : <EyeOff size={16} />}
+                    </button>
+                  </div>
                   <button
                     onClick={changePassword}
                     disabled={pwLoading}
