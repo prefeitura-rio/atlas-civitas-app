@@ -299,6 +299,11 @@
   position: absolute;
   inset: 0;
 }
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right {
+  bottom: 10px;
+}
+
 .mapboxgl-popup {
   z-index: 30;
 }

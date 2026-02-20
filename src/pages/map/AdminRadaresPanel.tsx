@@ -71,7 +71,7 @@ export function AdminRadaresPanel({
       });
 
       setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
+        `Sincronização concluída. (criados=${resp?.result?.created ?? "-"}, atualizados=${resp?.result?.updated ?? "-"}, desativados=${
           resp?.result?.deactivated ?? "-"
         })`
       );
@@ -79,7 +79,7 @@ export function AdminRadaresPanel({
       await load();
       onSynced?.();
     } catch (e: any) {
-      setErr(e?.message || "Erro no sync RADARES");
+      setErr(e?.message || "Erro na sincronização de radares");
     } finally {
       setSyncLoading(false);
     }
@@ -106,7 +106,7 @@ export function AdminRadaresPanel({
           border: "1px solid rgba(0,0,0,0.10)",
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Radares (SYNC)</div>
+        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Radares</div>
 
         <div style={{ display: "grid", gap: 10 }}>
           <button
@@ -123,7 +123,7 @@ export function AdminRadaresPanel({
               opacity: syncLoading ? 0.7 : 1,
             }}
           >
-            {syncLoading ? "Sincronizando..." : "SYNC RADARES"}
+            {syncLoading ? "Sincronizando..." : "Sincronizar Radares"}
           </button>
 
           <label
@@ -146,7 +146,7 @@ export function AdminRadaresPanel({
               onChange={(e) => setDeactivateMissing(e.target.checked)}
               style={{ transform: "scale(1.1)" }}
             />
-            Desativar no banco os que sumirem da fonte (deactivate_missing)
+            Desativar registros ausentes na fonte de dados
           </label>
 
           <button

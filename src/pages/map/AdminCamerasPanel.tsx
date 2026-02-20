@@ -140,7 +140,7 @@ export function AdminCamerasPanel({
       });
 
       setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
+        `Sincronização concluída. (criados=${resp?.result?.created ?? "-"}, atualizados=${resp?.result?.updated ?? "-"}, desativados=${
           resp?.result?.deactivated ?? "-"
         })`
       );
@@ -149,7 +149,7 @@ export function AdminCamerasPanel({
       onSynced?.();
     } catch (e: any) {
       setSyncMsg(null);
-      setErr(e?.message || "Erro no sync CÂMERAS");
+      setErr(e?.message || "Erro na sincronização de câmeras");
     } finally {
       setSyncLoading(false);
     }
@@ -173,7 +173,7 @@ export function AdminCamerasPanel({
       });
 
       setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
+        `Sincronização concluída. (criados=${resp?.result?.created ?? "-"}, atualizados=${resp?.result?.updated ?? "-"}, desativados=${
           resp?.result?.deactivated ?? "-"
         })`
       );
@@ -182,7 +182,7 @@ export function AdminCamerasPanel({
       if (civitasTab === "lpr") await loadLpr();
     } catch (e: any) {
       setSyncMsg(null);
-      setErr(e?.message || "Erro no sync CÂMERAS CIVITAS");
+      setErr(e?.message || "Erro na sincronização de câmeras Civitas");
     } finally {
       setSyncLoading(false);
     }
@@ -224,7 +224,7 @@ export function AdminCamerasPanel({
               border: "1px solid rgba(0,0,0,0.10)",
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Câmeras (SYNC)</div>
+            <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Câmeras</div>
 
             <div style={{ display: "grid", gap: 10 }}>
               <button
@@ -241,7 +241,7 @@ export function AdminCamerasPanel({
                   opacity: syncLoading ? 0.7 : 1,
                 }}
               >
-                {syncLoading ? "Sincronizando..." : "SYNC CÂMERAS"}
+                {syncLoading ? "Sincronizando..." : "Sincronizar Câmeras"}
               </button>
 
               <label
@@ -264,7 +264,7 @@ export function AdminCamerasPanel({
                   onChange={(e) => setDeactivateMissing(e.target.checked)}
                   style={{ transform: "scale(1.1)" }}
                 />
-                Desativar no banco as que sumirem da fonte (deactivate_missing)
+                Desativar registros ausentes na fonte de dados
               </label>
             </div>
 
@@ -374,7 +374,7 @@ export function AdminCamerasPanel({
             border: "1px solid rgba(0,0,0,0.10)",
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Câmeras Civitas (SYNC)</div>
+          <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Câmeras Civitas</div>
 
           <div style={{ display: "grid", gap: 10 }}>
             <button
@@ -391,7 +391,7 @@ export function AdminCamerasPanel({
                 opacity: syncLoading ? 0.7 : 1,
               }}
             >
-              {syncLoading ? "Sincronizando..." : "SYNC CÂMERAS CIVITAS"}
+              {syncLoading ? "Sincronizando..." : "Sincronizar Câmeras Civitas"}
             </button>
 
             <label
@@ -414,7 +414,7 @@ export function AdminCamerasPanel({
                 onChange={(e) => setDeactivateMissing(e.target.checked)}
                 style={{ transform: "scale(1.1)" }}
               />
-              Desativar no banco as que sumirem da fonte (deactivate_missing)
+              Desativar registros ausentes na fonte de dados
             </label>
           </div>
 
