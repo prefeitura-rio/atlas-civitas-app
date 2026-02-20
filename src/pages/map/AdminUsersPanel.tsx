@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Copy } from "lucide-react";
 import type { AdminUser } from "./types";
+import { isUserRole, roleLabel, type UserRole } from "./roles";
 import { fetchJson, inputStyle } from "./shared";
 
 const ADMIN_PAGE_SIZE = 50;
@@ -64,7 +65,7 @@ export function AdminUsersPanel({
   const [password, setPassword] = useState("");
   const [suggestedPassword, setSuggestedPassword] = useState("");
   const [passwordCopied, setPasswordCopied] = useState(false);
-  const [role, setRole] = useState("user");
+  const [role, setRole] = useState<UserRole>("user");
   const [isActive, setIsActive] = useState(true);
   const [roleOpen, setRoleOpen] = useState(false);
   const roleWrapRef = useRef<HTMLDivElement | null>(null);
@@ -148,7 +149,8 @@ export function AdminUsersPanel({
     setPassword("");
     setSuggestedPassword("");
     setPasswordCopied(false);
-    setRole((u.role || "user").toLowerCase());
+    const nextRole = (u.role || "user").toLowerCase();
+    setRole(isUserRole(nextRole) ? nextRole : "user");
     setIsActive(!!u.is_active);
   }
 
@@ -227,8 +229,8 @@ export function AdminUsersPanel({
 
     if (!emailV) return setErr("Email é obrigatório.");
     if (!fullNameV || fullNameV.length < 3) return setErr("Nome completo inválido.");
-    if (!roleV) return setErr("Role é obrigatório (admin/user).");
-    if (!/^(admin|user)$/.test(roleV)) return setErr("Role deve ser admin ou user.");
+    if (!roleV) return setErr("Role é obrigatório (admin/user/user_stream).");
+    if (!isUserRole(roleV)) return setErr("Role deve ser admin, user ou user_stream.");
     if (!matriculaV) return setErr("Matrícula é obrigatória.");
     if (!orgaoV) return setErr("Órgão é obrigatório.");
 
@@ -372,7 +374,7 @@ export function AdminUsersPanel({
 
           <div className="customSelect" ref={roleWrapRef}>
             <button type="button" className="customSelectBtn" onClick={() => setRoleOpen((v) => !v)}>
-              <span>{role === "admin" ? "Administrador" : "Usuário"}</span>
+              <span>{roleLabel(role)}</span>
               <span className="customSelectChevron" />
             </button>
             {roleOpen && (
@@ -385,7 +387,7 @@ export function AdminUsersPanel({
                     setRoleOpen(false);
                   }}
                 >
-                  Usuário
+                  Usuário sem streaming
                 </button>
                 <button
                   type="button"
@@ -396,6 +398,16 @@ export function AdminUsersPanel({
                   }}
                 >
                   Administrador
+                </button>
+                <button
+                  type="button"
+                  className={`customSelectItem ${role === "user_stream" ? "customSelectItemActive" : ""}`}
+                  onClick={() => {
+                    setRole("user_stream");
+                    setRoleOpen(false);
+                  }}
+                >
+                  Usuário com streaming
                 </button>
               </div>
             )}
@@ -602,7 +614,7 @@ export function AdminUsersPanel({
                     textOverflow: "ellipsis",
                   }}
                 >
-                  {u.email} <span style={{ opacity: 0.6, fontWeight: 800 }}>• {String(u.role).toUpperCase()}</span>
+                  {u.email} <span style={{ opacity: 0.6, fontWeight: 800 }}>• {roleLabel(u.role)}</span>
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.75 }}>
                   {u.full_name || "-"} • {u.is_active ? "ATIVO" : "INATIVO"}

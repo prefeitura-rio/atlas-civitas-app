@@ -1,3 +1,5 @@
+import type { UserRole } from "./roles";
+
 export type Camera = {
   id?: string;
   name: string;
@@ -7,7 +9,7 @@ export type Camera = {
   address: string;
   city: string;
   uf: string;
-  stream_url?: string;
+  stream_url?: string | null;
   is_active: boolean;
 };
 
@@ -68,7 +70,7 @@ export type Me = {
   id: string;
   email: string;
   full_name: string;
-  role: string;
+  role: UserRole;
   is_active: boolean;
   expires_at?: string | null;
   last_login_at?: string | null;
@@ -78,7 +80,7 @@ export type AdminUser = {
   id: string;
   email: string;
   full_name?: string | null;
-  role: string;
+  role: UserRole;
   cpf?: string | null;
   birth_date?: string | null;
   matricula?: string | null;

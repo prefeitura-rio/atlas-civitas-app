@@ -11,7 +11,7 @@ Crie um arquivo `.env` na raiz:
 
 ```
 VITE_MAPBOX_TOKEN=seu_token_aqui
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_URL=http://localhost:8000
 ```
 
 ## Como rodar
@@ -20,7 +20,34 @@ npm install
 npm run dev
 ```
 
-Acesse: `http://localhost:5173`
+Acesse: `http://localhost:3000`
+
+## Rodar com Docker
+### Build e run com Docker CLI
+```bash
+docker build \
+  --build-arg VITE_API_URL=http://localhost:8000 \
+  --build-arg VITE_MAPBOX_TOKEN=seu_token_aqui \
+  -t civitasmap-frontend .
+
+docker run --rm -p 3000:80 civitasmap-frontend
+```
+
+Acesse: `http://localhost:3000`
+
+### Rodar com Docker Compose
+1. Defina no `.env` (ou variáveis no shell):
+```bash
+VITE_API_URL=http://localhost:8000
+VITE_MAPBOX_TOKEN=seu_token_aqui
+# opcional (default 3000)
+# FRONTEND_PORT=3000
+```
+2. Suba o container:
+```bash
+docker compose up --build -d
+```
+3. Acesse em `http://localhost:3000`
 
 ## Funcionalidades principais
 - Camadas no mapa: Câmeras, Radares, Câmeras Inteligentes e LPR

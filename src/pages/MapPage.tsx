@@ -7,6 +7,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
+import { canAccessStreaming, isAdminRole, normalizeRole, roleLabel } from "./map/roles";
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
@@ -28,7 +29,9 @@ type AdminTab = "users" | "logs" | "cameras" | "radares";
 
 
 const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.toString() || "http://localhost:8000";
+  (import.meta as any).env?.VITE_API_URL?.toString() ||
+  (import.meta as any).env?.VITE_API_BASE_URL?.toString() ||
+  "http://localhost:8000";
 
 const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN?.toString() || "";
 
@@ -92,6 +95,13 @@ function escapeHtml(s: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function normalizeExternalUrl(value: unknown) {
+  if (typeof value !== "string") return "";
+  const raw = value.trim();
+  if (!raw) return "";
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
 function loadImagePromise(map: mapboxgl.Map, url: string) {
@@ -221,23 +231,29 @@ async function addImageOnce(map: mapboxgl.Map, id: string, url: string) {
 }
 
 function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
-  return list.map((c) => ({
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [c.lng, c.lat] },
-    properties: {
-      kind: "camera",
-      code: c.code,
-      name: c.name,
-      zona_camera: (c as any).zona_camera ?? "",
-      sistema_origem: (c as any).sistema_origem ?? "",
-      responsavel: (c as any).responsavel ?? "",
-      streaming_url: (c as any).streaming_url ?? c.stream_url ?? "",
-      city: c.city,
-      uf: c.uf,
-      address: c.address || "",
-      is_active: c.is_active ? 1 : 0,
-    },
-  }));
+  return list.map((c) => {
+    const rawStreamingUrl = ((c as any).streaming_url ?? c.stream_url ?? "").toString().trim();
+    const streamingUrl = normalizeExternalUrl(rawStreamingUrl);
+
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [c.lng, c.lat] },
+      properties: {
+        kind: "camera",
+        code: c.code,
+        name: c.name,
+        zona_camera: (c as any).zona_camera ?? (c as any).zone ?? "",
+        sistema_origem: (c as any).sistema_origem ?? "",
+        responsavel: (c as any).responsavel ?? "",
+        streaming_url: streamingUrl,
+        streaming_url_raw: rawStreamingUrl,
+        city: c.city,
+        uf: c.uf,
+        address: c.address || "",
+        is_active: c.is_active ? 1 : 0,
+      },
+    };
+  });
 }
 
 function camerasIntelToFeatures(list: CameraIntel[]): Feature<Point, any>[] {
@@ -461,8 +477,9 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dockOpen]);
 
-  const role = (me?.role || "user").toLowerCase();
-  const isAdmin = role === "admin";
+  const role = normalizeRole(me?.role ?? auth?.user?.role ?? localStorage.getItem("user_role"));
+  const isAdmin = isAdminRole(role);
+  const hasStreamingAccess = canAccessStreaming(role);
 
   function togglePanel(next: TabKey) {
     setPanel((cur) => (cur === next ? null : next));
@@ -1086,9 +1103,8 @@ export default function MapPage() {
       if (!f) return;
 
       const p = f.properties || {};
-      const rawStreamingUrl = (p.streaming_url || p.stream_url || "").toString().trim();
-      if (!rawStreamingUrl) return;
-      const streamingUrl = /^https?:\/\//i.test(rawStreamingUrl) ? rawStreamingUrl : `https://${rawStreamingUrl}`;
+      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      if (!streamingUrl) return;
       const coords = (f.geometry as any).coordinates as [number, number];
 
       hoverPreviewTimerRef.current = window.setTimeout(() => {
@@ -1143,6 +1159,10 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      const streamingLabel = escapeHtml(
+        (p.streaming_url_raw || p.streaming_url || p.stream_url || "").toString().trim() || streamingUrl
+      );
 
       setSelectedCode(p.code || null);
       setSelectedRadar(null);
@@ -1161,13 +1181,11 @@ export default function MapPage() {
             <div style="font-size: 12px; opacity:.85;">
               <div><strong>Código da câmera:</strong> ${escapeHtml(p.code || "-")}</div>
               <div><strong>Zona da câmera:</strong> ${escapeHtml(p.zona_camera || "-")}</div>
-              <div><strong>Streaming URL:</strong> ${
-                p.streaming_url
-                  ? `<a href="${escapeHtml(p.streaming_url)}" target="_blank" rel="noreferrer">${escapeHtml(
-                      p.streaming_url
-                    )}</a>`
-                  : "-"
-              }</div>
+              ${
+                streamingUrl
+                  ? `<div><strong>Streaming URL:</strong> <a href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">${streamingLabel}</a></div>`
+                  : ""
+              }
             </div>
           </div>
         `)
@@ -3976,6 +3994,10 @@ export default function MapPage() {
                     <div style={{ fontSize: 13 }}>{me?.full_name || "-"}</div>
                     <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
                     <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Perfil de acesso</div>
+                    <div style={{ fontSize: 13, opacity: 0.85 }}>
+                      {roleLabel(role)} • Streaming {hasStreamingAccess ? "habilitado" : "indisponível"}
+                    </div>
                   </div>
                 </div>
 
