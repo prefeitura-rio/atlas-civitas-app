@@ -2880,7 +2880,7 @@ export default function MapPage() {
 
                 <div style={{ flex: 1 }} />
 
-                <div className="panelTabs">
+                <div className="tabsRail">
                   <button
                     className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
                     onClick={() => setListMode("cameras")}
@@ -3446,30 +3446,32 @@ export default function MapPage() {
 
                 <div style={{ flex: 1 }} />
 
-                <button
-                  className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("users")}
-                >
-                  Usuários
-                </button>
-                <button
-                  className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("cameras")}
-                >
-                  Câmeras
-                </button>
-                <button
-                  className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("radares")}
-                >
-                  Radares
-                </button>
-                <button
-                  className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("logs")}
-                >
-                  Logs
-                </button>
+                <div className="tabsRail tabsRailAdmin">
+                  <button
+                    className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("users")}
+                  >
+                    Usuários
+                  </button>
+                  <button
+                    className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("cameras")}
+                  >
+                    Câmeras
+                  </button>
+                  <button
+                    className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("radares")}
+                  >
+                    Radares
+                  </button>
+                  <button
+                    className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("logs")}
+                  >
+                    Logs
+                  </button>
+                </div>
               </div>
 
               <div style={{ maxHeight: panelMaxHeight, overflow: "auto" }}>
@@ -3695,7 +3697,7 @@ export default function MapPage() {
 
             {panel === "map" && (
               <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <div className="tabsRail" style={{ marginBottom: 10 }}>
                   <button
                     className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
                     onClick={() => setListMode("cameras")}
@@ -4268,7 +4270,7 @@ export default function MapPage() {
 
             {panel === "admin" && isAdmin && (
               <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <div className="tabsRail tabsRailAdmin tabsRailAdminMobile">
                   <button
                     className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
                     onClick={() => setAdminTab("users")}

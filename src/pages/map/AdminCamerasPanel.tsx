@@ -190,7 +190,7 @@ export function AdminCamerasPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="tabsRail tabsRailSection">
         <button className={`subTab ${camTab === "cameras" ? "subTabActive" : ""}`} onClick={() => setCamTab("cameras")}>
           Câmeras
         </button>
@@ -200,7 +200,7 @@ export function AdminCamerasPanel({
       </div>
 
       {camTab === "civitas" && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="tabsRail tabsRailSection tabsRailCompact">
           <button
             className={`subTab ${civitasTab === "inteligentes" ? "subTabActive" : ""}`}
             onClick={() => setCivitasTab("inteligentes")}
