@@ -3801,7 +3801,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                Mapa
+                Central
               </button>
 
               <button
@@ -3938,7 +3938,7 @@ export default function MapPage() {
                           setPanelOpen(false);
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                           <div
                             style={{
                               width: 18,
@@ -3954,14 +3954,16 @@ export default function MapPage() {
                             <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
                               <div
                                 style={{
                                   fontWeight: 900,
-                                  fontSize: 13,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
+                                  fontSize: 12,
+                                  lineHeight: 1.2,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
                                 }}
                               >
                                 {c.name}
@@ -3971,8 +3973,8 @@ export default function MapPage() {
                                   display: "inline-flex",
                                   alignItems: "center",
                                   borderRadius: 999,
-                                  padding: "2px 8px",
-                                  fontSize: 11,
+                                  padding: "1px 7px",
+                                  fontSize: 10,
                                   fontWeight: 800,
                                   border: "1px solid rgba(59,130,246,0.32)",
                                   background: "rgba(219,234,254,0.92)",
@@ -3982,8 +3984,8 @@ export default function MapPage() {
                                 {c.code}
                               </span>
                             </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                          <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
                                   [c.city, c.uf].filter(Boolean).join(" - ") ||
                                   "-"}
@@ -4006,7 +4008,7 @@ export default function MapPage() {
                           setPanelOpen(false);
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                           <div
                             style={{
                               width: 18,
@@ -4022,14 +4024,16 @@ export default function MapPage() {
                             <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
                               <div
                                 style={{
                                   fontWeight: 900,
-                                  fontSize: 13,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
+                                  fontSize: 12,
+                                  lineHeight: 1.2,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
                                 }}
                               >
                                 {c.name}
@@ -4039,8 +4043,8 @@ export default function MapPage() {
                                   display: "inline-flex",
                                   alignItems: "center",
                                   borderRadius: 999,
-                                  padding: "2px 8px",
-                                  fontSize: 11,
+                                  padding: "1px 7px",
+                                  fontSize: 10,
                                   fontWeight: 800,
                                   border: "1px solid rgba(234,88,12,0.30)",
                                   background: "rgba(255,237,213,0.92)",
@@ -4050,11 +4054,11 @@ export default function MapPage() {
                                 {c.code}
                               </span>
                             </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 IP: {c.ip || "-"}
                               </span>
-                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 Direção: {c.direction || "-"}
                               </span>
                             </div>
@@ -4075,7 +4079,7 @@ export default function MapPage() {
                           setPanelOpen(false);
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                           <div
                             style={{
                               width: 18,
@@ -4091,14 +4095,16 @@ export default function MapPage() {
                             <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
                               <div
                                 style={{
                                   fontWeight: 900,
-                                  fontSize: 13,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
+                                  fontSize: 12,
+                                  lineHeight: 1.2,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
                                 }}
                               >
                                 {c.name}
@@ -4108,8 +4114,8 @@ export default function MapPage() {
                                   display: "inline-flex",
                                   alignItems: "center",
                                   borderRadius: 999,
-                                  padding: "2px 8px",
-                                  fontSize: 11,
+                                  padding: "1px 7px",
+                                  fontSize: 10,
                                   fontWeight: 800,
                                   border: "1px solid rgba(22,163,74,0.30)",
                                   background: "rgba(220,252,231,0.92)",
@@ -4119,11 +4125,11 @@ export default function MapPage() {
                                 {c.code}
                               </span>
                             </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 IP: {c.ip || "-"}
                               </span>
-                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 Direção: {c.direction || "-"}
                               </span>
                             </div>

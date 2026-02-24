@@ -52,6 +52,7 @@ export function AdminCamerasPanel({
     display: "flex",
     gap: 10,
     alignItems: "center",
+    flexWrap: "nowrap",
   } as const;
 
   const chipStyle = {
@@ -331,7 +332,10 @@ export function AdminCamerasPanel({
                 <div
                   key={c.id || c.code}
                   className="adminRow"
-                  style={cardRowStyle}
+                  style={{
+                    ...cardRowStyle,
+                    alignItems: "flex-start",
+                  }}
                 >
                   <div
                     style={{
@@ -348,14 +352,15 @@ export function AdminCamerasPanel({
                     <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
                       <div
                         style={{
                           fontWeight: 900,
                           fontSize: 13,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          whiteSpace: "normal",
+                          overflow: "visible",
+                          textOverflow: "clip",
+                          wordBreak: "break-word",
                           color: "#0f172a",
                         }}
                       >

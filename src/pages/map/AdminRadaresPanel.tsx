@@ -36,6 +36,7 @@ export function AdminRadaresPanel({
     display: "flex",
     gap: 10,
     alignItems: "center",
+    flexWrap: "nowrap",
   } as const;
   const chipStyle = {
     display: "inline-flex",

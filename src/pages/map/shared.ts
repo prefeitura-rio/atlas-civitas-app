@@ -35,6 +35,9 @@ export async function fetchJson<T>(url: string, opts: RequestInit = {}) {
 
 export function inputStyle(): CSSProperties {
   return {
+    boxSizing: "border-box",
+    minWidth: 0,
+    maxWidth: "100%",
     width: "100%",
     padding: "10px 12px",
     borderRadius: 14,

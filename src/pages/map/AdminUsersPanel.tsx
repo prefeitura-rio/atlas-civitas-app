@@ -96,6 +96,23 @@ function getUserExpirationBadge(expiresAt?: string | null) {
   };
 }
 
+function formatBirthDateMasked(v: string) {
+  const digits = v.replace(/\D/g, "").slice(0, 8);
+  const d = digits.slice(0, 2);
+  const m = digits.slice(2, 4);
+  const y = digits.slice(4, 8);
+  if (digits.length <= 2) return d;
+  if (digits.length <= 4) return `${d}/${m}`;
+  return `${d}/${m}/${y}`;
+}
+
+function formatBirthDateForMobile(v: string) {
+  if (!v) return "";
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  return formatBirthDateMasked(v);
+}
+
 export function AdminUsersPanel({
   apiBase,
   token,
@@ -202,7 +219,7 @@ export function AdminUsersPanel({
     setEmail(u.email || "");
     setFullName(u.full_name || "");
     setCpf(formatCpf(u.cpf || ""));
-    setBirthDate(u.birth_date || "");
+    setBirthDate(isMobile ? formatBirthDateForMobile(u.birth_date || "") : (u.birth_date || ""));
     setMatricula(u.matricula || "");
     setUnidade(u.unidade || "");
     setOrgao(u.orgao || "");
@@ -275,6 +292,15 @@ export function AdminUsersPanel({
     return out;
   }
 
+  function normalizeBirthDateInput(v: string) {
+    const raw = v.trim();
+    if (!raw) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    return raw;
+  }
+
   async function save() {
     setErr(null);
 
@@ -282,7 +308,7 @@ export function AdminUsersPanel({
     const fullNameV = fullName.trim();
     const roleV = role.trim().toLowerCase();
     const cpfV = normalizeCpf(cpf.trim());
-    const birthDateV = birthDate.trim();
+    const birthDateV = normalizeBirthDateInput(birthDate);
     const matriculaV = matricula.trim();
     const unidadeV = unidade.trim();
     const orgaoV = orgao.trim();
@@ -412,7 +438,10 @@ export function AdminUsersPanel({
           {id ? "Editar usuário" : "Criar usuário"}
         </div>
 
-        <div className="adminGrid2" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+        <div
+          className="adminGrid2"
+          style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr" }}
+        >
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" style={inputStyle()} />
           <input
             value={fullName}
@@ -429,9 +458,11 @@ export function AdminUsersPanel({
           />
           <input
             value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-            type="date"
-            placeholder="data de nascimento"
+            onChange={(e) => setBirthDate(isMobile ? formatBirthDateMasked(e.target.value) : e.target.value)}
+            type={isMobile ? "text" : "date"}
+            inputMode={isMobile ? "numeric" : undefined}
+            maxLength={isMobile ? 10 : undefined}
+            placeholder={isMobile ? "data de nascimento (dd/mm/aaaa)" : "data de nascimento"}
             style={inputStyle()}
           />
 
@@ -578,7 +609,7 @@ export function AdminUsersPanel({
               background: "rgba(255,255,255,0.95)",
               fontWeight: 900,
               color: "rgba(0,0,0,0.82)",
-              gridColumn: "1 / span 2",
+              gridColumn: isMobile ? "1 / span 1" : "1 / span 2",
             }}
           >
             <input
@@ -649,7 +680,7 @@ export function AdminUsersPanel({
             value={manageFilter}
             onChange={(e) => setManageFilter(e.target.value)}
             placeholder="Filtrar por nome ou CPF"
-            style={inputStyle()}
+            style={{ ...inputStyle(), flex: 1, minWidth: 0 }}
           />
           <button
             onClick={load}
@@ -704,28 +735,30 @@ export function AdminUsersPanel({
                 }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: isMobile ? "wrap" : "nowrap" }}>
                     <div
                       style={{
                         fontWeight: 900,
                         fontSize: 13,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
+                        whiteSpace: isMobile ? "normal" : "nowrap",
+                        overflow: isMobile ? "visible" : "hidden",
+                        textOverflow: isMobile ? "clip" : "ellipsis",
+                        wordBreak: "break-word",
                       }}
                     >
                       {u.full_name || u.email}
                     </div>
-                    <span style={{ opacity: 0.55, fontSize: 12, whiteSpace: "nowrap" }}>{roleLabel(u.role)}</span>
+                    <span style={{ opacity: 0.55, fontSize: 12, whiteSpace: isMobile ? "normal" : "nowrap" }}>{roleLabel(u.role)}</span>
                   </div>
                   <div
                     style={{
                       fontSize: 12,
                       opacity: 0.75,
                       marginTop: 2,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
+                      whiteSpace: isMobile ? "normal" : "nowrap",
+                      overflow: isMobile ? "visible" : "hidden",
+                      textOverflow: isMobile ? "clip" : "ellipsis",
+                      wordBreak: "break-word",
                     }}
                   >
                     {u.email}
@@ -735,9 +768,10 @@ export function AdminUsersPanel({
                       fontSize: 12,
                       opacity: 0.72,
                       marginTop: 2,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
+                      whiteSpace: isMobile ? "normal" : "nowrap",
+                      overflow: isMobile ? "visible" : "hidden",
+                      textOverflow: isMobile ? "clip" : "ellipsis",
+                      wordBreak: "break-word",
                     }}
                   >
                     {u.is_active ? "ATIVO" : "INATIVO"}

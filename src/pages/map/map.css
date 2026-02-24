@@ -45,6 +45,7 @@
 }
 .customSelectBtn {
   appearance: none;
+  box-sizing: border-box;
   width: 100%;
   padding: 10px 36px 10px 12px;
   border-radius: 14px;
@@ -277,6 +278,14 @@
   gap: 10px;
   margin: 10px 0 12px;
 }
+.panelSearch > input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.panelSearch > button {
+  flex: 0 0 auto;
+}
 
 .muted {
   opacity: 0.75;
@@ -321,6 +330,17 @@
     transition: transform 0.18s ease;
     z-index: 20;
   }
+  .mobileDrawer .adminGrid2 > * {
+    min-width: 0;
+  }
+  .mobileDrawer input,
+  .mobileDrawer .customSelect,
+  .mobileDrawer .customSelectBtn,
+  .mobileDrawer .adminCard {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
   .tabBtn {
     padding: 8px 10px;
     font-size: 12px;
@@ -358,6 +378,10 @@
   .adminLabelWrap {
     flex-wrap: wrap;
     line-height: 1.2;
+  }
+  .listItem {
+    padding: 8px 10px;
+    border-radius: 12px;
   }
   .dockWrap {
     position: fixed;
