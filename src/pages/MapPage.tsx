@@ -44,6 +44,7 @@ const SOURCES = {
   pois: "src-pois",
   gps: "src-gps",
   search: "src-search",
+  selection: "src-selection",
   bairros: "src-bairros",
   risp: "src-risp",
   aisp: "src-aisp",
@@ -60,6 +61,7 @@ const LAYERS = {
   gps_point: "lyr-gps-point",
   gps_accuracy: "lyr-gps-accuracy",
   search_pin: "lyr-search-pin",
+  selection_ring: "lyr-selection-ring",
   bairros_fill: "lyr-bairros-fill",
   bairros_line: "lyr-bairros-line",
   bairros_selected_fill: "lyr-bairros-selected-fill",
@@ -350,6 +352,7 @@ export default function MapPage() {
 
   const handlersBoundRef = useRef(false);
   const iconsLoadedRef = useRef(false);
+  const selectionRingTimerRef = useRef<number | null>(null);
 
   const [panel, setPanel] = useState<PanelKey>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -429,6 +432,39 @@ export default function MapPage() {
 
   const gpsOnRef = useRef<boolean>(false);
   useEffect(() => {
+    return () => {
+      if (selectionRingTimerRef.current) window.clearTimeout(selectionRingTimerRef.current);
+    };
+  }, []);
+
+  const civitasToolsSummary = [
+    {
+      tool: "Pontos de Detecção",
+      what: "Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.",
+      when: "Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais específicos.",
+      result:
+        "Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios de clonagem.",
+    },
+    {
+      tool: "Busca por Radar",
+      what: "Identificar veículos que passaram em determinado local e período.",
+      when: "Quando não há placa definida, mas há local e horário da ocorrência.",
+      result: "Lista cronológica de placas detectadas em radar ou conjunto de radares.",
+    },
+    {
+      tool: "Placas Conjuntas",
+      what: "Identificar veículos que trafegam junto com uma placa monitorada.",
+      when: "Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.",
+      result: "Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.",
+    },
+    {
+      tool: "Placas Correlatas",
+      what: "Identificar vínculos e padrões entre diferentes veículos monitorados.",
+      when: "Investigações com múltiplos veículos ou análise de conexões entre ocorrências.",
+      result: "Grafo de conexões entre veículos e tabela ordenada por nível de correlação.",
+    },
+  ] as const;
+  useEffect(() => {
     gpsOnRef.current = gpsOn;
   }, [gpsOn]);
 
@@ -494,11 +530,45 @@ export default function MapPage() {
     if (!map) return;
     map.flyTo({
       center: [lng, lat],
-      zoom: zoom ?? clamp(map.getZoom(), 12, 15),
+      zoom: zoom ?? clamp(map.getZoom(), 16, 18),
       speed: 1.2,
       curve: 1.4,
       essential: true,
     });
+  }
+
+  function setSelectionRing(lng: number, lat: number) {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource(SOURCES.selection) as mapboxgl.GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [lng, lat] },
+          properties: {},
+        },
+      ],
+    } as any);
+
+    if (selectionRingTimerRef.current) {
+      window.clearTimeout(selectionRingTimerRef.current);
+    }
+    selectionRingTimerRef.current = window.setTimeout(() => {
+      const currentMap = mapRef.current;
+      if (!currentMap) return;
+      const currentSrc = currentMap.getSource(SOURCES.selection) as mapboxgl.GeoJSONSource | undefined;
+      if (!currentSrc) return;
+      currentSrc.setData({ type: "FeatureCollection", features: [] } as any);
+      selectionRingTimerRef.current = null;
+    }, 5000);
+  }
+
+  function focusOnDetection(lng: number, lat: number, zoom = 17.2) {
+    setSelectionRing(lng, lat);
+    flyToPoint(lng, lat, zoom);
   }
 
   function ensureSourcesAndLayers(map: mapboxgl.Map) {
@@ -523,6 +593,13 @@ export default function MapPage() {
 
     if (!map.getSource(SOURCES.search)) {
       map.addSource(SOURCES.search, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.selection)) {
+      map.addSource(SOURCES.selection, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
@@ -700,6 +777,21 @@ export default function MapPage() {
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "icon-anchor": "bottom",
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.selection_ring)) {
+      map.addLayer({
+        id: LAYERS.selection_ring,
+        type: "circle",
+        source: SOURCES.selection,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 9, 14, 14, 17, 20, 19, 24],
+          "circle-color": "rgba(239,68,68,0.08)",
+          "circle-stroke-color": "rgba(220,38,38,0.98)",
+          "circle-stroke-width": 2.5,
+          "circle-opacity": 1,
         },
       });
     }
@@ -915,6 +1007,7 @@ export default function MapPage() {
       LAYERS.cameras_lpr_points,
       LAYERS.radares_points,
       LAYERS.search_pin,
+      LAYERS.selection_ring,
       LAYERS.gps_accuracy,
       LAYERS.gps_point,
     ];
@@ -1160,6 +1253,7 @@ export default function MapPage() {
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
       const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      setSelectionRing(coords[0], coords[1]);
 
       setSelectedCode(p.code || null);
       setSelectedRadar(null);
@@ -1210,6 +1304,7 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      setSelectionRing(coords[0], coords[1]);
 
       setSelectedCode(null);
       setSelectedRadar(null);
@@ -1252,6 +1347,7 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      setSelectionRing(coords[0], coords[1]);
 
       setSelectedCode(null);
       setSelectedRadar(null);
@@ -1294,6 +1390,7 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      setSelectionRing(coords[0], coords[1]);
 
       setSelectedRadar(p.codcet || null);
       setSelectedCode(null);
@@ -2991,7 +3088,7 @@ export default function MapPage() {
                       onClick={() => {
                         setSelectedCode(c.code);
                         setSelectedRadar(null);
-                        flyToPoint(c.lng, c.lat);
+                        focusOnDetection(c.lng, c.lat);
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3058,7 +3155,7 @@ export default function MapPage() {
                       onClick={() => {
                         setSelectedCode(null);
                         setSelectedRadar(null);
-                        flyToPoint(c.lng, c.lat);
+                        focusOnDetection(c.lng, c.lat);
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3126,7 +3223,7 @@ export default function MapPage() {
                       onClick={() => {
                         setSelectedCode(null);
                         setSelectedRadar(null);
-                        flyToPoint(c.lng, c.lat);
+                        focusOnDetection(c.lng, c.lat);
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3199,7 +3296,7 @@ export default function MapPage() {
                           if (!ok) return;
                           setSelectedRadar(r.codcet);
                           setSelectedCode(null);
-                          flyToPoint(lng, lat);
+                          focusOnDetection(lng, lat);
                         }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3475,70 +3572,56 @@ export default function MapPage() {
                   <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
                     Quadro-resumo das ferramentas da CIVITAS
                   </div>
-                  <div style={{ width: "100%", overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Pontos de Detecção</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais
-                            específicos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios
-                            de clonagem.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Busca por Radar</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que passaram em determinado local e período.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando não há placa definida, mas há local e horário da ocorrência.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista cronológica de placas detectadas em radar ou conjunto de radares.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Conjuntas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que trafegam junto com uma placa monitorada.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Correlatas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar vínculos e padrões entre diferentes veículos monitorados.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Investigações com múltiplos veículos ou análise de conexões entre ocorrências.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Grafo de conexões entre veículos e tabela ordenada por nível de correlação.
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  {!isMobile ? (
+                    <div style={{ width: "100%", overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {civitasToolsSummary.map((row) => (
+                            <tr key={row.tool}>
+                              <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>{row.tool}</td>
+                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.what}</td>
+                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.when}</td>
+                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.result}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {civitasToolsSummary.map((row) => (
+                        <div
+                          key={row.tool}
+                          style={{
+                            border: "1px solid rgba(0,0,0,0.14)",
+                            borderRadius: 12,
+                            padding: 10,
+                            background: "rgba(255,255,255,0.96)",
+                            minWidth: 0,
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{row.tool}</div>
+                          <div style={{ fontSize: 12, lineHeight: 1.4, wordBreak: "break-word" }}>
+                            <strong>O que é:</strong> {row.what}
+                          </div>
+                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                            <strong>Quando utilizar:</strong> {row.when}
+                          </div>
+                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                            <strong>Resultado:</strong> {row.result}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -3934,7 +4017,7 @@ export default function MapPage() {
                         onClick={() => {
                           setSelectedCode(c.code);
                           setSelectedRadar(null);
-                          flyToPoint(c.lng, c.lat);
+                          focusOnDetection(c.lng, c.lat);
                           setPanelOpen(false);
                         }}
                       >
@@ -4004,7 +4087,7 @@ export default function MapPage() {
                         onClick={() => {
                           setSelectedCode(null);
                           setSelectedRadar(null);
-                          flyToPoint(c.lng, c.lat);
+                          focusOnDetection(c.lng, c.lat);
                           setPanelOpen(false);
                         }}
                       >
@@ -4075,7 +4158,7 @@ export default function MapPage() {
                         onClick={() => {
                           setSelectedCode(null);
                           setSelectedRadar(null);
-                          flyToPoint(c.lng, c.lat);
+                          focusOnDetection(c.lng, c.lat);
                           setPanelOpen(false);
                         }}
                       >
@@ -4152,7 +4235,7 @@ export default function MapPage() {
                             if (!ok) return;
                             setSelectedRadar(r.codcet);
                             setSelectedCode(null);
-                            flyToPoint(lng, lat);
+                            focusOnDetection(lng, lat);
                             setPanelOpen(false);
                           }}
                         >
@@ -4429,70 +4512,56 @@ export default function MapPage() {
                   <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
                     Quadro-resumo das ferramentas da CIVITAS
                   </div>
-                  <div style={{ width: "100%", overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Pontos de Detecção</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais
-                            específicos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios
-                            de clonagem.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Busca por Radar</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que passaram em determinado local e período.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando não há placa definida, mas há local e horário da ocorrência.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista cronológica de placas detectadas em radar ou conjunto de radares.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Conjuntas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que trafegam junto com uma placa monitorada.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Correlatas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar vínculos e padrões entre diferentes veículos monitorados.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Investigações com múltiplos veículos ou análise de conexões entre ocorrências.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Grafo de conexões entre veículos e tabela ordenada por nível de correlação.
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  {!isMobile ? (
+                    <div style={{ width: "100%", overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
+                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {civitasToolsSummary.map((row) => (
+                            <tr key={row.tool}>
+                              <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>{row.tool}</td>
+                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.what}</td>
+                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.when}</td>
+                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.result}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {civitasToolsSummary.map((row) => (
+                        <div
+                          key={row.tool}
+                          style={{
+                            border: "1px solid rgba(0,0,0,0.14)",
+                            borderRadius: 12,
+                            padding: 10,
+                            background: "rgba(255,255,255,0.96)",
+                            minWidth: 0,
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{row.tool}</div>
+                          <div style={{ fontSize: 12, lineHeight: 1.4, wordBreak: "break-word" }}>
+                            <strong>O que é:</strong> {row.what}
+                          </div>
+                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                            <strong>Quando utilizar:</strong> {row.when}
+                          </div>
+                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                            <strong>Resultado:</strong> {row.result}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div
