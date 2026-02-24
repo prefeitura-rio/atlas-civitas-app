@@ -2317,8 +2317,33 @@ export default function MapPage() {
     return radares.find((r) => r.codcet === selectedRadar) || null;
   }, [selectedRadar, radares]);
 
-  const panelWidth = panel === "admin" ? 820 : 520;
+  const panelWidth = panel === "admin" ? 860 : 560;
   const panelMaxHeight = panel === "admin" || panel === "civitas" ? "74vh" : "56vh";
+  const listTitle =
+    listMode === "cameras"
+      ? "Câmeras"
+      : listMode === "inteligentes"
+      ? "Super Câmeras Inteligentes"
+      : listMode === "lpr"
+      ? "Câmeras LPR"
+      : "Radares";
+  const listCountLabel =
+    listMode === "cameras"
+      ? loadingCameras
+        ? "Carregando..."
+        : `${cameras.length}`
+      : listMode === "inteligentes"
+      ? loadingCamerasIntel
+        ? "Carregando..."
+        : `${camerasIntel.length}`
+      : listMode === "lpr"
+      ? loadingCamerasLpr
+        ? "Carregando..."
+        : `${camerasLpr.length}`
+      : loadingRadares
+      ? "Carregando..."
+      : `${radares.length}`;
+  const listHeaderLabel = `${listTitle} - ${listCountLabel}`;
 
   return (
     <div
@@ -2552,6 +2577,7 @@ export default function MapPage() {
                   style={{ ...inputStyle(), padding: "8px 10px", borderRadius: 12 }}
                 />
                 <div
+                  className="scrollbarHidden"
                   style={{
                     border: "1px solid rgba(0,0,0,0.08)",
                     borderRadius: 12,
@@ -2894,39 +2920,8 @@ export default function MapPage() {
         >
           {panel === "map" && (
             <>
-              <div className="panelHeader" style={{ marginBottom: 10, alignItems: "center" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <div className="panelTitle">
-                    {listMode === "cameras"
-                      ? "Câmeras"
-                      : listMode === "inteligentes"
-                      ? "Super Câmeras Inteligentes"
-                      : listMode === "lpr"
-                      ? "Câmeras LPR"
-                      : "Radares"}
-                  </div>
-                  <div className="panelCount">
-                    {listMode === "cameras"
-                      ? loadingCameras
-                        ? "Carregando..."
-                        : `${cameras.length} câmeras`
-                      : listMode === "inteligentes"
-                      ? loadingCamerasIntel
-                        ? "Carregando..."
-                        : `${camerasIntel.length} super câmeras inteligentes`
-                      : listMode === "lpr"
-                      ? loadingCamerasLpr
-                        ? "Carregando..."
-                        : `${camerasLpr.length} LPR`
-                      : loadingRadares
-                      ? "Carregando..."
-                      : `${radares.length} radares`}
-                  </div>
-                </div>
-
-                <div style={{ flex: 1 }} />
-
-                <div className="tabsRail">
+              <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
+                <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
                   <button
                     className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
                     onClick={() => setListMode("cameras")}
@@ -2952,6 +2947,7 @@ export default function MapPage() {
                     Radares
                   </button>
                 </div>
+                <div className="panelTitle">{listHeaderLabel}</div>
               </div>
 
               <div className="panelSearch">
@@ -2986,7 +2982,7 @@ export default function MapPage() {
                 </button>
               </div>
 
-              <div style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
+              <div className="scrollbarHidden" style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
                 {listMode === "cameras" &&
                   (listItems as Camera[]).map((c) => (
                     <div
@@ -2999,28 +2995,55 @@ export default function MapPage() {
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 999,
+                            border: "1px solid rgba(59,130,246,0.30)",
+                            background: "rgba(219,234,254,0.90)",
+                            display: "grid",
+                            placeItems: "center",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 900,
-                              fontSize: 13,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontWeight: 900,
+                                fontSize: 13,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {c.name}
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                                border: "1px solid rgba(59,130,246,0.32)",
+                                background: "rgba(219,234,254,0.92)",
+                                color: "#1d4ed8",
+                              }}
+                            >
+                              {c.code}
+                            </span>
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.75,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {c.city} - {c.uf} • {c.address}
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                                [c.city, c.uf].filter(Boolean).join(" - ") ||
+                                "-"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -3039,28 +3062,56 @@ export default function MapPage() {
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 999,
+                            border: "1px solid rgba(234,88,12,0.30)",
+                            background: "rgba(255,237,213,0.92)",
+                            display: "grid",
+                            placeItems: "center",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 900,
-                              fontSize: 13,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontWeight: 900,
+                                fontSize: 13,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {c.name}
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                                border: "1px solid rgba(234,88,12,0.30)",
+                                background: "rgba(255,237,213,0.92)",
+                                color: "#c2410c",
+                              }}
+                            >
+                              {c.code}
+                            </span>
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.75,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              IP: {c.ip || "-"}
+                            </span>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              Direção: {c.direction || "-"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -3079,28 +3130,56 @@ export default function MapPage() {
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 999,
+                            border: "1px solid rgba(22,163,74,0.30)",
+                            background: "rgba(220,252,231,0.92)",
+                            display: "grid",
+                            placeItems: "center",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 900,
-                              fontSize: 13,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontWeight: 900,
+                                fontSize: 13,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {c.name}
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                                border: "1px solid rgba(22,163,74,0.30)",
+                                background: "rgba(220,252,231,0.92)",
+                                color: "#166534",
+                              }}
+                            >
+                              {c.code}
+                            </span>
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.75,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              IP: {c.ip || "-"}
+                            </span>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              Direção: {c.direction || "-"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -3122,33 +3201,61 @@ export default function MapPage() {
                           setSelectedCode(null);
                           flyToPoint(lng, lat);
                         }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div
                               style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(234,88,12,0.30)",
+                                background: "rgba(255,237,213,0.92)",
+                                display: "grid",
+                                placeItems: "center",
+                                flex: "0 0 auto",
                               }}
                             >
-                              Radar <span style={{ opacity: 0.6 }}>({r.codcet})</span>
+                              <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {r.bairro || "-"} • {r.logradouro || r.localidade || "-"} • {r.sentido || "-"}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 13,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  {r.logradouro || r.localidade || "Radar"}
+                                </div>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(234,88,12,0.30)",
+                                    background: "rgba(255,237,213,0.92)",
+                                    color: "#c2410c",
+                                  }}
+                                >
+                                  {r.codcet}
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Bairro: {r.bairro || "-"}
+                                </span>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Sentido: {r.sentido || "-"}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
                       </div>
                     );
                   })}
@@ -3167,7 +3274,7 @@ export default function MapPage() {
               </div>
 
               {!isMobile && filtered.length > PAGE_SIZE && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
                   <button
                     className="btnGhost"
                     onClick={() => setPage(page - 1)}
@@ -3356,7 +3463,7 @@ export default function MapPage() {
                 Ferramentas da CIVITAS e Como Solicitar as Informações
               </div>
 
-              <div style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
+              <div className="scrollbarHidden" style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
                 <div
                   style={{
                     padding: 12,
@@ -3663,7 +3770,7 @@ export default function MapPage() {
         {panelOpen && (
           <div
             ref={mobileDrawerRef}
-            className="mobileDrawer glassStrong"
+            className="mobileDrawer glassStrong scrollbarHidden"
             style={{ padding: 12, color: "#0b0b0f" }}
             onTouchStart={(e) => {
               touchStartYRef.current = e.touches[0]?.clientY ?? null;
@@ -3743,31 +3850,34 @@ export default function MapPage() {
 
             {panel === "map" && (
               <>
-                <div className="tabsRail" style={{ marginBottom: 10 }}>
-                  <button
-                    className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("cameras")}
-                  >
-                    Câmeras
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("inteligentes")}
-                  >
-                    Super Câmeras Inteligentes
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("lpr")}
-                  >
-                    LPR
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "radares" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("radares")}
-                  >
-                    Radares
-                  </button>
+                <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
+                  <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
+                    <button
+                      className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("cameras")}
+                    >
+                      Câmeras
+                    </button>
+                    <button
+                      className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("inteligentes")}
+                    >
+                      Super Câmeras Inteligentes
+                    </button>
+                    <button
+                      className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("lpr")}
+                    >
+                      LPR
+                    </button>
+                    <button
+                      className={`subTab ${listMode === "radares" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("radares")}
+                    >
+                      Radares
+                    </button>
+                  </div>
+                  <div className="panelTitle">{listHeaderLabel}</div>
                 </div>
 
                 <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
@@ -3803,6 +3913,7 @@ export default function MapPage() {
                 </div>
 
                 <div
+                  className="scrollbarHidden"
                   style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
                   onScroll={(e) => {
                     if (!isMobile) return;
@@ -3828,28 +3939,55 @@ export default function MapPage() {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(59,130,246,0.30)",
+                              background: "rgba(219,234,254,0.90)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(59,130,246,0.32)",
+                                  background: "rgba(219,234,254,0.92)",
+                                  color: "#1d4ed8",
+                                }}
+                              >
+                                {c.code}
+                              </span>
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {c.city} - {c.uf}
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                                  [c.city, c.uf].filter(Boolean).join(" - ") ||
+                                  "-"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -3869,28 +4007,56 @@ export default function MapPage() {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(234,88,12,0.30)",
+                              background: "rgba(255,237,213,0.92)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(234,88,12,0.30)",
+                                  background: "rgba(255,237,213,0.92)",
+                                  color: "#c2410c",
+                                }}
+                              >
+                                {c.code}
+                              </span>
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                IP: {c.ip || "-"}
+                              </span>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                Direção: {c.direction || "-"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -3910,28 +4076,56 @@ export default function MapPage() {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(22,163,74,0.30)",
+                              background: "rgba(220,252,231,0.92)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(22,163,74,0.30)",
+                                  background: "rgba(220,252,231,0.92)",
+                                  color: "#166534",
+                                }}
+                              >
+                                {c.code}
+                              </span>
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                IP: {c.ip || "-"}
+                              </span>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                Direção: {c.direction || "-"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -3957,28 +4151,56 @@ export default function MapPage() {
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(234,88,12,0.30)",
+                                background: "rgba(255,237,213,0.92)",
+                                display: "grid",
+                                placeItems: "center",
+                                flex: "0 0 auto",
+                              }}
+                            >
+                              <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                            </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div
-                                style={{
-                                  fontWeight: 900,
-                                  fontSize: 13,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
-                                Radar <span style={{ opacity: 0.55 }}>({r.codcet})</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 13,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  {r.logradouro || r.localidade || "Radar"}
+                                </div>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(234,88,12,0.30)",
+                                    background: "rgba(255,237,213,0.92)",
+                                    color: "#c2410c",
+                                  }}
+                                >
+                                  {r.codcet}
+                                </span>
                               </div>
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  opacity: 0.75,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
-                                {r.bairro || "-"} • {r.sentido || "-"}
+                              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Bairro: {r.bairro || "-"}
+                                </span>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Sentido: {r.sentido || "-"}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -4000,7 +4222,7 @@ export default function MapPage() {
                 </div>
 
                 {!isMobile && filtered.length > PAGE_SIZE && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
                     <button
                       className="btnGhost"
                       onClick={() => setPage(page - 1)}
