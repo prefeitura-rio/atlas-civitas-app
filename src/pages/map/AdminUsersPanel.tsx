@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import type { AdminUser } from "./types";
 import { isUserRole, roleLabel, type UserRole } from "./roles";
 import { fetchJson, inputStyle } from "./shared";
@@ -39,6 +39,63 @@ function generateStrongPassword(size = SUGGESTED_PASSWORD_SIZE) {
   return chars.join("");
 }
 
+function getUserExpirationBadge(expiresAt?: string | null) {
+  if (!expiresAt) {
+    return {
+      label: "Sem expiração",
+      borderColor: "rgba(100,116,139,0.30)",
+      background: "rgba(241,245,249,0.95)",
+      color: "#475569",
+    };
+  }
+
+  const expMs = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expMs)) {
+    return {
+      label: "Sem expiração",
+      borderColor: "rgba(100,116,139,0.30)",
+      background: "rgba(241,245,249,0.95)",
+      color: "#475569",
+    };
+  }
+
+  const diffMs = expMs - Date.now();
+  if (diffMs <= 0) {
+    return {
+      label: "expirado",
+      borderColor: "rgba(15,23,42,0.36)",
+      background: "rgba(15,23,42,0.92)",
+      color: "#f8fafc",
+    };
+  }
+
+  const daysLeft = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+  if (daysLeft <= 2) {
+    return {
+      label: `Expira em ${daysLeft}d`,
+      borderColor: "rgba(239,68,68,0.35)",
+      background: "rgba(254,226,226,0.95)",
+      color: "#b91c1c",
+    };
+  }
+
+  if (daysLeft <= 5) {
+    return {
+      label: `Expira em ${daysLeft}d`,
+      borderColor: "rgba(245,158,11,0.35)",
+      background: "rgba(254,243,199,0.95)",
+      color: "#b45309",
+    };
+  }
+
+  return {
+    label: `Expira em ${daysLeft}d`,
+    borderColor: "rgba(22,163,74,0.35)",
+    background: "rgba(220,252,231,0.95)",
+    color: "#166534",
+  };
+}
+
 export function AdminUsersPanel({
   apiBase,
   token,
@@ -71,6 +128,8 @@ export function AdminUsersPanel({
   const roleWrapRef = useRef<HTMLDivElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
   const passwordCopiedTimerRef = useRef<number | null>(null);
+  const [userTab, setUserTab] = useState<"create" | "manage">("create");
+  const [manageFilter, setManageFilter] = useState("");
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
 
@@ -116,7 +175,7 @@ export function AdminUsersPanel({
   useEffect(() => {
     setPage(1);
     setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length]);
+  }, [items.length, manageFilter]);
 
   useEffect(() => {
     function handleDocClick(e: MouseEvent) {
@@ -138,6 +197,7 @@ export function AdminUsersPanel({
   }, []);
 
   function pick(u: AdminUser) {
+    setUserTab("create");
     setId(u.id);
     setEmail(u.email || "");
     setFullName(u.full_name || "");
@@ -319,8 +379,26 @@ export function AdminUsersPanel({
     }
   }
 
+  const normalizedManageFilter = manageFilter.trim().toLowerCase();
+  const normalizedManageFilterCpf = normalizedManageFilter.replace(/\D/g, "");
+  const filteredItems = items.filter((u) => {
+    if (!normalizedManageFilter) return true;
+    const name = (u.full_name || "").toLowerCase();
+    const cpfDigits = (u.cpf || "").replace(/\D/g, "");
+    return name.includes(normalizedManageFilter) || (normalizedManageFilterCpf && cpfDigits.includes(normalizedManageFilterCpf));
+  });
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      <div className="tabsRail tabsRailSection tabsRailCompact">
+        <button className={`subTab ${userTab === "create" ? "subTabActive" : ""}`} onClick={() => setUserTab("create")}>
+          Criar Usuário
+        </button>
+        <button className={`subTab ${userTab === "manage" ? "subTabActive" : ""}`} onClick={() => setUserTab("manage")}>
+          Gerenciar Usuários
+        </button>
+      </div>
+      {userTab === "create" && (
       <div
         className="adminCard"
         style={{
@@ -543,26 +621,13 @@ export function AdminUsersPanel({
           >
             Limpar
           </button>
-
-          <button
-            onClick={load}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
-              cursor: "pointer",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
-            }}
-          >
-            Recarregar
-          </button>
         </div>
 
         {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
       </div>
+      )}
 
+      {userTab === "manage" && (
       <div
         className="adminCard"
         style={{
@@ -574,10 +639,42 @@ export function AdminUsersPanel({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 13 }}>Usuários</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            {loading ? "Carregando..." : `${filteredItems.length} de ${items.length} itens`}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 10, display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            value={manageFilter}
+            onChange={(e) => setManageFilter(e.target.value)}
+            placeholder="Filtrar por nome ou CPF"
+            style={inputStyle()}
+          />
+          <button
+            onClick={load}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              border: "1px solid rgba(0,0,0,0.12)",
+              background: "rgba(255,255,255,0.90)",
+              cursor: "pointer",
+              color: "rgba(0,0,0,0.78)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flex: "0 0 auto",
+            }}
+            title="Recarregar usuários"
+            aria-label="Recarregar usuários"
+          >
+            <RefreshCw size={16} />
+          </button>
         </div>
 
         <div
+          className="scrollbarHidden"
           style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
           onScroll={(e) => {
             if (!isMobile) return;
@@ -588,42 +685,85 @@ export function AdminUsersPanel({
           }}
         >
           {(isMobile
-            ? items.slice(0, mobileCount)
-            : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
-          ).map((u) => (
-            <div
-              key={u.id}
-              className="adminRow"
-              style={{
-                border: "1px solid rgba(0,0,0,0.10)",
-                borderRadius: 14,
-                padding: 10,
-                background: "rgba(255,255,255,0.75)",
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontWeight: 900,
-                    fontSize: 13,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {u.email} <span style={{ opacity: 0.6, fontWeight: 800 }}>• {roleLabel(u.role)}</span>
+            ? filteredItems.slice(0, mobileCount)
+            : filteredItems.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
+          ).map((u) => {
+            const expBadge = getUserExpirationBadge(u.expires_at);
+            return (
+              <div
+                key={u.id}
+                className="adminRow"
+                style={{
+                  border: "1px solid rgba(0,0,0,0.10)",
+                  borderRadius: 14,
+                  padding: 10,
+                  background: "rgba(255,255,255,0.75)",
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 13,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {u.full_name || u.email}
+                    </div>
+                    <span style={{ opacity: 0.55, fontSize: 12, whiteSpace: "nowrap" }}>{roleLabel(u.role)}</span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.75,
+                      marginTop: 2,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {u.email}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.72,
+                      marginTop: 2,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {u.is_active ? "ATIVO" : "INATIVO"}
+                    {u.cpf ? ` • CPF: ${u.cpf}` : ""}
+                    {u.matricula ? ` • Matrícula: ${u.matricula}` : ""}
+                    {u.unidade ? ` • ${u.unidade}` : ""}
+                    {u.orgao ? ` • ${u.orgao}` : ""}
+                  </div>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      borderRadius: 999,
+                      padding: "1px 7px",
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: 0.1,
+                      border: `1px solid ${expBadge.borderColor}`,
+                      background: expBadge.background,
+                      color: expBadge.color,
+                      marginTop: 6,
+                    }}
+                  >
+                    {expBadge.label}
+                  </span>
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  {u.full_name || "-"} • {u.is_active ? "ATIVO" : "INATIVO"}
-                  {u.cpf ? ` • CPF: ${u.cpf}` : ""}
-                  {u.matricula ? ` • Matrícula: ${u.matricula}` : ""}
-                  {u.unidade ? ` • Unidade: ${u.unidade}` : ""}
-                  {u.orgao ? ` • Órgão: ${u.orgao}` : ""}
-                </div>
-              </div>
 
               <button
                 onClick={() => pick(u)}
@@ -673,14 +813,17 @@ export function AdminUsersPanel({
                   Reativar
                 </button>
               )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
 
-          {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum usuário encontrado.</div>}
+          {!filteredItems.length && !loading && (
+            <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum usuário encontrado para esse filtro.</div>
+          )}
         </div>
 
-        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+        {!isMobile && filteredItems.length > ADMIN_PAGE_SIZE && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
             <button
               className="btnGhost"
               onClick={() => setPage((v) => Math.max(1, v - 1))}
@@ -690,19 +833,20 @@ export function AdminUsersPanel({
               Anterior
             </button>
             <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
+              Página {page} de {Math.max(1, Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE))}
             </div>
             <button
               className="btnGhost"
-              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
-              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
-              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+              onClick={() => setPage((v) => Math.min(Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE), v + 1))}
+              disabled={page >= Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE)}
+              style={{ opacity: page >= Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
             >
               Próxima
             </button>
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

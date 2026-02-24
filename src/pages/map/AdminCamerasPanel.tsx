@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Camera, CameraIntel, CameraLpr } from "./types";
 import { fetchJson } from "./shared";
+import cameraIcon from "@/assets/camera-icon.png";
+import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
+import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
 
@@ -40,6 +43,29 @@ export function AdminCamerasPanel({
   const [mobileCountCams, setMobileCountCams] = useState(ADMIN_PAGE_SIZE);
   const [mobileCountIntel, setMobileCountIntel] = useState(ADMIN_PAGE_SIZE);
   const [mobileCountLpr, setMobileCountLpr] = useState(ADMIN_PAGE_SIZE);
+  const cardRowStyle = {
+    border: "1px solid rgba(15,23,42,0.10)",
+    borderRadius: 14,
+    padding: 12,
+    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+    boxShadow: "0 6px 20px rgba(15,23,42,0.06)",
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+  } as const;
+
+  const chipStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    padding: "3px 9px",
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.2,
+    border: "1px solid rgba(15,23,42,0.14)",
+    background: "rgba(248,250,252,0.95)",
+    color: "rgba(15,23,42,0.85)",
+  } as const;
 
   async function load() {
     setErr(null);
@@ -288,6 +314,7 @@ export function AdminCamerasPanel({
             </div>
 
             <div
+              className="scrollbarHidden"
               style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
               onScroll={(e) => {
                 if (!isMobile) return;
@@ -304,30 +331,53 @@ export function AdminCamerasPanel({
                 <div
                   key={c.id || c.code}
                   className="adminRow"
-                  style={{
-                    border: "1px solid rgba(0,0,0,0.10)",
-                    borderRadius: 14,
-                    padding: 10,
-                    background: "rgba(255,255,255,0.75)",
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "center",
-                  }}
+                  style={cardRowStyle}
                 >
+                  <div
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 999,
+                      border: "1px solid rgba(59,130,246,0.30)",
+                      background: "rgba(219,234,254,0.90)",
+                      display: "grid",
+                      placeItems: "center",
+                      flex: "0 0 auto",
+                    }}
+                  >
+                    <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        fontSize: 13,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 13,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          color: "#0f172a",
+                        }}
+                      >
+                        {c.name}
+                      </div>
+                      <span
+                        style={{
+                          ...chipStyle,
+                          borderColor: "rgba(59,130,246,0.32)",
+                          background: "rgba(219,234,254,0.92)",
+                          color: "#1d4ed8",
+                        }}
+                      >
+                        {c.code}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.75 }}>
-                      {c.city} - {c.uf} • {c.is_active ? "ATIVA" : "INATIVA"}
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      <span style={chipStyle}>
+                        {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                          [c.city, c.uf].filter(Boolean).join(" - ") ||
+                          "-"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -339,7 +389,7 @@ export function AdminCamerasPanel({
             </div>
 
             {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
                 <button
                   className="btnGhost"
                   onClick={() => setPageCams((v) => Math.max(1, v - 1))}
@@ -434,12 +484,13 @@ export function AdminCamerasPanel({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras Inteligentes</div>
+            <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
             <div style={{ fontSize: 12, opacity: 0.75 }}>
               {intelLoading ? "Carregando..." : `${intelItems.length} itens`}
             </div>
           </div>
           <div
+            className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
             onScroll={(e) => {
               if (!isMobile) return;
@@ -456,29 +507,51 @@ export function AdminCamerasPanel({
               <div
                 key={c.id || c.code}
                 className="adminRow"
-                style={{
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  borderRadius: 14,
-                  padding: 10,
-                  background: "rgba(255,255,255,0.75)",
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                }}
+                style={cardRowStyle}
               >
+                <div
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    border: "1px solid rgba(234,88,12,0.30)",
+                    background: "rgba(255,237,213,0.92)",
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 auto",
+                  }}
+                >
+                  <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 13,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 13,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        color: "#0f172a",
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                    <span
+                      style={{
+                        ...chipStyle,
+                        borderColor: "rgba(234,88,12,0.30)",
+                        background: "rgba(255,237,213,0.92)",
+                        color: "#c2410c",
+                      }}
+                    >
+                      {c.code}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>IP: {c.ip || "-"} • Direção: {c.direction || "-"}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={chipStyle}>IP: {c.ip || "-"}</span>
+                    <span style={chipStyle}>Direção: {c.direction || "-"}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -488,7 +561,7 @@ export function AdminCamerasPanel({
           </div>
 
           {!isMobile && intelItems.length > ADMIN_PAGE_SIZE && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
               <button
                 className="btnGhost"
                 onClick={() => setPageIntel((v) => Math.max(1, v - 1))}
@@ -530,6 +603,7 @@ export function AdminCamerasPanel({
             </div>
           </div>
           <div
+            className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
             onScroll={(e) => {
               if (!isMobile) return;
@@ -546,29 +620,51 @@ export function AdminCamerasPanel({
               <div
                 key={c.id || c.code}
                 className="adminRow"
-                style={{
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  borderRadius: 14,
-                  padding: 10,
-                  background: "rgba(255,255,255,0.75)",
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                }}
+                style={cardRowStyle}
               >
+                <div
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    border: "1px solid rgba(22,163,74,0.30)",
+                    background: "rgba(220,252,231,0.92)",
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 auto",
+                  }}
+                >
+                  <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 13,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 13,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        color: "#0f172a",
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                    <span
+                      style={{
+                        ...chipStyle,
+                        borderColor: "rgba(22,163,74,0.30)",
+                        background: "rgba(220,252,231,0.92)",
+                        color: "#166534",
+                      }}
+                    >
+                      {c.code}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>IP: {c.ip || "-"} • Direção: {c.direction || "-"}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={chipStyle}>IP: {c.ip || "-"}</span>
+                    <span style={chipStyle}>Direção: {c.direction || "-"}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -578,7 +674,7 @@ export function AdminCamerasPanel({
           </div>
 
           {!isMobile && lprItems.length > ADMIN_PAGE_SIZE && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
               <button
                 className="btnGhost"
                 onClick={() => setPageLpr((v) => Math.max(1, v - 1))}

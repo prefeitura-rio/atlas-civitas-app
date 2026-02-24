@@ -218,6 +218,17 @@
   opacity: 1;
   filter: drop-shadow(0 1px 4px rgba(0, 192, 243, 0.45));
 }
+
+.scrollbarHidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbarHidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
 .listItem {
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(255, 255, 255, 0.88);
@@ -396,14 +407,19 @@
   z-index: 30;
 }
 .mapboxgl-popup-content {
-  max-width: 280px;
-  padding: 12px 56px 12px 12px;
+  width: min(340px, calc(100vw - 28px));
+  max-width: min(340px, calc(100vw - 28px));
+  padding: 12px;
   word-wrap: break-word;
   overflow-wrap: anywhere;
+  word-break: break-word;
   white-space: normal;
   line-height: 1.5;
   user-select: none;
   position: relative;
+  border-radius: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .mapboxgl-popup-content ::selection {
@@ -412,20 +428,25 @@
 
 .mapboxgl-popup-close-button {
   position: absolute !important;
-  top: 6px !important;
+  top: 8px !important;
   right: 8px !important;
-  width: 24px;
-  height: 24px;
-  line-height: 24px;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
   padding: 0;
   text-align: center;
-  border: 0;
-  border-radius: 0;
-  font-size: 15px;
-  font-weight: 400;
-  background: transparent;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(15, 23, 42, 0.8);
+  background: rgba(248, 250, 252, 0.95);
   cursor: pointer;
   z-index: 2;
+}
+
+.mapboxgl-popup-close-button:hover {
+  background: rgba(226, 232, 240, 0.98);
 }
 
 .cameraHoverPreviewPopup .mapboxgl-popup-content {
@@ -438,6 +459,171 @@
 
 .cameraHoverPreviewPopup .mapboxgl-popup-tip {
   display: none;
+}
+
+.cameraPopup {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color: #0f172a;
+  box-sizing: border-box;
+}
+
+.cameraPopupHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 30px;
+  min-width: 0;
+}
+
+.cameraPopupTitleWrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.cameraPopupKickerRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.cameraPopupIcon {
+  width: 13px;
+  height: 13px;
+  object-fit: contain;
+  opacity: 0.78;
+}
+
+.cameraPopupKicker {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(15, 23, 42, 0.55);
+}
+
+.cameraPopupTitle {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.cameraPopupCode {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  background: rgba(219, 234, 254, 0.92);
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cameraPopup--intel .cameraPopupCode {
+  border-color: rgba(234, 88, 12, 0.25);
+  background: rgba(255, 237, 213, 0.9);
+  color: #9a3412;
+}
+
+.cameraPopup--lpr .cameraPopupCode {
+  border-color: rgba(22, 163, 74, 0.28);
+  background: rgba(220, 252, 231, 0.9);
+  color: #166534;
+}
+
+.cameraPopup--radar .cameraPopupCode {
+  border-color: rgba(234, 88, 12, 0.3);
+  background: rgba(255, 237, 213, 0.92);
+  color: #c2410c;
+}
+
+.cameraPopup--intel .cameraPopupIcon {
+  opacity: 0.9;
+}
+
+.cameraPopup--lpr .cameraPopupIcon {
+  opacity: 0.9;
+}
+
+.cameraPopup--radar .cameraPopupIcon {
+  opacity: 0.9;
+}
+
+.cameraPopupInfoGrid {
+  display: grid;
+  gap: 6px;
+}
+
+.cameraPopupInfoItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: rgba(248, 250, 252, 0.85);
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cameraPopupInfoLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.62);
+}
+
+.cameraPopupInfoValue {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.cameraPopupStreamBlock {
+  display: grid;
+  gap: 6px;
+}
+
+.cameraPopupStreamLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 10px;
+  text-decoration: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cameraPopupStreamLink:hover {
+  background: #1e293b;
+}
+
+.cameraPopupStreamRaw {
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.65);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .dockWrap {

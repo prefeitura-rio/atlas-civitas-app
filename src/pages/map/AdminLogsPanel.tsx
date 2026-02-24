@@ -91,6 +91,7 @@ export function AdminLogsPanel({
         }}
       >
         <div
+          className="scrollbarHidden"
           style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
           onScroll={(e) => {
             if (!isMobile) return;
@@ -131,7 +132,7 @@ export function AdminLogsPanel({
         </div>
 
         {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
             <button
               className="btnGhost"
               onClick={() => setPage((v) => Math.max(1, v - 1))}

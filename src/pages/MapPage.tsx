@@ -1059,7 +1059,7 @@ export default function MapPage() {
     handlersBoundRef.current = true;
 
     if (!popupRef.current) {
-      popupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true });
+      popupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true, maxWidth: "360px" });
     }
     if (!hoverPreviewPopupRef.current) {
       hoverPreviewPopupRef.current = new mapboxgl.Popup({
@@ -1160,9 +1160,6 @@ export default function MapPage() {
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
       const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
-      const streamingLabel = escapeHtml(
-        (p.streaming_url_raw || p.streaming_url || p.stream_url || "").toString().trim() || streamingUrl
-      );
 
       setSelectedCode(p.code || null);
       setSelectedRadar(null);
@@ -1171,20 +1168,34 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 240px;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px; max-width: calc(100% - 56px); overflow-wrap: anywhere; word-break: break-word;">
-              📷 <span style="overflow-wrap: anywhere; word-break: break-word;">${escapeHtml(p.name || "")}</span>
-              <span style="opacity:.65;font-weight:700; overflow-wrap: anywhere; word-break: break-word;"> (${escapeHtml(
-                p.code || ""
-              )})</span>
+          <div class="cameraPopup">
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${cameraIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Câmera</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.name || "Câmera sem nome")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.code || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85;">
-              <div><strong>Código da câmera:</strong> ${escapeHtml(p.code || "-")}</div>
-              <div><strong>Zona da câmera:</strong> ${escapeHtml(p.zona_camera || "-")}</div>
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Código</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.code || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Zona</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.zona_camera || "-")}</span>
+              </div>
+            </div>
+
+            <div class="cameraPopupStreamBlock">
               ${
                 streamingUrl
-                  ? `<div><strong>Streaming URL:</strong> <a href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">${streamingLabel}</a></div>`
-                  : ""
+                  ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+                  : `<div class="cameraPopupStreamRaw">Streaming indisponivel</div>`
               }
             </div>
           </div>
@@ -1207,19 +1218,27 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 240px;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              🟠 Super Câmera Inteligente
-              <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
+          <div class="cameraPopup cameraPopup--intel">
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${cameraIntelIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Super Câmera Inteligente</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.name || "Super Câmera Inteligente")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.code || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
-              ${escapeHtml(p.name || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              Direção: ${escapeHtml(p.direction || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              IP: ${escapeHtml(p.ip || "-")}
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Direção</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">IP</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.ip || "-")}</span>
+              </div>
             </div>
           </div>
         `)
@@ -1241,19 +1260,27 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 240px;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              🟢 Câmera LPR
-              <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
+          <div class="cameraPopup cameraPopup--lpr">
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${cameraLprIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Câmera LPR</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.name || "Câmera LPR")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.code || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
-              ${escapeHtml(p.name || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              Direção: ${escapeHtml(p.direction || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              IP: ${escapeHtml(p.ip || "-")}
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Direção</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">IP</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.ip || "-")}</span>
+              </div>
             </div>
           </div>
         `)
@@ -1275,20 +1302,39 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; min-width: 0; max-width: 240px;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px; overflow-wrap: anywhere; word-break: break-word;">
-              📡 Radar <span style="opacity:.75">(${escapeHtml(p.codcet || "")})</span>
+          <div class="cameraPopup cameraPopup--radar">
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${radarIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Radar</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.logradouro || "Radar sem logradouro")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.codcet || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px; overflow-wrap: anywhere; word-break: break-word;">
-              ${escapeHtml(p.logradouro || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8; overflow-wrap: anywhere; word-break: break-word;">
-              Bairro: ${escapeHtml(p.bairro || "-")} • Sentido: ${escapeHtml(p.sentido || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8; margin-top:6px; overflow-wrap: anywhere; word-break: break-word;">
-              <div>Empresa: ${escapeHtml(p.empresa || "-")}</div>
-              <div>Vel: ${p.velofisc ?? "-"}</div>
-              <div>Equip: ${escapeHtml(p.numero_equipamento || "-")}</div>
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Bairro</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.bairro || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Sentido</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.sentido || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Empresa</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.empresa || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Vel</span>
+                <span class="cameraPopupInfoValue">${p.velofisc ?? "-"}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Equip</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.numero_equipamento || "-")}</span>
+              </div>
             </div>
           </div>
         `)
@@ -3474,7 +3520,7 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div style={{ maxHeight: panelMaxHeight, overflow: "auto" }}>
+              <div className="scrollbarHidden" style={{ maxHeight: panelMaxHeight, overflow: "auto" }}>
                 {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
                 {adminTab === "cameras" && (
                   <AdminCamerasPanel
