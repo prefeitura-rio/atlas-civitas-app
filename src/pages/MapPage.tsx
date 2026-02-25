@@ -205,6 +205,7 @@ function colorForIndex(i: number) {
 }
 
 function buildMatchExpr(key: string, values: number[]) {
+  if (!values.length) return "rgba(0,0,0,0)";
   const expr: any[] = ["match", ["to-number", ["get", key]]];
   values.forEach((v, i) => {
     expr.push(v, colorForIndex(i));

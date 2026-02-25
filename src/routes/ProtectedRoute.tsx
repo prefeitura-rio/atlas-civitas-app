@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../app/auth";
 import { fetchJson } from "../pages/map/shared";
@@ -63,13 +63,13 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  const mustAcceptTerms = useMemo(() => {
+  const mustAcceptTerms = (() => {
     if (!termsStatus) return false;
     const mustAccept = !!termsStatus.must_accept_terms;
     const firstTime =
       termsStatus.accepted_at == null && termsStatus.accepted_version == null;
     return mustAccept || firstTime;
-  }, [termsStatus]);
+  })();
 
   if (termsLoading || (!termsStatus && !termsError)) {
     return (
