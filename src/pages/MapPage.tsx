@@ -401,10 +401,12 @@ export default function MapPage() {
   const [pageIntel, setPageIntel] = useState(1);
   const [pageLpr, setPageLpr] = useState(1);
   const [pageRadares, setPageRadares] = useState(1);
+  const [pagePulse, setPagePulse] = useState(false);
   const [mobileCountCameras, setMobileCountCameras] = useState(PAGE_SIZE);
   const [mobileCountIntel, setMobileCountIntel] = useState(PAGE_SIZE);
   const [mobileCountLpr, setMobileCountLpr] = useState(PAGE_SIZE);
   const [mobileCountRadares, setMobileCountRadares] = useState(PAGE_SIZE);
+  const pagePulseTimerRef = useRef<number | null>(null);
 
   const [me, setMe] = useState<Me | null>(null);
   const [pwOld, setPwOld] = useState("");
@@ -2413,6 +2415,17 @@ export default function MapPage() {
     };
   }, [filtered, listMode, pageCameras, pageIntel, pageLpr, pageRadares]);
 
+  function triggerPagePulse() {
+    if (pagePulseTimerRef.current) {
+      window.clearTimeout(pagePulseTimerRef.current);
+    }
+    setPagePulse(true);
+    pagePulseTimerRef.current = window.setTimeout(() => {
+      setPagePulse(false);
+      pagePulseTimerRef.current = null;
+    }, 700);
+  }
+
   const mobileCount =
     listMode === "cameras"
       ? mobileCountCameras
@@ -2653,7 +2666,7 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={cameraIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={cameraIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>Câmeras</span>
@@ -2675,7 +2688,7 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={cameraIntelIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={cameraIntelIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>Super Câmeras Inteligentes</span>
@@ -2697,7 +2710,7 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={cameraLprIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={cameraLprIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>LPR</span>
@@ -2719,7 +2732,7 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={radarIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={radarIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>Radares</span>
@@ -2931,7 +2944,7 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={mapPinRed} alt="" style={{ width: 14, height: 14 }} />
+                  <img src={mapPinRed} alt="" />
                 </span>
                 <span>GPS</span>
                 <span
@@ -3176,7 +3189,17 @@ export default function MapPage() {
                 </button>
               </div>
 
-              <div className="scrollbarHidden" style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
+              <div
+                className="scrollbarHidden"
+                style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
+                onScroll={(e) => {
+                  if (isMobile) return;
+                  const el = e.currentTarget;
+                  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) {
+                    if (page < totalPages) triggerPagePulse();
+                  }
+                }}
+              >
                 {listMode === "cameras" &&
                   (listItems as Camera[]).map((c) => (
                     <div
@@ -3477,7 +3500,10 @@ export default function MapPage() {
               </div>
 
               {!isMobile && filtered.length > PAGE_SIZE && (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
+                <div
+                  className={`pageControls ${pagePulse ? "pagePulse" : ""}`}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}
+                >
                   <button
                     className="btnGhost"
                     onClick={() => setPage(page - 1)}

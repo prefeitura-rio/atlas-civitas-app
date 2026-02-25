@@ -688,8 +688,17 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 165px;
+  min-width: 220px;
+  width: 320px;
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   font-size: 12px;
+}
+.dock::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 .dockTitle {
   font-size: 11px;
@@ -752,6 +761,13 @@
   display: grid;
   place-items: center;
   font-size: 11px;
+  flex: 0 0 auto;
+}
+.chipIcon img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  display: block;
 }
 .chipDot {
   width: 8px;
@@ -834,4 +850,53 @@
   font-size: 10px;
   color: rgba(0, 0, 0, 0.65);
   margin-top: 4px;
+}
+
+.pageControls {
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.pagePulse {
+  animation: pagePulse 0.7s ease;
+}
+.pagePulse::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  transform: translateX(-50%);
+  width: 42px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.9);
+  box-shadow: 0 6px 14px rgba(100, 116, 139, 0.25);
+  animation: pageHint 0.7s ease;
+}
+@keyframes pagePulse {
+  0% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 rgba(100, 116, 139, 0);
+  }
+  50% {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(100, 116, 139, 0.25);
+  }
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 rgba(100, 116, 139, 0);
+  }
+}
+@keyframes pageHint {
+  0% {
+    transform: translateX(-50%) scaleX(0.6);
+    opacity: 0.2;
+  }
+  60% {
+    transform: translateX(-50%) scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scaleX(0.9);
+    opacity: 0.6;
+  }
 }
