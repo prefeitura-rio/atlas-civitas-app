@@ -2539,6 +2539,35 @@ export default function MapPage() {
               <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
               <div>LPR: {selectedBairroStats.lpr}</div>
               <div>Radares: {selectedBairroStats.radares}</div>
+              <div
+                style={{
+                  marginTop: 8,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 4,
+                  fontSize: 9,
+                  lineHeight: 1.35,
+                  color: "rgba(15,23,42,0.75)",
+                }}
+              >
+                <span
+                  title="Alguns equipamentos podem compartilhar a mesma coordenada."
+                  style={{
+                    display: "inline-block",
+                    marginTop: 1,
+                    fontWeight: 900,
+                    fontSize: 10,
+                    lineHeight: 1,
+                  }}
+                >
+                  *
+                </span>
+                <div>
+                  Podem existir câmeras, radares, LPR e Super Câmeras Inteligentes na mesma coordenada.
+                  <br />
+                  Por isso, o total pode não refletir pontos únicos no mapa.
+                </div>
+              </div>
             </div>
           </div>
         )}

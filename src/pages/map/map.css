@@ -660,8 +660,8 @@
   gap: 10px;
 }
 .dockHandle {
-  height: 36px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -674,11 +674,11 @@
   justify-content: center;
   user-select: none;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(0, 0, 0, 0.78);
 }
 .dock {
-  padding: 12px;
+  padding: 10px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -687,11 +687,12 @@
   -webkit-backdrop-filter: blur(16px) saturate(200%);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 180px;
+  gap: 6px;
+  min-width: 165px;
+  font-size: 12px;
 }
 .dockTitle {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   color: rgba(0, 0, 0, 0.72);
   letter-spacing: 0.02em;
@@ -703,8 +704,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 6px 8px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(0, 0, 0, 0.04);
@@ -739,18 +740,18 @@
   line-height: 1.1;
 }
 .chipLegend {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   opacity: 0.6;
 }
 .chipIcon {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.1);
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: 11px;
 }
 .chipDot {
   width: 8px;
@@ -759,7 +760,7 @@
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
 }
 .chipState {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
   color: rgba(0, 0, 0, 0.65);
 }
@@ -769,8 +770,8 @@
   margin: 4px 0;
 }
 .dockFab {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.14);
   background: linear-gradient(180deg, rgba(20, 20, 20, 0.98), rgba(0, 0, 0, 0.92));
@@ -782,7 +783,7 @@
   align-self: flex-end;
   transition: transform 0.12s ease, filter 0.12s ease;
   font-weight: 900;
-  font-size: 18px;
+  font-size: 16px;
 }
 .dockFab:hover {
   transform: translateY(-1px);
@@ -792,7 +793,7 @@
   transform: translateY(0px) scale(0.98);
 }
 .dockNote {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(0, 0, 0, 0.65);
   margin-top: 4px;
 }
