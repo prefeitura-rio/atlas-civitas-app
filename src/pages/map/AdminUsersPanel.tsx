@@ -458,11 +458,12 @@ export function AdminUsersPanel({
           />
           <input
             value={birthDate}
-            onChange={(e) => setBirthDate(isMobile ? formatBirthDateMasked(e.target.value) : e.target.value)}
-            type={isMobile ? "text" : "date"}
-            inputMode={isMobile ? "numeric" : undefined}
-            maxLength={isMobile ? 10 : undefined}
-            placeholder={isMobile ? "data de nascimento (dd/mm/aaaa)" : "data de nascimento"}
+            onChange={(e) => setBirthDate(formatBirthDateMasked(e.target.value))}
+            type="text"
+            inputMode="numeric"
+            maxLength={10}
+            placeholder="dd/mm/aaaa (data de nascimento)"
+            title="Data de nascimento"
             style={inputStyle()}
           />
 
@@ -720,6 +721,15 @@ export function AdminUsersPanel({
             : filteredItems.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
           ).map((u) => {
             const expBadge = getUserExpirationBadge(u.expires_at);
+            const isExpired = (() => {
+              if (!u.expires_at) return false;
+              const expMs = new Date(u.expires_at).getTime();
+              return Number.isFinite(expMs) ? expMs <= Date.now() : false;
+            })();
+            const hasTermsInfo =
+              typeof u.terms_accepted_at !== "undefined" ||
+              typeof u.accepted_terms_version !== "undefined";
+            const termsAccepted = !!u.terms_accepted_at && !!u.accepted_terms_version;
             return (
               <div
                 key={u.id}
@@ -780,23 +790,67 @@ export function AdminUsersPanel({
                     {u.unidade ? ` • ${u.unidade}` : ""}
                     {u.orgao ? ` • ${u.orgao}` : ""}
                   </div>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      borderRadius: 999,
-                      padding: "1px 7px",
-                      fontSize: 10,
-                      fontWeight: 800,
-                      letterSpacing: 0.1,
-                      border: `1px solid ${expBadge.borderColor}`,
-                      background: expBadge.background,
-                      color: expBadge.color,
-                      marginTop: 6,
-                    }}
-                  >
-                    {expBadge.label}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        borderRadius: 999,
+                        padding: "1px 7px",
+                        fontSize: 10,
+                        fontWeight: 800,
+                        letterSpacing: 0.1,
+                        border: `1px solid ${expBadge.borderColor}`,
+                        background: expBadge.background,
+                        color: expBadge.color,
+                      }}
+                    >
+                      {expBadge.label}
+                    </span>
+                    {termsAccepted ? (
+                      <span
+                        title="Termo aceito"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          borderRadius: 999,
+                          padding: "1px 8px",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          letterSpacing: 0.1,
+                          background: "rgba(34,197,94,0.16)",
+                          color: "#15803d",
+                          border: "1px solid rgba(34,197,94,0.35)",
+                        }}
+                      >
+                        ✓ Termo aceito
+                      </span>
+                    ) : (
+                      <span
+                        title={hasTermsInfo ? "Termo pendente" : "Sem informação de termos"}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          borderRadius: 999,
+                          padding: "1px 8px",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          letterSpacing: 0.1,
+                          background: hasTermsInfo
+                            ? "rgba(15,23,42,0.08)"
+                            : "rgba(148,163,184,0.15)",
+                          color: hasTermsInfo ? "#334155" : "#64748b",
+                          border: hasTermsInfo
+                            ? "1px solid rgba(15,23,42,0.18)"
+                            : "1px solid rgba(148,163,184,0.35)",
+                        }}
+                      >
+                        {hasTermsInfo ? "Termo pendente" : "Termo: n/d"}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
               <button
@@ -814,7 +868,7 @@ export function AdminUsersPanel({
                 Editar
               </button>
 
-              {u.is_active ? (
+              {u.is_active && !isExpired ? (
                 <button
                   onClick={() => deactivate(u.id)}
                   className="adminRowBtn"

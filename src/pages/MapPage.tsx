@@ -1,5 +1,6 @@
 // src/pages/MapPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -339,6 +340,7 @@ function makePoisGeoJSON(
 
 export default function MapPage() {
   const auth: any = useAuth();
+  const nav = useNavigate();
 
   const accessToken =
     auth?.accessToken || auth?.token || localStorage.getItem("access_token") || "";
@@ -2993,7 +2995,17 @@ export default function MapPage() {
           <div style={{ width: 72, height: 48, display: "grid", placeItems: "center" }}>
             <img src={prefeituraLogo} alt="Prefeitura" style={{ height: 28, width: "auto" }} />
           </div>
-          <button className="btnGhost" onClick={() => auth?.logout?.()}>
+          <button
+            className="btnGhost"
+            onClick={() => {
+              auth?.logout?.();
+              try {
+                nav("/login", { replace: true });
+              } catch {
+                window.location.href = "/login";
+              }
+            }}
+          >
             Sair
           </button>
         </div>
@@ -3840,6 +3852,11 @@ export default function MapPage() {
                   onClick={() => {
                     setMobileMenuOpen(false);
                     auth?.logout?.();
+                    try {
+                      nav("/login", { replace: true });
+                    } catch {
+                      window.location.href = "/login";
+                    }
                   }}
                   style={{ width: "100%", borderRadius: 10 }}
                 >

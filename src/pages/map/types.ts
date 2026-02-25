@@ -90,6 +90,8 @@ export type AdminUser = {
   created_at?: string;
   expires_at?: string | null;
   last_login_at?: string | null;
+  accepted_terms_version?: string | null;
+  terms_accepted_at?: string | null;
 };
 
 export type AdminLog = {
