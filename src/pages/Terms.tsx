@@ -119,13 +119,12 @@ export default function Terms({
           border: none;
           border-radius: 999px;
           padding: 12px 16px;
-          color: #111;
+          color: #fff;
           font-weight: 700;
           letter-spacing: 0.3px;
           cursor: pointer;
-          background:
-            linear-gradient(135deg, #4285f4 0%, #34a853 40%, #fbbc05 70%, #ea4335 100%);
-          box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+          background: linear-gradient(90deg, #00c0f3, #0a284b);
+          box-shadow: 0 12px 30px rgba(0, 24, 48, 0.35);
           transition: transform 0.15s ease, opacity 0.15s ease;
         }
         .termsButton:hover {
