@@ -3328,14 +3328,23 @@ export default function MapPage() {
                               <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  minWidth: 0,
+                                  flexWrap: isMobile ? "wrap" : "nowrap",
+                                }}
+                              >
                                 <div
                                   style={{
                                     fontWeight: 900,
                                     fontSize: 13,
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
+                                    whiteSpace: isMobile ? "normal" : "nowrap",
+                                    overflow: isMobile ? "visible" : "hidden",
+                                    textOverflow: isMobile ? "clip" : "ellipsis",
+                                    wordBreak: "break-word",
                                   }}
                                 >
                                   {r.logradouro || r.localidade || "Radar"}
@@ -4273,14 +4282,23 @@ export default function MapPage() {
                               <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  minWidth: 0,
+                                  flexWrap: isMobile ? "wrap" : "nowrap",
+                                }}
+                              >
                                 <div
                                   style={{
                                     fontWeight: 900,
                                     fontSize: 13,
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
+                                    whiteSpace: isMobile ? "normal" : "nowrap",
+                                    overflow: isMobile ? "visible" : "hidden",
+                                    textOverflow: isMobile ? "clip" : "ellipsis",
+                                    wordBreak: "break-word",
                                   }}
                                 >
                                   {r.logradouro || r.localidade || "Radar"}
