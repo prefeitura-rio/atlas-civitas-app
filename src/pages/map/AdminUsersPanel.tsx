@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy, RefreshCw } from "lucide-react";
+import { Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
 import type { AdminUser } from "./types";
 import { isUserRole, roleLabel, type UserRole } from "./roles";
 import { fetchJson, inputStyle } from "./shared";
@@ -139,6 +139,7 @@ export function AdminUsersPanel({
   const [password, setPassword] = useState("");
   const [suggestedPassword, setSuggestedPassword] = useState("");
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [role, setRole] = useState<UserRole>("user");
   const [isActive, setIsActive] = useState(true);
   const [roleOpen, setRoleOpen] = useState(false);
@@ -533,44 +534,76 @@ export function AdminUsersPanel({
                 }}
                 onClick={refreshPasswordSuggestion}
                 placeholder={id ? "senha (só na criação)" : "senha (mín 8)"}
-                type="password"
+                type={passwordVisible ? "text" : "password"}
                 disabled={!!id}
                 style={{
                   ...inputStyle(),
-                  paddingRight: id ? 12 : 40,
+                  paddingRight: id ? 12 : 70,
                   opacity: id ? 0.6 : 1,
                   cursor: id ? "not-allowed" : "text",
                 }}
               />
               {!id && (
-                <button
-                  type="button"
-                  onClick={copyPassword}
-                  disabled={!password}
+                <div
                   style={{
                     position: "absolute",
                     right: 10,
                     top: "50%",
                     transform: "translateY(-50%)",
                     zIndex: 2,
-                    width: 26,
-                    height: 26,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(255,255,255,0.92)",
-                    color: passwordCopied ? "#15803d" : "rgba(0,0,0,0.78)",
                     display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 8,
-                    padding: 0,
-                    cursor: password ? "pointer" : "not-allowed",
-                    opacity: password ? 1 : 0.7,
+                    gap: 6,
                   }}
-                  title={password ? "Copiar senha" : "Digite uma senha para copiar"}
-                  aria-label={password ? "Copiar senha" : "Digite uma senha para copiar"}
                 >
-                  <Copy size={14} strokeWidth={2.2} aria-hidden="true" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setPasswordVisible((v) => !v)}
+                    style={{
+                      width: 26,
+                      height: 26,
+                      border: "1px solid rgba(0,0,0,0.12)",
+                      background: "rgba(255,255,255,0.92)",
+                      color: "rgba(0,0,0,0.78)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 8,
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                    title={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
+                    aria-label={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
+                  >
+                    {passwordVisible ? (
+                      <EyeOff size={14} strokeWidth={2.2} aria-hidden="true" />
+                    ) : (
+                      <Eye size={14} strokeWidth={2.2} aria-hidden="true" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyPassword}
+                    disabled={!password}
+                    style={{
+                      width: 26,
+                      height: 26,
+                      border: "1px solid rgba(0,0,0,0.12)",
+                      background: "rgba(255,255,255,0.92)",
+                      color: passwordCopied ? "#15803d" : "rgba(0,0,0,0.78)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 8,
+                      padding: 0,
+                      cursor: password ? "pointer" : "not-allowed",
+                      opacity: password ? 1 : 0.7,
+                    }}
+                    title={password ? "Copiar senha" : "Digite uma senha para copiar"}
+                    aria-label={password ? "Copiar senha" : "Digite uma senha para copiar"}
+                  >
+                    <Copy size={14} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
               )}
             </div>
             {!id && suggestedPassword && (
