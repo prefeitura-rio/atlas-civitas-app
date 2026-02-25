@@ -61,6 +61,7 @@ const LAYERS = {
   radares_points: "lyr-radares-points",
   gps_point: "lyr-gps-point",
   gps_accuracy: "lyr-gps-accuracy",
+  gps_pulse: "lyr-gps-pulse",
   search_pin: "lyr-search-pin",
   selection_ring: "lyr-selection-ring",
   bairros_fill: "lyr-bairros-fill",
@@ -434,6 +435,7 @@ export default function MapPage() {
   }, [gps]);
 
   const gpsOnRef = useRef<boolean>(false);
+  const gpsPulseTimerRef = useRef<number | null>(null);
   useEffect(() => {
     return () => {
       if (selectionRingTimerRef.current) window.clearTimeout(selectionRingTimerRef.current);
@@ -470,6 +472,36 @@ export default function MapPage() {
   useEffect(() => {
     gpsOnRef.current = gpsOn;
   }, [gpsOn]);
+
+  useEffect(() => {
+    if (gpsPulseTimerRef.current) {
+      window.clearInterval(gpsPulseTimerRef.current);
+      gpsPulseTimerRef.current = null;
+    }
+
+    if (!gpsOn || !gps) {
+      const map = mapRef.current;
+      if (map && map.isStyleLoaded()) updateGpsData(map, gpsRef.current, gpsOnRef.current, 0);
+      return;
+    }
+
+    const tick = () => {
+      const map = mapRef.current;
+      if (!map || !map.isStyleLoaded()) return;
+      const phase = (Date.now() % 1600) / 1600;
+      updateGpsData(map, gpsRef.current, gpsOnRef.current, phase);
+    };
+
+    tick();
+    gpsPulseTimerRef.current = window.setInterval(tick, 80);
+
+    return () => {
+      if (gpsPulseTimerRef.current) {
+        window.clearInterval(gpsPulseTimerRef.current);
+        gpsPulseTimerRef.current = null;
+      }
+    };
+  }, [gpsOn, gps]);
 
   const [dockOpen, setDockOpen] = useState(true);
   const DOCK_AUTOHIDE_MS = 0;
@@ -754,6 +786,20 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getLayer(LAYERS.gps_pulse)) {
+      map.addLayer({
+        id: LAYERS.gps_pulse,
+        type: "circle",
+        source: SOURCES.gps,
+        filter: ["==", ["get", "kind"], "gps_point"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["get", "pulse"], 0, 14, 1, 40],
+          "circle-color": "rgba(34,197,94,0.45)",
+          "circle-opacity": ["interpolate", ["linear"], ["get", "pulse"], 0, 0.5, 1, 0],
+        },
+      });
+    }
+
     if (!map.getLayer(LAYERS.gps_point)) {
       map.addLayer({
         id: LAYERS.gps_point,
@@ -1012,6 +1058,7 @@ export default function MapPage() {
       LAYERS.search_pin,
       LAYERS.selection_ring,
       LAYERS.gps_accuracy,
+      LAYERS.gps_pulse,
       LAYERS.gps_point,
     ];
     for (const id of aboveBairros) {
@@ -1118,7 +1165,12 @@ export default function MapPage() {
     return meters / Math.max(0.000001, metersPerPixel);
   }
 
-  function updateGpsData(map: mapboxgl.Map, gpsData: typeof gps | null, isOn: boolean) {
+  function updateGpsData(
+    map: mapboxgl.Map,
+    gpsData: typeof gps | null,
+    isOn: boolean,
+    pulse = 0
+  ) {
     const src: any = map.getSource(SOURCES.gps);
     if (!src || typeof src.setData !== "function") return;
 
@@ -1144,7 +1196,7 @@ export default function MapPage() {
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [gpsData.lng, gpsData.lat] },
-      properties: { kind: "gps_point" },
+      properties: { kind: "gps_point", pulse },
     });
 
     src.setData({ type: "FeatureCollection", features });
@@ -2882,21 +2934,24 @@ export default function MapPage() {
                   <img src={mapPinRed} alt="" style={{ width: 14, height: 14 }} />
                 </span>
                 <span>GPS</span>
-                <span className="chipDot" style={{ background: gpsOn ? "#22c55e" : "#9ca3af" }} />
+                <span
+                  className={`chipDot ${gpsOn ? "gpsPulse" : ""}`}
+                  style={{ background: gpsOn ? "#22c55e" : "#9ca3af" }}
+                />
               </span>
               <span className="chipState">{gpsOn ? "ON" : "OFF"}</span>
             </button>
 
             {gpsOn && gps && !gpsErr && (
               <button
-                className="dockFab"
+                className="dockCenterBtn"
                 onClick={() => {
                   flyToPoint(gps.lng, gps.lat, 16);
                   bumpDockAutoHide();
                 }}
                 title="Centralizar no GPS"
               >
-                ⦿
+                Centralizar GPS
               </button>
             )}
 

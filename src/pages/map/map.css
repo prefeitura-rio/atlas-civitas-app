@@ -759,6 +759,20 @@
   border-radius: 999px;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
 }
+.gpsPulse {
+  animation: gpsPulse 1.6s ease-out infinite;
+}
+@keyframes gpsPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
 .chipState {
   font-size: 10px;
   font-weight: 900;
@@ -791,6 +805,30 @@
 }
 .dockFab:active {
   transform: translateY(0px) scale(0.98);
+}
+.dockCenterBtn {
+  width: 100%;
+  height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: linear-gradient(90deg, rgba(0, 192, 243, 0.16), rgba(10, 40, 75, 0.08));
+  color: rgba(10, 40, 75, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.dockCenterBtn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(90deg, rgba(0, 192, 243, 0.22), rgba(10, 40, 75, 0.12));
+  border-color: rgba(0, 0, 0, 0.2);
+}
+.dockCenterBtn:active {
+  transform: translateY(0px);
 }
 .dockNote {
   font-size: 10px;
