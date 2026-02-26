@@ -424,6 +424,8 @@ export default function MapPage() {
   const [mobileCountIntel, setMobileCountIntel] = useState(PAGE_SIZE);
   const [mobileCountLpr, setMobileCountLpr] = useState(PAGE_SIZE);
   const [mobileCountRadares, setMobileCountRadares] = useState(PAGE_SIZE);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const listScrollMobileRef = useRef<HTMLDivElement | null>(null);
   const pagePulseTimerRef = useRef<number | null>(null);
 
   const [me, setMe] = useState<Me | null>(null);
@@ -2495,6 +2497,12 @@ export default function MapPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages, setPage]);
 
+  useEffect(() => {
+    const el = isMobile ? listScrollMobileRef.current : listScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: 0, behavior: "auto" });
+  }, [page, listMode, isMobile]);
+
   useMemo(() => {
     if (!selectedCode) return null;
     return cameras.find((c) => c.code === selectedCode) || null;
@@ -2695,7 +2703,7 @@ export default function MapPage() {
                   <span>Câmeras</span>
                   <span className="chipLegend">Gravação de imagens</span>
                 </span>
-                <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#ef4444" }} />
+                <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCameras ? "ON" : "OFF"}</span>
             </button>
@@ -2717,7 +2725,7 @@ export default function MapPage() {
                   <span>Super Câmeras Inteligentes</span>
                   <span className="chipLegend">Gravações e analíticos de IA</span>
                 </span>
-                <span className="chipDot" style={{ background: showCamerasIntel ? "#f59e0b" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showCamerasIntel ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCamerasIntel ? "ON" : "OFF"}</span>
             </button>
@@ -2739,7 +2747,7 @@ export default function MapPage() {
                   <span>LPR</span>
                   <span className="chipLegend">Leitura de radar</span>
                 </span>
-                <span className="chipDot" style={{ background: showCamerasLpr ? "#22d3ee" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showCamerasLpr ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCamerasLpr ? "ON" : "OFF"}</span>
             </button>
@@ -2761,7 +2769,7 @@ export default function MapPage() {
                   <span>Radares</span>
                   <span className="chipLegend">Leitura de radar</span>
                 </span>
-                <span className="chipDot" style={{ background: showRadares ? "#3b82f6" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showRadares ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showRadares ? "ON" : "OFF"}</span>
             </button>
@@ -2912,7 +2920,7 @@ export default function MapPage() {
                   <span>AISP</span>
                   <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
                 </span>
-                <span className="chipDot" style={{ background: showAisp ? "#3b82f6" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showAisp ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
             </button>
@@ -2945,7 +2953,7 @@ export default function MapPage() {
                   <span>CISP</span>
                   <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>
                 </span>
-                <span className="chipDot" style={{ background: showCisp ? "#f59e0b" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showCisp ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
             </button>
@@ -3213,6 +3221,8 @@ export default function MapPage() {
               </div>
 
               <div
+                key={listMode}
+                ref={listScrollRef}
                 className="scrollbarHidden"
                 style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
                 onScroll={(e) => {
@@ -3250,14 +3260,15 @@ export default function MapPage() {
                           <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
                             <div
                               style={{
                                 fontWeight: 900,
                                 fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
+                                whiteSpace: "normal",
+                                overflow: "visible",
+                                textOverflow: "clip",
+                                wordBreak: "break-word",
                               }}
                             >
                               {c.name}
@@ -3317,14 +3328,15 @@ export default function MapPage() {
                           <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
                             <div
                               style={{
                                 fontWeight: 900,
                                 fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
+                                whiteSpace: "normal",
+                                overflow: "visible",
+                                textOverflow: "clip",
+                                wordBreak: "break-word",
                               }}
                             >
                               {c.name}
@@ -3385,14 +3397,15 @@ export default function MapPage() {
                           <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
                             <div
                               style={{
                                 fontWeight: 900,
                                 fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
+                                whiteSpace: "normal",
+                                overflow: "visible",
+                                textOverflow: "clip",
+                                wordBreak: "break-word",
                               }}
                             >
                               {c.name}
@@ -3458,22 +3471,14 @@ export default function MapPage() {
                               <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 8,
-                                  minWidth: 0,
-                                  flexWrap: isMobile ? "wrap" : "nowrap",
-                                }}
-                              >
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
                                 <div
                                   style={{
                                     fontWeight: 900,
                                     fontSize: 13,
-                                    whiteSpace: isMobile ? "normal" : "nowrap",
-                                    overflow: isMobile ? "visible" : "hidden",
-                                    textOverflow: isMobile ? "clip" : "ellipsis",
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                    textOverflow: "clip",
                                     wordBreak: "break-word",
                                   }}
                                 >
@@ -4156,6 +4161,8 @@ export default function MapPage() {
                 </div>
 
                 <div
+                  key={listMode}
+                  ref={listScrollMobileRef}
                   className="scrollbarHidden"
                   style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
                   onScroll={(e) => {
