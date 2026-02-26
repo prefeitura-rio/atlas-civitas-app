@@ -369,6 +369,7 @@ export default function MapPage() {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
+  const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
   const hoverPreviewTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
@@ -1231,16 +1232,23 @@ export default function MapPage() {
     if (!popupRef.current) {
       popupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true, maxWidth: "360px" });
     }
-    if (!hoverPreviewPopupRef.current) {
+    const popup = popupRef.current;
+
+    function ensureHoverPreviewPopup(anchor: "top" | "bottom") {
+      if (hoverPreviewPopupRef.current && hoverPreviewAnchorRef.current === anchor) {
+        return hoverPreviewPopupRef.current;
+      }
+      hoverPreviewPopupRef.current?.remove();
       hoverPreviewPopupRef.current = new mapboxgl.Popup({
         offset: 14,
         closeButton: false,
         closeOnClick: false,
         className: "cameraHoverPreviewPopup",
+        anchor,
       });
+      hoverPreviewAnchorRef.current = anchor;
+      return hoverPreviewPopupRef.current;
     }
-    const popup = popupRef.current;
-    const hoverPreviewPopup = hoverPreviewPopupRef.current;
 
     function clearHoverPreviewTimer() {
       if (!hoverPreviewTimerRef.current) return;
@@ -1250,7 +1258,7 @@ export default function MapPage() {
 
     function hideHoverPreview() {
       clearHoverPreviewTimer();
-      hoverPreviewPopup?.remove();
+      hoverPreviewPopupRef.current?.remove();
     }
 
     function setCursorPointer() {
@@ -1276,10 +1284,18 @@ export default function MapPage() {
       const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
       if (!streamingUrl) return;
       const coords = (f.geometry as any).coordinates as [number, number];
+      const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
+      const navSafeTop = 96;
+      const previewHeight = 240;
+      const minTop = navSafeTop + 6;
+      const isNearTop = pointY < minTop + previewHeight;
+      const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
+      const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
 
       hoverPreviewTimerRef.current = window.setTimeout(() => {
         hoverPreviewPopup
           ?.setLngLat(coords)
+          .setOffset(isNearTop ? [0, offsetY] : 14)
           .setHTML(`
             <div style="width:360px;background:#000;">
               <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
