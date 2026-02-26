@@ -364,6 +364,7 @@ export default function MapPage() {
 
   const accessToken =
     auth?.accessToken || auth?.token || localStorage.getItem("access_token") || "";
+  const authLoading = !!auth?.loading;
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -1929,6 +1930,17 @@ export default function MapPage() {
     loadCamerasLpr();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  useEffect(() => {
+    if (authLoading || !accessToken) return;
+    if (listMode === "inteligentes" && !loadingCamerasIntel && camerasIntel.length === 0) {
+      loadCamerasIntel();
+    }
+    if (listMode === "lpr" && !loadingCamerasLpr && camerasLpr.length === 0) {
+      loadCamerasLpr();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listMode, authLoading, accessToken, loadingCamerasIntel, loadingCamerasLpr, camerasIntel.length, camerasLpr.length]);
 
   useEffect(() => {
     if (!gpsOn) return;
