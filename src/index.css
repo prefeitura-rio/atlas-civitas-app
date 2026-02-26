@@ -27,6 +27,12 @@ html, body, #root {
   padding: 0;
 }
 
+html,
+body,
+#root {
+  background: #0b0b0f;
+}
+
 a {
   color: inherit;
   text-decoration: none;

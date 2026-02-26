@@ -312,7 +312,26 @@
   display: none;
 }
 
+.mapRoot {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: var(--vvh, 100dvh);
+  overflow: hidden;
+  background: #0b0b0f;
+}
+
 @media (max-width: 860px) {
+  .mapRoot {
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    height: var(--vvh, 100dvh);
+    min-height: var(--vvh, 100dvh);
+  }
   .desktopPanels {
     display: none !important;
   }
@@ -323,7 +342,7 @@
     position: fixed;
     left: 12px;
     right: 12px;
-    bottom: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
     max-height: 72vh;
     overflow: auto;
     transform: translateY(0);
@@ -385,9 +404,9 @@
   }
   .dockWrap {
     position: fixed;
-    top: auto;
     right: 12px;
-    bottom: 72px;
+    top: calc(76px + env(safe-area-inset-top));
+    bottom: auto;
   }
   .dockHandle {
     height: 32px;
@@ -415,6 +434,12 @@
   }
   .menuOpen .dockWrap {
     display: none;
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  .mapRoot {
+    min-height: -webkit-fill-available;
   }
 }
 

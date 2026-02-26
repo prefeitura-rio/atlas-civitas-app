@@ -428,6 +428,7 @@ export default function MapPage() {
   const [mobileCountRadares, setMobileCountRadares] = useState(PAGE_SIZE);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const listScrollMobileRef = useRef<HTMLDivElement | null>(null);
+  const listScrollAnimFrameRef = useRef<number | null>(null);
   const pagePulseTimerRef = useRef<number | null>(null);
 
   const [me, setMe] = useState<Me | null>(null);
@@ -542,6 +543,31 @@ export default function MapPage() {
   useEffect(() => {
     panelRef.current = panel;
   }, [panel]);
+
+  useEffect(() => {
+    const setViewportHeightVar = () => {
+      const vv = window.visualViewport;
+      const height = vv?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty("--vvh", `${Math.round(height)}px`);
+      const map = mapRef.current;
+      if (map) {
+        window.requestAnimationFrame(() => map.resize());
+      }
+    };
+
+    setViewportHeightVar();
+    window.addEventListener("resize", setViewportHeightVar);
+    window.addEventListener("orientationchange", setViewportHeightVar);
+    window.visualViewport?.addEventListener("resize", setViewportHeightVar);
+    window.visualViewport?.addEventListener("scroll", setViewportHeightVar);
+
+    return () => {
+      window.removeEventListener("resize", setViewportHeightVar);
+      window.removeEventListener("orientationchange", setViewportHeightVar);
+      window.visualViewport?.removeEventListener("resize", setViewportHeightVar);
+      window.visualViewport?.removeEventListener("scroll", setViewportHeightVar);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -2525,11 +2551,53 @@ export default function MapPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages, setPage]);
 
+  function animateListScrollToTop(el: HTMLDivElement) {
+    if (listScrollAnimFrameRef.current) {
+      window.cancelAnimationFrame(listScrollAnimFrameRef.current);
+      listScrollAnimFrameRef.current = null;
+    }
+
+    const startTop = el.scrollTop;
+    if (startTop <= 0) return;
+
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduceMotion) {
+      el.scrollTop = 0;
+      return;
+    }
+
+    const durationMs = 180;
+    const startedAt = performance.now();
+
+    const step = (now: number) => {
+      const t = Math.min(1, (now - startedAt) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.scrollTop = Math.round(startTop * (1 - eased));
+
+      if (t < 1) {
+        listScrollAnimFrameRef.current = window.requestAnimationFrame(step);
+      } else {
+        el.scrollTop = 0;
+        listScrollAnimFrameRef.current = null;
+      }
+    };
+
+    listScrollAnimFrameRef.current = window.requestAnimationFrame(step);
+  }
+
   useEffect(() => {
     const el = isMobile ? listScrollMobileRef.current : listScrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: 0, behavior: "auto" });
+    animateListScrollToTop(el);
   }, [page, listMode, isMobile]);
+
+  useEffect(() => {
+    return () => {
+      if (listScrollAnimFrameRef.current) {
+        window.cancelAnimationFrame(listScrollAnimFrameRef.current);
+      }
+    };
+  }, []);
 
   useMemo(() => {
     if (!selectedCode) return null;
@@ -2570,10 +2638,7 @@ export default function MapPage() {
   const listHeaderLabel = `${listTitle} - ${listCountLabel}`;
 
   return (
-    <div
-      className={panelOpen || mobileMenuOpen ? "menuOpen" : undefined}
-      style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden" }}
-    >
+    <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""}`}>
       <div
         ref={mapContainerRef}
         onClick={() => {
@@ -3932,9 +3997,9 @@ export default function MapPage() {
         className="mobileBar"
         style={{
           position: "fixed",
-          top: 12,
-          left: 12,
-          right: 12,
+          top: "calc(12px + env(safe-area-inset-top))",
+          left: "calc(12px + env(safe-area-inset-left))",
+          right: "calc(12px + env(safe-area-inset-right))",
           zIndex: 25,
           gap: 10,
           alignItems: "center",
