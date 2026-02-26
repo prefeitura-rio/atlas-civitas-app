@@ -539,6 +539,7 @@ export default function MapPage() {
   const panelRef = useRef<PanelKey>(null);
   const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const mapResizeFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     panelRef.current = panel;
@@ -566,6 +567,33 @@ export default function MapPage() {
       window.removeEventListener("orientationchange", setViewportHeightVar);
       window.visualViewport?.removeEventListener("resize", setViewportHeightVar);
       window.visualViewport?.removeEventListener("scroll", setViewportHeightVar);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const triggerMapResize = () => {
+      if (mapResizeFrameRef.current) {
+        window.cancelAnimationFrame(mapResizeFrameRef.current);
+      }
+      mapResizeFrameRef.current = window.requestAnimationFrame(() => {
+        mapRef.current?.resize();
+        mapResizeFrameRef.current = null;
+      });
+    };
+
+    const ro = new ResizeObserver(() => triggerMapResize());
+    ro.observe(el);
+    window.addEventListener("orientationchange", triggerMapResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", triggerMapResize);
+      if (mapResizeFrameRef.current) {
+        window.cancelAnimationFrame(mapResizeFrameRef.current);
+      }
     };
   }, []);
 
@@ -2517,7 +2545,7 @@ export default function MapPage() {
   const listItems = isMobile ? filtered.slice(0, mobileCount) : pagedItems;
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 860px)");
+    const mq = window.matchMedia("(max-width: 860px), (max-height: 500px) and (pointer: coarse)");
     const update = () => setIsMobile(mq.matches);
     update();
     if (mq.addEventListener) mq.addEventListener("change", update);

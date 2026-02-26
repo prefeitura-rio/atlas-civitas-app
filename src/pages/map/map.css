@@ -315,7 +315,6 @@
 .mapRoot {
   position: fixed;
   inset: 0;
-  width: 100vw;
   height: 100dvh;
   min-height: 100vh;
   min-height: var(--vvh, 100dvh);
@@ -323,13 +322,14 @@
   background: #0b0b0f;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 860px), (max-height: 500px) and (pointer: coarse) {
   .mapRoot {
-    top: 0;
-    right: 0;
-    left: 0;
-    bottom: 0;
-    height: var(--vvh, 100dvh);
+    top: calc(env(safe-area-inset-top) * -1);
+    right: calc(env(safe-area-inset-right) * -1);
+    bottom: calc(env(safe-area-inset-bottom) * -1);
+    left: calc(env(safe-area-inset-left) * -1);
+    width: auto;
+    height: auto;
     min-height: var(--vvh, 100dvh);
   }
   .desktopPanels {
