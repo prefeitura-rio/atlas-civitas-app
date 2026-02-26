@@ -7,6 +7,24 @@ import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
 
+function coerceCoord(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
+}
+
+function getLat(value: any) {
+  return coerceCoord(value?.lat ?? value?.latitude ?? value?.latitud ?? value?.y);
+}
+
+function getLng(value: any) {
+  return coerceCoord(value?.lng ?? value?.lon ?? value?.long ?? value?.longitude ?? value?.longitud ?? value?.x);
+}
+
 export function AdminCamerasPanel({
   apiBase,
   token,
@@ -76,7 +94,14 @@ export function AdminCamerasPanel({
         headers: { Authorization: `Bearer ${token}` },
       });
       const list: Camera[] = Array.isArray(data) ? data : [];
-      setItems(list);
+      const normalized = list
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+      setItems(normalized);
     } catch (e: any) {
       setErr(e?.message || "Erro ao carregar câmeras");
     } finally {
@@ -92,11 +117,11 @@ export function AdminCamerasPanel({
       });
       const list: CameraIntel[] = Array.isArray(data) ? data : [];
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
       setIntelItems(normalized);
     } catch (e: any) {
@@ -114,11 +139,11 @@ export function AdminCamerasPanel({
       });
       const list: CameraLpr[] = Array.isArray(data) ? data : [];
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
       setLprItems(normalized);
     } catch (e: any) {

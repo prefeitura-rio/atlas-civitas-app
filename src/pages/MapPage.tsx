@@ -92,6 +92,24 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function coerceCoord(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
+}
+
+function getLat(value: any) {
+  return coerceCoord(value?.lat ?? value?.latitude ?? value?.latitud ?? value?.y);
+}
+
+function getLng(value: any) {
+  return coerceCoord(value?.lng ?? value?.lon ?? value?.long ?? value?.longitude ?? value?.longitud ?? value?.x);
+}
+
 function escapeHtml(s: string) {
   return (s || "")
     .replaceAll("&", "&amp;")
@@ -1778,11 +1796,11 @@ export default function MapPage() {
       const list: Camera[] = Array.isArray(data) ? data : [];
 
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
       setCameras(normalized);
@@ -1807,11 +1825,11 @@ export default function MapPage() {
       const list: CameraIntel[] = Array.isArray(data) ? data : [];
 
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
       setCamerasIntel(normalized);
@@ -1836,11 +1854,11 @@ export default function MapPage() {
       const list: CameraLpr[] = Array.isArray(data) ? data : [];
 
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
       setCamerasLpr(normalized);
@@ -1883,11 +1901,16 @@ export default function MapPage() {
 
   useEffect(() => {
     loadCameras();
-    loadCamerasIntel();
-    loadCamerasLpr();
     loadRadares();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    loadCamerasIntel();
+    loadCamerasLpr();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   useEffect(() => {
     if (!gpsOn) return;
