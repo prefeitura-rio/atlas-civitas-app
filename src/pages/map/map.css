@@ -518,6 +518,38 @@
   min-width: 0;
   color: #0f172a;
   box-sizing: border-box;
+  position: relative;
+}
+
+.cameraPopupCloseBtn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  line-height: 22px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.96);
+  color: rgba(15, 23, 42, 0.8);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cameraPopupCloseBtn:hover {
+  background: rgba(226, 232, 240, 0.98);
+}
+
+@media (max-width: 900px) {
+  .cameraPopupCloseBtn {
+    width: 28px;
+    height: 28px;
+    line-height: 26px;
+    font-size: 18px;
+  }
 }
 
 .cameraPopupHead {

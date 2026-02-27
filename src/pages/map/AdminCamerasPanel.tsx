@@ -38,7 +38,8 @@ export function AdminCamerasPanel({
 }) {
   const CAMS_URL = `${apiBase}/api/v1/cameras`;
   const SYNC_CAMERAS_URL = `${apiBase}/api/v1/sync/cameras`;
-  const SYNC_CIVITAS_URL = `${apiBase}/api/v1/sync/civitas`;
+  const SYNC_CAMS_INTEL_URL = `${apiBase}/api/v1/sync/cameras-inteligentes`;
+  const SYNC_CAMS_LPR_URL = `${apiBase}/api/v1/sync/cameras-lpr`;
   const CAMS_INTEL_URL = `${apiBase}/api/v1/cameras-inteligentes`;
   const CAMS_LPR_URL = `${apiBase}/api/v1/cameras-lpr`;
 
@@ -85,6 +86,14 @@ export function AdminCamerasPanel({
     background: "rgba(248,250,252,0.95)",
     color: "rgba(15,23,42,0.85)",
   } as const;
+
+  function formatSyncMsg(result: any) {
+    const base = `Sincronização concluída. (criados=${result?.created ?? "-"}, atualizados=${result?.updated ?? "-"}`;
+    const withReactivated =
+      result?.reactivated === undefined ? base : `${base}, reativados=${result?.reactivated ?? "-"}`;
+    const withDeactivated = `${withReactivated}, desativados=${result?.deactivated ?? "-"}`;
+    return result?.total_seen === undefined ? `${withDeactivated})` : `${withDeactivated}, total_lido=${result?.total_seen ?? "-"})`;
+  }
 
   async function load() {
     setErr(null);
@@ -192,9 +201,7 @@ export function AdminCamerasPanel({
       });
 
       setSyncMsg(
-        `Sincronização concluída. (criados=${resp?.result?.created ?? "-"}, atualizados=${resp?.result?.updated ?? "-"}, desativados=${
-          resp?.result?.deactivated ?? "-"
-        })`
+        formatSyncMsg(resp?.result)
       );
 
       await load();
@@ -213,7 +220,8 @@ export function AdminCamerasPanel({
 
     setSyncLoading(true);
     try {
-      const resp = await fetchJson<any>(SYNC_CIVITAS_URL, {
+      const syncUrl = civitasTab === "inteligentes" ? SYNC_CAMS_INTEL_URL : SYNC_CAMS_LPR_URL;
+      const resp = await fetchJson<any>(syncUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -224,17 +232,13 @@ export function AdminCamerasPanel({
         }),
       });
 
-      setSyncMsg(
-        `Sincronização concluída. (criados=${resp?.result?.created ?? "-"}, atualizados=${resp?.result?.updated ?? "-"}, desativados=${
-          resp?.result?.deactivated ?? "-"
-        })`
-      );
+      setSyncMsg(formatSyncMsg(resp?.result));
 
       if (civitasTab === "inteligentes") await loadIntel();
       if (civitasTab === "lpr") await loadLpr();
     } catch (e: any) {
       setSyncMsg(null);
-      setErr(e?.message || "Erro na sincronização de câmeras Civitas");
+      setErr(e?.message || `Erro na sincronização de ${civitasTab === "inteligentes" ? "câmeras inteligentes" : "câmeras LPR"}`);
     } finally {
       setSyncLoading(false);
     }
@@ -471,7 +475,11 @@ export function AdminCamerasPanel({
                 opacity: syncLoading ? 0.7 : 1,
               }}
             >
-              {syncLoading ? "Sincronizando..." : "Sincronizar Câmeras Civitas"}
+              {syncLoading
+                ? "Sincronizando..."
+                : civitasTab === "inteligentes"
+                ? "Sincronizar Câmeras Inteligentes"
+                : "Sincronizar Câmeras LPR"}
             </button>
 
             <label
@@ -579,7 +587,7 @@ export function AdminCamerasPanel({
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                    <span style={chipStyle}>IP: {c.ip || "-"}</span>
+                    <span style={chipStyle}>Responsável: {c.responsavel || (c as any).responsavel || "-"}</span>
                     <span style={chipStyle}>Direção: {c.direction || "-"}</span>
                   </div>
                 </div>
@@ -692,7 +700,7 @@ export function AdminCamerasPanel({
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                    <span style={chipStyle}>IP: {c.ip || "-"}</span>
+                    <span style={chipStyle}>Bairro: {c.neighborhood || (c as any).bairro || "-"}</span>
                     <span style={chipStyle}>Direção: {c.direction || "-"}</span>
                   </div>
                 </div>

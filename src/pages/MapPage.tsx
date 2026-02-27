@@ -280,18 +280,25 @@ function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
 }
 
 function camerasIntelToFeatures(list: CameraIntel[]): Feature<Point, any>[] {
-  return list.map((c) => ({
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [c.lng, c.lat] },
-    properties: {
-      kind: "camera_intel",
-      code: c.code,
-      name: c.name,
-      ip: c.ip ?? "",
-      direction: c.direction ?? "",
-      is_active: c.is_active ? 1 : 0,
-    },
-  }));
+  return list.map((c) => {
+    const rawStreamingUrl = (c.streaming_url ?? "").toString().trim();
+    const streamingUrl = normalizeExternalUrl(rawStreamingUrl);
+
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [c.lng, c.lat] },
+      properties: {
+        kind: "camera_intel",
+        code: c.code,
+        name: c.name,
+        responsavel: c.responsavel ?? (c as any).responsavel ?? "",
+        direction: c.direction ?? "",
+        streaming_url: streamingUrl,
+        streaming_url_raw: rawStreamingUrl,
+        is_active: c.is_active ? 1 : 0,
+      },
+    };
+  });
 }
 
 function camerasLprToFeatures(list: CameraLpr[]): Feature<Point, any>[] {
@@ -302,7 +309,7 @@ function camerasLprToFeatures(list: CameraLpr[]): Feature<Point, any>[] {
       kind: "camera_lpr",
       code: c.code,
       name: c.name,
-      ip: c.ip ?? "",
+      neighborhood: c.neighborhood ?? (c as any).bairro ?? "",
       direction: c.direction ?? "",
       is_active: c.is_active ? 1 : 0,
     },
@@ -540,6 +547,8 @@ export default function MapPage() {
   const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const mapResizeFrameRef = useRef<number | null>(null);
+  const suppressNextMapClickRef = useRef(false);
+  const suppressMapClickTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     panelRef.current = panel;
@@ -1285,7 +1294,13 @@ export default function MapPage() {
     handlersBoundRef.current = true;
 
     if (!popupRef.current) {
-      popupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true, maxWidth: "360px" });
+      popupRef.current = new mapboxgl.Popup({
+        offset: 12,
+        closeButton: false,
+        closeOnClick: false,
+        closeOnMove: false,
+        maxWidth: "360px",
+      });
     }
     const popup = popupRef.current;
 
@@ -1314,6 +1329,45 @@ export default function MapPage() {
     function hideHoverPreview() {
       clearHoverPreviewTimer();
       hoverPreviewPopupRef.current?.remove();
+    }
+
+    function bindPopupCloseButton() {
+      if (!popup?.isOpen()) return;
+      const btn = popup.getElement()?.querySelector<HTMLButtonElement>("[data-popup-close]");
+      if (!btn) return;
+      btn.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        popup.remove();
+      };
+    }
+
+    function keepMobileStreamingPopupOpen() {
+      if (!isMobileRef.current || !popup?.isOpen()) return false;
+      const popupEl = popup.getElement();
+      return Boolean(popupEl?.querySelector(".cameraPopupStreamLink"));
+    }
+
+    function markMobileMapGesture() {
+      if (!isMobileRef.current) return;
+      suppressNextMapClickRef.current = true;
+      if (suppressMapClickTimerRef.current) {
+        window.clearTimeout(suppressMapClickTimerRef.current);
+      }
+      suppressMapClickTimerRef.current = window.setTimeout(() => {
+        suppressNextMapClickRef.current = false;
+        suppressMapClickTimerRef.current = null;
+      }, 380);
+    }
+
+    function consumeSuppressedMapClick() {
+      if (!suppressNextMapClickRef.current) return false;
+      suppressNextMapClickRef.current = false;
+      if (suppressMapClickTimerRef.current) {
+        window.clearTimeout(suppressMapClickTimerRef.current);
+        suppressMapClickTimerRef.current = null;
+      }
+      return true;
     }
 
     function setCursorPointer() {
@@ -1411,6 +1465,7 @@ export default function MapPage() {
         ?.setLngLat(coords)
         .setHTML(`
           <div class="cameraPopup">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
@@ -1443,6 +1498,7 @@ export default function MapPage() {
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
@@ -1452,6 +1508,7 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
       setSelectionRing(coords[0], coords[1]);
 
       setSelectedCode(null);
@@ -1462,6 +1519,7 @@ export default function MapPage() {
         ?.setLngLat(coords)
         .setHTML(`
           <div class="cameraPopup cameraPopup--intel">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
@@ -1475,17 +1533,26 @@ export default function MapPage() {
 
             <div class="cameraPopupInfoGrid">
               <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Responsável</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.responsavel || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
                 <span class="cameraPopupInfoLabel">Direção</span>
                 <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
               </div>
-              <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">IP</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(p.ip || "-")}</span>
-              </div>
+            </div>
+
+            <div class="cameraPopupStreamBlock">
+              ${
+                streamingUrl
+                  ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+                  : `<div class="cameraPopupStreamRaw">Streaming indisponivel</div>`
+              }
             </div>
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
@@ -1505,6 +1572,7 @@ export default function MapPage() {
         ?.setLngLat(coords)
         .setHTML(`
           <div class="cameraPopup cameraPopup--lpr">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
@@ -1518,17 +1586,18 @@ export default function MapPage() {
 
             <div class="cameraPopupInfoGrid">
               <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">Direção</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
+                <span class="cameraPopupInfoLabel">Bairro</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.neighborhood || p.bairro || "-")}</span>
               </div>
               <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">IP</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(p.ip || "-")}</span>
+                <span class="cameraPopupInfoLabel">Direção</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
               </div>
             </div>
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
     });
 
     map.on("click", LAYERS.radares_points, (e) => {
@@ -1548,6 +1617,7 @@ export default function MapPage() {
         ?.setLngLat(coords)
         .setHTML(`
           <div class="cameraPopup cameraPopup--radar">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
@@ -1584,10 +1654,12 @@ export default function MapPage() {
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
     });
 
     map.on("click", (e) => {
       hideHoverPreview();
+      if (consumeSuppressedMapClick()) return;
       const features = map.queryRenderedFeatures(e.point, {
         layers: [
           LAYERS.cameras_points,
@@ -1597,7 +1669,9 @@ export default function MapPage() {
           LAYERS.clusters,
         ],
       });
-      if (!features || features.length === 0) popup?.remove();
+      if (!features || features.length === 0) {
+        if (!keepMobileStreamingPopupOpen()) popup?.remove();
+      }
 
       if (panelRef.current !== null) {
         setPanel(null);
@@ -1609,6 +1683,7 @@ export default function MapPage() {
 
     const closeDockOnMove = () => {
       hideHoverPreview();
+      markMobileMapGesture();
       if (isMobileRef.current) setDockOpen(false);
     };
     map.on("dragstart", closeDockOnMove);
@@ -1849,6 +1924,10 @@ export default function MapPage() {
       searchMarkerRef.current?.remove();
       searchMarkerRef.current = null;
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
+      if (suppressMapClickTimerRef.current) {
+        window.clearTimeout(suppressMapClickTimerRef.current);
+        suppressMapClickTimerRef.current = null;
+      }
       handlersBoundRef.current = false;
       map.remove();
       mapRef.current = null;
@@ -2469,7 +2548,7 @@ export default function MapPage() {
     if (listMode === "inteligentes") {
       if (!q) return camerasIntel;
       return camerasIntel.filter((c) => {
-        const hay = `${c.name} ${c.code} ${c.ip ?? ""} ${c.direction ?? ""}`.toLowerCase();
+        const hay = `${c.name} ${c.code} ${c.responsavel ?? ""} ${(c as any).responsavel ?? ""} ${c.direction ?? ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -2477,7 +2556,7 @@ export default function MapPage() {
     if (listMode === "lpr") {
       if (!q) return camerasLpr;
       return camerasLpr.filter((c) => {
-        const hay = `${c.name} ${c.code} ${c.ip ?? ""} ${c.direction ?? ""}`.toLowerCase();
+        const hay = `${c.name} ${c.code} ${c.neighborhood ?? ""} ${(c as any).bairro ?? ""} ${c.direction ?? ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -3480,7 +3559,7 @@ export default function MapPage() {
                           </div>
                           <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              IP: {c.ip || "-"}
+                              Responsável: {c.responsavel || (c as any).responsavel || "-"}
                             </span>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
                               Direção: {c.direction || "-"}
@@ -3549,7 +3628,7 @@ export default function MapPage() {
                           </div>
                           <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              IP: {c.ip || "-"}
+                              Bairro: {c.neighborhood || (c as any).bairro || "-"}
                             </span>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
                               Direção: {c.direction || "-"}
@@ -4427,7 +4506,7 @@ export default function MapPage() {
                             </div>
                             <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                IP: {c.ip || "-"}
+                                Responsável: {c.responsavel || (c as any).responsavel || "-"}
                               </span>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 Direção: {c.direction || "-"}
@@ -4498,7 +4577,7 @@ export default function MapPage() {
                             </div>
                             <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                IP: {c.ip || "-"}
+                                Bairro: {c.neighborhood || (c as any).bairro || "-"}
                               </span>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 Direção: {c.direction || "-"}

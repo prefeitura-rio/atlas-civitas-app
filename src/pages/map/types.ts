@@ -9,18 +9,20 @@ export type Camera = {
   address: string;
   city: string;
   uf: string;
+  streaming_url?: string | null;
   stream_url?: string | null;
   is_active: boolean;
 };
 
 export type CameraIntel = {
   id?: string;
-  ip?: string | null;
   code: string;
   name: string;
   lat: number;
   lng: number;
+  responsavel?: string | null;
   direction?: string | null;
+  streaming_url?: string | null;
   is_active?: boolean;
   source_file?: string | null;
   last_seen_at?: string | null;
@@ -30,11 +32,11 @@ export type CameraIntel = {
 
 export type CameraLpr = {
   id?: string;
-  ip?: string | null;
   code: string;
   name: string;
   lat: number;
   lng: number;
+  neighborhood?: string | null;
   direction?: string | null;
   is_active?: boolean;
   source_file?: string | null;
