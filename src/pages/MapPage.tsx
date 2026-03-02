@@ -379,6 +379,8 @@ export default function MapPage() {
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
   const hoverPreviewTimerRef = useRef<number | null>(null);
+  const suppressHoverHideRef = useRef(false);
+  const suppressHoverHideTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   const handlersBoundRef = useRef(false);
@@ -610,6 +612,10 @@ export default function MapPage() {
     return () => {
       if (hoverPreviewTimerRef.current) {
         window.clearTimeout(hoverPreviewTimerRef.current);
+      }
+      if (suppressHoverHideTimerRef.current) {
+        window.clearTimeout(suppressHoverHideTimerRef.current);
+        suppressHoverHideTimerRef.current = null;
       }
       hoverPreviewPopupRef.current?.remove();
     };
@@ -1327,6 +1333,7 @@ export default function MapPage() {
     }
 
     function hideHoverPreview() {
+      if (suppressHoverHideRef.current && hoverPreviewPopupRef.current?.isOpen()) return;
       clearHoverPreviewTimer();
       hoverPreviewPopupRef.current?.remove();
     }
@@ -1340,6 +1347,51 @@ export default function MapPage() {
         ev.stopPropagation();
         popup.remove();
       };
+    }
+
+    function centerMobilePopup(target?: mapboxgl.Popup | null) {
+      const activePopup = target ?? popup;
+      if (!isMobileRef.current || !activePopup?.isOpen()) return;
+      const popupEl = activePopup.getElement();
+      const mapEl = map.getContainer();
+      if (!popupEl || !mapEl) return;
+
+      const isHoverPreview = popupEl.classList.contains("cameraHoverPreviewPopup");
+
+      const run = () => {
+        const popupRect = popupEl.getBoundingClientRect();
+        const mapRect = mapEl.getBoundingClientRect();
+        const popupCenterX = popupRect.left + popupRect.width / 2;
+        const popupCenterY = popupRect.top + popupRect.height / 2;
+        const mapCenterX = mapRect.left + mapRect.width / 2;
+        const mapCenterY = mapRect.top + mapRect.height / 2;
+        const dx = popupCenterX - mapCenterX;
+        const dy = popupCenterY - mapCenterY;
+
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        if (isHoverPreview) {
+          suppressHoverHideRef.current = true;
+          if (suppressHoverHideTimerRef.current) {
+            window.clearTimeout(suppressHoverHideTimerRef.current);
+          }
+          suppressHoverHideTimerRef.current = window.setTimeout(() => {
+            suppressHoverHideRef.current = false;
+            suppressHoverHideTimerRef.current = null;
+          }, 600);
+          map.once("moveend", () => {
+            suppressHoverHideRef.current = false;
+            if (suppressHoverHideTimerRef.current) {
+              window.clearTimeout(suppressHoverHideTimerRef.current);
+              suppressHoverHideTimerRef.current = null;
+            }
+          });
+        }
+        map.panBy([dx, dy], { duration: 240 });
+      };
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(run);
+      });
     }
 
     function keepMobileStreamingPopupOpen() {
@@ -1402,7 +1454,7 @@ export default function MapPage() {
       const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
 
       hoverPreviewTimerRef.current = window.setTimeout(() => {
-        hoverPreviewPopup
+      hoverPreviewPopup
           ?.setLngLat(coords)
           .setOffset(isNearTop ? [0, offsetY] : 14)
           .setHTML(`
@@ -1424,6 +1476,7 @@ export default function MapPage() {
             </div>
           `)
           .addTo(map);
+        centerMobilePopup(hoverPreviewPopup);
       }, 120);
     });
 
@@ -1499,6 +1552,7 @@ export default function MapPage() {
         `)
         .addTo(map);
       bindPopupCloseButton();
+      if (streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
@@ -1553,6 +1607,7 @@ export default function MapPage() {
         `)
         .addTo(map);
       bindPopupCloseButton();
+      if (streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
