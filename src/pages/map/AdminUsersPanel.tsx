@@ -126,6 +126,7 @@ export function AdminUsersPanel({
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [items, setItems] = useState<AdminUser[]>([]);
 
   const [id, setId] = useState<string | null>(null);
@@ -165,6 +166,8 @@ export function AdminUsersPanel({
     setPasswordCopied(false);
     setRole("user");
     setIsActive(true);
+    setErr(null);
+    setSuccess(null);
   }
 
   async function load() {
@@ -304,6 +307,7 @@ export function AdminUsersPanel({
 
   async function save() {
     setErr(null);
+    setSuccess(null);
 
     const emailV = email.trim();
     const fullNameV = fullName.trim();
@@ -327,8 +331,10 @@ export function AdminUsersPanel({
       if (!password || password.length < 8) return setErr("Senha mínima: 8 caracteres.");
     }
 
+    const creating = !id;
+
     try {
-      if (!id) {
+      if (creating) {
         await fetchJson(USERS_URL, {
           method: "POST",
           headers: {
@@ -369,6 +375,7 @@ export function AdminUsersPanel({
       }
 
       resetForm();
+      setSuccess(creating ? "Usuário criado com sucesso." : "Usuário atualizado com sucesso.");
       load();
     } catch (e: any) {
       setErr(e?.message || "Erro ao salvar usuário");
@@ -689,6 +696,7 @@ export function AdminUsersPanel({
         </div>
 
         {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
+        {success && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#166534" }}>{success}</div>}
       </div>
       )}
 
