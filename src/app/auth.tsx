@@ -40,14 +40,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const migrateItem = (key: string) => {
+      const existing = sessionStorage.getItem(key);
+      if (existing !== null) return existing;
+      const legacy = localStorage.getItem(key);
+      if (legacy !== null) {
+        sessionStorage.setItem(key, legacy);
+        localStorage.removeItem(key);
+      }
+      return legacy;
+    };
+
     // carrega estado inicial do storage
-    const token = localStorage.getItem("access_token");
-    const storedUser = safeJsonParse<User>(localStorage.getItem("user"));
+    const token = migrateItem("access_token");
+    const storedUser = safeJsonParse<User>(migrateItem("user"));
+    migrateItem("user_role");
 
     setAccessToken(token);
     setUser(storedUser);
     setLoading(false);
   }, []);
+
+  function clearAuthStorage() {
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("user");
+    sessionStorage.removeItem("user_role");
+    sessionStorage.removeItem("tokens");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_role");
+    localStorage.removeItem("tokens");
+  }
 
   async function login(email: string, password: string) {
     // DEBUG (você vai ver isso no console)
@@ -99,27 +122,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       payload?.data?.user ||
       null;
 
-    localStorage.setItem("access_token", token);
+    sessionStorage.setItem("access_token", token);
+    localStorage.removeItem("access_token");
     setAccessToken(token);
 
     if (nextUser) {
-      localStorage.setItem("user", JSON.stringify(nextUser));
+      sessionStorage.setItem("user", JSON.stringify(nextUser));
+      localStorage.removeItem("user");
       setUser(nextUser);
 
       // opcional: se você usa user_role em algum lugar
       const role = nextUser.role || nextUser.roles?.[0];
-      if (role) localStorage.setItem("user_role", role);
+      if (role) {
+        sessionStorage.setItem("user_role", role);
+        localStorage.removeItem("user_role");
+      }
     } else {
-      localStorage.removeItem("user");
       setUser(null);
+      sessionStorage.removeItem("user");
+      sessionStorage.removeItem("user_role");
+      localStorage.removeItem("user");
       localStorage.removeItem("user_role");
     }
   }
 
   function logout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("user_role");
+    clearAuthStorage();
     setAccessToken(null);
     setUser(null);
   }

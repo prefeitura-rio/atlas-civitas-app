@@ -20,6 +20,7 @@ export default function Login() {
     auth?.isAuthed === true ||
     !!auth?.accessToken ||
     !!auth?.token ||
+    !!sessionStorage.getItem("access_token") ||
     !!localStorage.getItem("access_token");
 
   // ✅ Se voltar pra /login estando logado, desloga e exige autenticação de novo
@@ -28,6 +29,8 @@ export default function Login() {
       try {
         auth?.logout?.();
       } catch {}
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("user_role");
       localStorage.removeItem("access_token");
       localStorage.removeItem("user_role");
     }

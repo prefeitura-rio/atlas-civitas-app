@@ -18,6 +18,8 @@ export async function fetchJson<T>(url: string, opts: RequestInit = {}) {
         "auth_toast",
         "Sua sessão expirou. Faça login novamente para continuar."
       );
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("user_role");
       localStorage.removeItem("access_token");
       localStorage.removeItem("user_role");
       try {

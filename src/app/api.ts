@@ -5,14 +5,25 @@ const API_URL = import.meta.env.VITE_API_URL as string;
 type Tokens = { access_token: string; refresh_token: string };
 
 function getTokens(): Tokens | null {
-  const raw = localStorage.getItem("tokens");
+  const raw = sessionStorage.getItem("tokens") ?? localStorage.getItem("tokens");
   if (!raw) return null;
-  try { return JSON.parse(raw) as Tokens; } catch { return null; }
+  try {
+    const parsed = JSON.parse(raw) as Tokens;
+    if (sessionStorage.getItem("tokens") == null && localStorage.getItem("tokens") != null) {
+      sessionStorage.setItem("tokens", raw);
+      localStorage.removeItem("tokens");
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 function setTokens(t: Tokens) {
-  localStorage.setItem("tokens", JSON.stringify(t));
+  sessionStorage.setItem("tokens", JSON.stringify(t));
+  localStorage.removeItem("tokens");
 }
 function clearTokens() {
+  sessionStorage.removeItem("tokens");
   localStorage.removeItem("tokens");
 }
 

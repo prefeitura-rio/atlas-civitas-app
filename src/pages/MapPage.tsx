@@ -370,7 +370,11 @@ export default function MapPage() {
   const nav = useNavigate();
 
   const accessToken =
-    auth?.accessToken || auth?.token || localStorage.getItem("access_token") || "";
+    auth?.accessToken ||
+    auth?.token ||
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token") ||
+    "";
   const authLoading = !!auth?.loading;
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -641,7 +645,12 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dockOpen]);
 
-  const role = normalizeRole(me?.role ?? auth?.user?.role ?? localStorage.getItem("user_role"));
+  const role = normalizeRole(
+    me?.role ??
+      auth?.user?.role ??
+      sessionStorage.getItem("user_role") ??
+      localStorage.getItem("user_role")
+  );
   const isAdmin = isAdminRole(role);
   const hasStreamingAccess = canAccessStreaming(role);
 
@@ -2283,10 +2292,20 @@ export default function MapPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!map.isStyleLoaded()) return;
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updatePoisData(map, poisGeo);
+      return;
+    }
 
-    ensureSourcesAndLayers(map);
-    updatePoisData(map, poisGeo);
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updatePoisData(map, poisGeo);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poisGeo]);
 
@@ -2563,16 +2582,59 @@ export default function MapPage() {
     }
 
     try {
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-        q
-      )}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=pt&country=BR&bbox=${rioBbox.west},${rioBbox.south},${rioBbox.east},${rioBbox.north}`;
-      const data = await fetchJson<any>(url);
-      const f = data?.features?.[0];
-      if (!f || !Array.isArray(f.center)) {
+      const baseUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`;
+      const proximity = "-43.2096,-22.9035";
+      const commonParams = {
+        access_token: MAPBOX_TOKEN,
+        language: "pt",
+        country: "BR",
+        bbox: `${rioBbox.west},${rioBbox.south},${rioBbox.east},${rioBbox.north}`,
+        proximity,
+      } as const;
+
+      const buildUrl = (params: Record<string, string | number | boolean>) => {
+        const search = new URLSearchParams();
+        for (const [k, v] of Object.entries({ ...commonParams, ...params })) {
+          if (typeof v === "boolean") search.set(k, v ? "true" : "false");
+          else search.set(k, String(v));
+        }
+        return `${baseUrl}?${search.toString()}`;
+      };
+
+      const looksLikeAddressWithNumber = /\d/.test(q) && /[A-Za-zÀ-ÿ]/.test(q);
+
+      const fetchFeatures = async (params: Record<string, string | number | boolean>) => {
+        const data = await fetchJson<any>(buildUrl(params));
+        return Array.isArray(data?.features) ? data.features : [];
+      };
+
+      const pickFeature = (features: any[]) => {
+        if (!features.length) return null;
+        const byType = (t: string) => features.find((f) => Array.isArray(f.place_type) && f.place_type.includes(t));
+        return byType("address") || byType("poi") || byType("street") || features[0];
+      };
+
+      let features: any[] = [];
+      if (looksLikeAddressWithNumber) {
+        features = await fetchFeatures({ types: "address", autocomplete: false, limit: 5 });
+        if (!features.length) features = await fetchFeatures({ types: "address", autocomplete: true, limit: 5 });
+        if (!features.length) features = await fetchFeatures({ limit: 5 });
+      } else {
+        features = await fetchFeatures({ limit: 3 });
+      }
+
+      const f = pickFeature(features);
+      const center = Array.isArray(f?.center)
+        ? f.center
+        : Array.isArray(f?.geometry?.coordinates)
+        ? f.geometry.coordinates
+        : null;
+
+      if (!f || !Array.isArray(center)) {
         setSearchErr("Nenhum resultado.");
         return;
       }
-      const [lng, lat] = f.center;
+      const [lng, lat] = center;
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         setSearchErr("Resultado inválido.");
         return;
@@ -2582,7 +2644,9 @@ export default function MapPage() {
         return;
       }
       setSearchPin({ lng, lat });
-      flyToPoint(lng, lat, 16);
+      const isAddress =
+        Array.isArray(f.place_type) && (f.place_type.includes("address") || f.place_type.includes("poi"));
+      flyToPoint(lng, lat, isAddress ? 17.5 : 16);
       searchTimerRef.current = window.setTimeout(() => setSearchPin(null), 4000);
     } catch (e: any) {
       setSearchErr(e?.message || "Falha ao buscar endereço.");
