@@ -110,6 +110,25 @@ function getLng(value: any) {
   return coerceCoord(value?.lng ?? value?.lon ?? value?.long ?? value?.longitude ?? value?.longitud ?? value?.x);
 }
 
+function getLprNeighborhood(value: any) {
+  const candidates = [
+    value?.neighborhood,
+    value?.bairro,
+    value?.neighbourhood,
+    value?.district,
+    value?.bairro_nome,
+    value?.bairro_name,
+    value?.BAIRRO,
+    value?.Bairro,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+}
+
 function escapeHtml(s: string) {
   return (s || "")
     .replaceAll("&", "&amp;")
@@ -309,7 +328,7 @@ function camerasLprToFeatures(list: CameraLpr[]): Feature<Point, any>[] {
       kind: "camera_lpr",
       code: c.code,
       name: c.name,
-      neighborhood: c.neighborhood ?? (c as any).bairro ?? "",
+      neighborhood: getLprNeighborhood(c),
       direction: c.direction ?? "",
       is_active: c.is_active ? 1 : 0,
     },
@@ -1651,7 +1670,7 @@ export default function MapPage() {
             <div class="cameraPopupInfoGrid">
               <div class="cameraPopupInfoItem">
                 <span class="cameraPopupInfoLabel">Bairro</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(p.neighborhood || p.bairro || "-")}</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(getLprNeighborhood(p) || "-")}</span>
               </div>
               <div class="cameraPopupInfoItem">
                 <span class="cameraPopupInfoLabel">Direção</span>
@@ -2073,7 +2092,8 @@ export default function MapPage() {
         .map((c) => {
           const lat = getLat(c);
           const lng = getLng(c);
-          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+          const neighborhood = getLprNeighborhood(c);
+          return { ...c, neighborhood, lat: lat ?? NaN, lng: lng ?? NaN };
         })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
@@ -2675,7 +2695,7 @@ export default function MapPage() {
     if (listMode === "lpr") {
       if (!q) return camerasLpr;
       return camerasLpr.filter((c) => {
-        const hay = `${c.name} ${c.code} ${c.neighborhood ?? ""} ${(c as any).bairro ?? ""} ${c.direction ?? ""}`.toLowerCase();
+        const hay = `${c.name} ${c.code} ${getLprNeighborhood(c)} ${c.direction ?? ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -3747,7 +3767,7 @@ export default function MapPage() {
                           </div>
                           <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              Bairro: {c.neighborhood || (c as any).bairro || "-"}
+                              Bairro: {getLprNeighborhood(c) || "-"}
                             </span>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
                               Direção: {c.direction || "-"}
@@ -4696,7 +4716,7 @@ export default function MapPage() {
                             </div>
                             <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                Bairro: {c.neighborhood || (c as any).bairro || "-"}
+                                Bairro: {getLprNeighborhood(c) || "-"}
                               </span>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 Direção: {c.direction || "-"}
