@@ -1423,6 +1423,7 @@ export default function MapPage() {
     }
 
     function keepMobileStreamingPopupOpen() {
+      if (!hasStreamingAccess) return false;
       if (!isMobileRef.current || !popup?.isOpen()) return false;
       const popupEl = popup.getElement();
       return Boolean(popupEl?.querySelector(".cameraPopupStreamLink"));
@@ -1466,6 +1467,7 @@ export default function MapPage() {
     map.on("mouseenter", LAYERS.cameras_points, (e) => {
       setCursorPointer();
       clearHoverPreviewTimer();
+      if (!hasStreamingAccess) return;
       const f: any = e.features?.[0];
       if (!f) return;
 
@@ -1570,17 +1572,15 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${
-                streamingUrl
-                  ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
-                  : `<div class="cameraPopupStreamRaw">Streaming indisponivel</div>`
-              }
+              ${hasStreamingAccess && streamingUrl
+                ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+                : ""}
             </div>
           </div>
         `)
         .addTo(map);
       bindPopupCloseButton();
-      if (streamingUrl) centerMobilePopup();
+      if (hasStreamingAccess && streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
@@ -1625,17 +1625,15 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${
-                streamingUrl
-                  ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
-                  : `<div class="cameraPopupStreamRaw">Streaming indisponivel</div>`
-              }
+              ${hasStreamingAccess && streamingUrl
+                ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+                : ""}
             </div>
           </div>
         `)
         .addTo(map);
       bindPopupCloseButton();
-      if (streamingUrl) centerMobilePopup();
+      if (hasStreamingAccess && streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
@@ -3696,14 +3694,14 @@ export default function MapPage() {
                               {c.code}
                             </span>
                           </div>
-                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                          {/* <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
                               Responsável: {c.responsavel || (c as any).responsavel || "-"}
                             </span>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
                               Direção: {c.direction || "-"}
                             </span>
-                          </div>
+                          </div> */}
                         </div>
                       </div>
                     </div>
@@ -4643,14 +4641,14 @@ export default function MapPage() {
                                 {c.code}
                               </span>
                             </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                            {/* <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 Responsável: {c.responsavel || (c as any).responsavel || "-"}
                               </span>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
                                 Direção: {c.direction || "-"}
                               </span>
-                            </div>
+                            </div> */}
                           </div>
                         </div>
                       </div>
@@ -4870,7 +4868,7 @@ export default function MapPage() {
                     <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
                     <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Perfil de acesso</div>
                     <div style={{ fontSize: 13, opacity: 0.85 }}>
-                      {roleLabel(role)} • Streaming {hasStreamingAccess ? "habilitado" : "indisponível"}
+                      {roleLabel(role)}
                     </div>
                   </div>
                 </div>
