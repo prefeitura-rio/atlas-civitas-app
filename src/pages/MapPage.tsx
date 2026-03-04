@@ -46,6 +46,7 @@ const SOURCES = {
   gps: "src-gps",
   search: "src-search",
   selection: "src-selection",
+  area_draw: "src-area-draw",
   bairros: "src-bairros",
   risp: "src-risp",
   aisp: "src-aisp",
@@ -64,6 +65,9 @@ const LAYERS = {
   gps_pulse: "lyr-gps-pulse",
   search_pin: "lyr-search-pin",
   selection_ring: "lyr-selection-ring",
+  area_draw_fill: "lyr-area-draw-fill",
+  area_draw_line: "lyr-area-draw-line",
+  area_draw_points: "lyr-area-draw-points",
   bairros_fill: "lyr-bairros-fill",
   bairros_line: "lyr-bairros-line",
   bairros_selected_fill: "lyr-bairros-selected-fill",
@@ -384,6 +388,37 @@ function makePoisGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
+function makeAreaDrawGeoJSON(points: Array<[number, number]>) {
+  const features: Feature<any, any>[] = [];
+
+  if (points.length >= 3) {
+    const ring = [...points, points[0]];
+    features.push({
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: [ring] },
+      properties: { kind: "area_polygon" },
+    } as any);
+  }
+
+  if (points.length >= 2) {
+    features.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: points },
+      properties: { kind: "area_line" },
+    } as any);
+  }
+
+  for (const pt of points) {
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: pt },
+      properties: { kind: "area_point" },
+    } as any);
+  }
+
+  return { type: "FeatureCollection", features } as FeatureCollection<any, any>;
+}
+
 export default function MapPage() {
   const auth: any = useAuth();
   const nav = useNavigate();
@@ -398,6 +433,8 @@ export default function MapPage() {
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const areaDrawModeRef = useRef(false);
+  const hasStreamingAccessRef = useRef(false);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
@@ -446,6 +483,17 @@ export default function MapPage() {
   const [cispGeo, setCispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [selectedBairro, setSelectedBairro] = useState<string>("");
   const [bairroQuery, setBairroQuery] = useState<string>("");
+  const [bairroReportLoading, setBairroReportLoading] = useState(false);
+  const [bairroReportMsg, setBairroReportMsg] = useState<string | null>(null);
+  const [areaDrawMode, setAreaDrawMode] = useState(false);
+  const [areaToolsOpen, setAreaToolsOpen] = useState(false);
+  const [areaDrawPoints, setAreaDrawPoints] = useState<Array<[number, number]>>([]);
+  const [areaReportLoading, setAreaReportLoading] = useState(false);
+  const [areaReportMsg, setAreaReportMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    areaDrawModeRef.current = areaDrawMode;
+  }, [areaDrawMode]);
 
   const [listMode, setListMode] = useState<"cameras" | "inteligentes" | "lpr" | "radares">("cameras");
   const [query, setQuery] = useState("");
@@ -673,6 +721,10 @@ export default function MapPage() {
   const isAdmin = isAdminRole(role);
   const hasStreamingAccess = canAccessStreaming(role);
 
+  useEffect(() => {
+    hasStreamingAccessRef.current = hasStreamingAccess;
+  }, [hasStreamingAccess]);
+
   function togglePanel(next: TabKey) {
     setPanel((cur) => (cur === next ? null : next));
   }
@@ -756,6 +808,13 @@ export default function MapPage() {
 
     if (!map.getSource(SOURCES.selection)) {
       map.addSource(SOURCES.selection, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.area_draw)) {
+      map.addSource(SOURCES.area_draw, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
@@ -962,6 +1021,48 @@ export default function MapPage() {
           "circle-stroke-color": "rgba(220,38,38,0.98)",
           "circle-stroke-width": 2.5,
           "circle-opacity": 1,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.area_draw_fill)) {
+      map.addLayer({
+        id: LAYERS.area_draw_fill,
+        type: "fill",
+        source: SOURCES.area_draw,
+        filter: ["==", ["get", "kind"], "area_polygon"],
+        paint: {
+          "fill-color": "#38bdf8",
+          "fill-opacity": 0.18,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.area_draw_line)) {
+      map.addLayer({
+        id: LAYERS.area_draw_line,
+        type: "line",
+        source: SOURCES.area_draw,
+        filter: ["any", ["==", ["get", "kind"], "area_line"], ["==", ["get", "kind"], "area_polygon"]],
+        paint: {
+          "line-color": "#0ea5e9",
+          "line-width": 2.5,
+          "line-opacity": 0.95,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.area_draw_points)) {
+      map.addLayer({
+        id: LAYERS.area_draw_points,
+        type: "circle",
+        source: SOURCES.area_draw,
+        filter: ["==", ["get", "kind"], "area_point"],
+        paint: {
+          "circle-radius": 4.5,
+          "circle-color": "#e0f2fe",
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#0284c7",
         },
       });
     }
@@ -1178,6 +1279,9 @@ export default function MapPage() {
       LAYERS.radares_points,
       LAYERS.search_pin,
       LAYERS.selection_ring,
+      LAYERS.area_draw_fill,
+      LAYERS.area_draw_line,
+      LAYERS.area_draw_points,
       LAYERS.gps_accuracy,
       LAYERS.gps_pulse,
       LAYERS.gps_point,
@@ -1214,6 +1318,12 @@ export default function MapPage() {
     } else {
       searchMarkerRef.current.setLngLat([pin.lng, pin.lat]);
     }
+  }
+
+  function updateAreaDrawData(map: mapboxgl.Map, points: Array<[number, number]>) {
+    const src: any = map.getSource(SOURCES.area_draw);
+    if (!src || typeof src.setData !== "function") return;
+    src.setData(makeAreaDrawGeoJSON(points));
   }
 
   function updateBairrosData(
@@ -1423,7 +1533,7 @@ export default function MapPage() {
     }
 
     function keepMobileStreamingPopupOpen() {
-      if (!hasStreamingAccess) return false;
+      if (!hasStreamingAccessRef.current) return false;
       if (!isMobileRef.current || !popup?.isOpen()) return false;
       const popupEl = popup.getElement();
       return Boolean(popupEl?.querySelector(".cameraPopupStreamLink"));
@@ -1467,7 +1577,7 @@ export default function MapPage() {
     map.on("mouseenter", LAYERS.cameras_points, (e) => {
       setCursorPointer();
       clearHoverPreviewTimer();
-      if (!hasStreamingAccess) return;
+      if (!hasStreamingAccessRef.current) return;
       const f: any = e.features?.[0];
       if (!f) return;
 
@@ -1538,6 +1648,7 @@ export default function MapPage() {
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
       const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      const allowStreaming = hasStreamingAccessRef.current;
       setSelectionRing(coords[0], coords[1]);
 
       setSelectedCode(p.code || null);
@@ -1572,7 +1683,7 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${hasStreamingAccess && streamingUrl
+              ${allowStreaming && streamingUrl
                 ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
                 : ""}
             </div>
@@ -1580,7 +1691,7 @@ export default function MapPage() {
         `)
         .addTo(map);
       bindPopupCloseButton();
-      if (hasStreamingAccess && streamingUrl) centerMobilePopup();
+      if (allowStreaming && streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
@@ -1591,6 +1702,7 @@ export default function MapPage() {
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
       const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      const allowStreaming = hasStreamingAccessRef.current;
       setSelectionRing(coords[0], coords[1]);
 
       setSelectedCode(null);
@@ -1625,7 +1737,7 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${hasStreamingAccess && streamingUrl
+              ${allowStreaming && streamingUrl
                 ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
                 : ""}
             </div>
@@ -1633,7 +1745,7 @@ export default function MapPage() {
         `)
         .addTo(map);
       bindPopupCloseButton();
-      if (hasStreamingAccess && streamingUrl) centerMobilePopup();
+      if (allowStreaming && streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
@@ -1740,6 +1852,14 @@ export default function MapPage() {
 
     map.on("click", (e) => {
       hideHoverPreview();
+      if (areaDrawModeRef.current) {
+        const lng = Number(e.lngLat?.lng);
+        const lat = Number(e.lngLat?.lat);
+        if (Number.isFinite(lng) && Number.isFinite(lat)) {
+          setAreaDrawPoints((prev) => [...prev, [lng, lat]]);
+        }
+        return;
+      }
       if (consumeSuppressedMapClick()) return;
       const features = map.queryRenderedFeatures(e.point, {
         layers: [
@@ -1997,6 +2117,7 @@ export default function MapPage() {
       applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
       updateGpsData(map, gps, gpsOnRef.current);
       updateSearchPin(map, searchPin);
+      updateAreaDrawData(map, areaDrawPoints);
     });
 
     return () => {
@@ -2130,6 +2251,180 @@ export default function MapPage() {
       alert(e?.message || "Falha ao carregar radares");
     } finally {
       setLoadingRadares(false);
+    }
+  }
+
+  function resolveApiUrl(pathOrUrl: string) {
+    if (!pathOrUrl) return "";
+    if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+    const normalizedPath = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+    return `${API_BASE}${normalizedPath}`;
+  }
+
+  async function downloadReportFile(pathOrUrl: string, fallbackName: string) {
+    const url = resolveApiUrl(pathOrUrl);
+    if (!url) throw new Error("URL de download inválida.");
+
+    const res = await fetch(url, {
+      headers: {
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Falha no download (${res.status}) ${txt || res.statusText}`);
+    }
+
+    const disposition = res.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^\";]+)/i);
+    const filename = match ? decodeURIComponent(match[1].replace(/"/g, "").trim()) : fallbackName;
+
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename || fallbackName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  }
+
+  async function waitForReportCompletion(reportId: string, maxAttempts = 20, intervalMs = 1500) {
+    for (let i = 0; i < maxAttempts; i++) {
+      const detail = await fetchJson<any>(`${API_BASE}/api/v1/reports/${reportId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      const status = String(detail?.status || "").toLowerCase();
+      if (status === "completed" && detail?.download_url) return detail;
+      if (status === "failed" || status === "error") {
+        throw new Error(detail?.message || "Falha ao gerar relatório.");
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+    }
+    throw new Error("Relatório ainda em processamento. Tente novamente em instantes.");
+  }
+
+  async function downloadBairroReport() {
+    if (!selectedBairro) return;
+    if (!selectedBairroFeature?.geometry) {
+      setBairroReportMsg("Geometria do bairro não disponível para gerar relatório.");
+      return;
+    }
+    setBairroReportLoading(true);
+    setBairroReportMsg("Solicitando geração do relatório...");
+    try {
+      const payload = {
+        bairro: selectedBairro,
+        geometry: selectedBairroFeature.geometry,
+        selected_ids: selectedBairroSelectionIds,
+        layers: ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"],
+        include_inactive: false,
+        format: "pdf",
+      };
+
+      const created = await fetchJson<any>(`${API_BASE}/api/v1/reports/bairros`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let downloadUrl = created?.download_url as string | undefined;
+
+      if (!downloadUrl && created?.id) {
+        setBairroReportMsg("Gerando PDF no servidor...");
+        const detail = await waitForReportCompletion(String(created.id));
+        downloadUrl = detail?.download_url;
+      }
+
+      if (!downloadUrl) {
+        throw new Error("Relatório criado, mas sem URL de download.");
+      }
+
+      const safeBairro = selectedBairro.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").toLowerCase();
+      await downloadReportFile(downloadUrl, `relatorio_bairro_${safeBairro}.pdf`);
+      setBairroReportMsg("PDF baixado com sucesso.");
+    } catch (e: any) {
+      setBairroReportMsg(e?.message || "Falha ao gerar relatório.");
+    } finally {
+      setBairroReportLoading(false);
+    }
+  }
+
+  function areaGeometryFromPoints(points: Array<[number, number]>) {
+    if (points.length < 3) return null;
+    const ring = [...points, points[0]];
+    return {
+      type: "Polygon",
+      coordinates: [ring],
+    };
+  }
+
+  function clearAreaDrawing() {
+    setAreaDrawPoints([]);
+    setAreaReportMsg(null);
+  }
+
+  function toggleAreaDrawing() {
+    setAreaToolsOpen(true);
+    setAreaDrawMode((prev) => !prev);
+    setAreaReportMsg(null);
+  }
+
+  function removeLastAreaPoint() {
+    setAreaDrawPoints((prev) => prev.slice(0, -1));
+    setAreaReportMsg(null);
+  }
+
+  async function downloadAreaReport() {
+    const geometry = areaGeometryFromPoints(areaDrawPoints);
+    if (!geometry) {
+      setAreaReportMsg("Desenhe uma área com pelo menos 3 pontos.");
+      return;
+    }
+
+    setAreaReportLoading(true);
+    setAreaReportMsg("Solicitando geração do relatório...");
+    try {
+      const payload = {
+        name: `Relatório de Área - ${new Date().toISOString()}`,
+        geometry,
+        layers: ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"],
+        include_inactive: false,
+        format: "pdf",
+      };
+
+      const created = await fetchJson<any>(`${API_BASE}/api/v1/reports/areas`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let downloadUrl = created?.download_url as string | undefined;
+      if (!downloadUrl && created?.id) {
+        setAreaReportMsg("Gerando PDF no servidor...");
+        const detail = await waitForReportCompletion(String(created.id));
+        downloadUrl = detail?.download_url;
+      }
+      if (!downloadUrl) {
+        throw new Error("Relatório criado, mas sem URL de download.");
+      }
+
+      await downloadReportFile(downloadUrl, "relatorio_area_desenhada.pdf");
+      setAreaReportMsg("PDF baixado com sucesso.");
+    } catch (e: any) {
+      setAreaReportMsg(e?.message || "Falha ao gerar relatório da área.");
+    } finally {
+      setAreaReportLoading(false);
     }
   }
 
@@ -2304,6 +2599,83 @@ export default function MapPage() {
       inteligentes: countPoints(camerasIntel),
       lpr: countPoints(camerasLpr),
       radares: countPoints(radares),
+    };
+  }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
+
+  const selectedBairroSelectionIds = useMemo(() => {
+    if (!selectedBairroFeature?.geometry) {
+      return {
+        cameras: [] as string[],
+        super_cameras: [] as string[],
+        lpr: [] as string[],
+        radar: [] as string[],
+      };
+    }
+
+    const geom = selectedBairroFeature.geometry;
+    const bbox = getGeometryBbox(geom);
+    if (!bbox) {
+      return {
+        cameras: [] as string[],
+        super_cameras: [] as string[],
+        lpr: [] as string[],
+        radar: [] as string[],
+      };
+    }
+
+    const inBbox = (lng: number, lat: number) =>
+      lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
+
+    const camerasIds: string[] = [];
+    const superCameraIds: string[] = [];
+    const lprIds: string[] = [];
+    const radarIds: string[] = [];
+
+    for (const c of cameras) {
+      const lng = Number(c.lng);
+      const lat = Number(c.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCode = String((c as any).id || c.code || "").trim();
+      if (idOrCode) camerasIds.push(idOrCode);
+    }
+
+    for (const c of camerasIntel) {
+      const lng = Number(c.lng);
+      const lat = Number(c.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCode = String((c as any).id || c.code || "").trim();
+      if (idOrCode) superCameraIds.push(idOrCode);
+    }
+
+    for (const c of camerasLpr) {
+      const lng = Number(c.lng);
+      const lat = Number(c.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCode = String((c as any).id || c.code || "").trim();
+      if (idOrCode) lprIds.push(idOrCode);
+    }
+
+    for (const r of radares) {
+      const lng = Number(r.lng);
+      const lat = Number(r.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCodcet = String((r as any).id || r.codcet || "").trim();
+      if (idOrCodcet) radarIds.push(idOrCodcet);
+    }
+
+    return {
+      cameras: camerasIds,
+      super_cameras: superCameraIds,
+      lpr: lprIds,
+      radar: radarIds,
     };
   }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
 
@@ -2500,6 +2872,34 @@ export default function MapPage() {
     updateSearchPin(map, searchPin);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchPin]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updateAreaDrawData(map, areaDrawPoints);
+      return;
+    }
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updateAreaDrawData(map, areaDrawPoints);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [areaDrawPoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = areaDrawMode ? "crosshair" : "";
+    return () => {
+      if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
+    };
+  }, [areaDrawMode]);
 
   async function changePassword() {
     setPwMsg(null);
@@ -2972,6 +3372,25 @@ export default function MapPage() {
               <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
               <div>LPR: {selectedBairroStats.lpr}</div>
               <div>Radares: {selectedBairroStats.radares}</div>
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="btnGhost"
+                  onClick={downloadBairroReport}
+                  disabled={bairroReportLoading}
+                  style={{
+                    width: "100%",
+                    borderRadius: 10,
+                    opacity: bairroReportLoading ? 0.7 : 1,
+                  }}
+                >
+                  {bairroReportLoading ? "Gerando PDF..." : "Baixar PDF"}
+                </button>
+                {bairroReportMsg && (
+                  <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.8)" }}>
+                    {bairroReportMsg}
+                  </div>
+                )}
+              </div>
               <div
                 style={{
                   marginTop: 8,
@@ -3198,7 +3617,95 @@ export default function MapPage() {
                 ) : null}
                 {loadingBairros && <div className="dockNote">Carregando bairros...</div>}
                 {bairrosErr && <div className="dockNote">{bairrosErr}</div>}
-                
+              </div>
+            )}
+
+            <button
+              className="dockChip"
+              onClick={() => {
+                setAreaToolsOpen(true);
+                if (!areaDrawMode) setAreaDrawMode(true);
+                setAreaReportMsg(null);
+              }}
+              title="Desenhar área"
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" style={{ fontSize: 11 }}>AR</span>
+                <span className="chipText">
+                  <span>Desenhar área</span>
+                  <span className="chipLegend">Abrir relatório por área</span>
+                </span>
+                <span className="chipDot" style={{ background: areaDrawMode ? "#22c55e" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{areaDrawMode ? "ON" : "OFF"}</span>
+            </button>
+
+            {areaToolsOpen && (
+              <div
+                style={{
+                  marginTop: 6,
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.85)",
+                  padding: 8,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.8)" }}>
+                    Relatório por Área Desenhada
+                  </div>
+                  <button
+                    className="btnGhost"
+                    onClick={() => setAreaToolsOpen(false)}
+                    style={{ width: 28, height: 28, padding: 0, borderRadius: 999, lineHeight: 1 }}
+                    title="Fechar"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="dockNote" style={{ margin: 0 }}>
+                  Pontos da área: {areaDrawPoints.length}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  <button
+                    className="btnGhost"
+                    onClick={toggleAreaDrawing}
+                    style={{ borderRadius: 10, fontWeight: 800 }}
+                  >
+                    {areaDrawMode ? "Parar desenho" : "Desenhar área"}
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={removeLastAreaPoint}
+                    disabled={areaDrawPoints.length === 0 || areaReportLoading}
+                    style={{ borderRadius: 10, opacity: areaDrawPoints.length === 0 || areaReportLoading ? 0.5 : 1 }}
+                  >
+                    Desfazer ponto
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={clearAreaDrawing}
+                    disabled={areaDrawPoints.length === 0 || areaReportLoading}
+                    style={{ borderRadius: 10, opacity: areaDrawPoints.length === 0 || areaReportLoading ? 0.5 : 1 }}
+                  >
+                    Limpar área
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={downloadAreaReport}
+                    disabled={areaDrawPoints.length < 3 || areaReportLoading}
+                    style={{ borderRadius: 10, opacity: areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1 }}
+                  >
+                    {areaReportLoading ? "Gerando..." : "Baixar PDF"}
+                  </button>
+                </div>
+                {areaReportMsg && (
+                  <div className="dockNote" style={{ margin: 0, fontSize: 10 }}>
+                    {areaReportMsg}
+                  </div>
+                )}
               </div>
             )}
 
@@ -3571,72 +4078,97 @@ export default function MapPage() {
                 }}
               >
                 {listMode === "cameras" &&
-                  (listItems as Camera[]).map((c) => (
-                    <div
-                      key={c.code}
-                      className="listItem"
-                      onClick={() => {
-                        setSelectedCode(c.code);
-                        setSelectedRadar(null);
-                        focusOnDetection(c.lng, c.lat);
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: 999,
-                            border: "1px solid rgba(59,130,246,0.30)",
-                            background: "rgba(219,234,254,0.90)",
-                            display: "grid",
-                            placeItems: "center",
-                            flex: "0 0 auto",
-                          }}
-                        >
-                          <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "normal",
-                                overflow: "visible",
-                                textOverflow: "clip",
-                                wordBreak: "break-word",
-                              }}
-                            >
-                              {c.name}
-                            </div>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                borderRadius: 999,
-                                padding: "2px 8px",
-                                fontSize: 11,
-                                fontWeight: 800,
-                                border: "1px solid rgba(59,130,246,0.32)",
-                                background: "rgba(219,234,254,0.92)",
-                                color: "#1d4ed8",
-                              }}
-                            >
-                              {c.code}
-                            </span>
+                  (listItems as Camera[]).map((c) => {
+                    const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
+                    return (
+                      <div
+                        key={c.code}
+                        className="listItem"
+                        onClick={() => {
+                          setSelectedCode(c.code);
+                          setSelectedRadar(null);
+                          focusOnDetection(c.lng, c.lat);
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(59,130,246,0.30)",
+                              background: "rgba(219,234,254,0.90)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                           </div>
-                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
-                                [c.city, c.uf].filter(Boolean).join(" - ") ||
-                                "-"}
-                            </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(59,130,246,0.32)",
+                                  background: "rgba(219,234,254,0.92)",
+                                  color: "#1d4ed8",
+                                }}
+                              >
+                                {c.code}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                                  [c.city, c.uf].filter(Boolean).join(" - ") ||
+                                  "-"}
+                              </span>
+                              {hasStreamingAccess && streamUrl && (
+                                <a
+                                  href={streamUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(15,23,42,0.18)",
+                                    background: "rgba(241,245,249,0.95)",
+                                    color: "#0f172a",
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  Abrir streaming
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                 {listMode === "inteligentes" &&
                   (listItems as CameraIntel[]).map((c) => (
@@ -4514,74 +5046,99 @@ export default function MapPage() {
                   }}
                 >
                   {listMode === "cameras" &&
-                    (listItems as Camera[]).map((c) => (
-                      <div
-                        key={c.code}
-                        className="listItem"
-                        onClick={() => {
-                          setSelectedCode(c.code);
-                          setSelectedRadar(null);
-                          focusOnDetection(c.lng, c.lat);
-                          setPanelOpen(false);
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                          <div
-                            style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 999,
-                              border: "1px solid rgba(59,130,246,0.30)",
-                              background: "rgba(219,234,254,0.90)",
-                              display: "grid",
-                              placeItems: "center",
-                              flex: "0 0 auto",
-                            }}
-                          >
-                            <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
-                              <div
-                                style={{
-                                  fontWeight: 900,
-                                  fontSize: 12,
-                                  lineHeight: 1.2,
-                                  whiteSpace: "normal",
-                                  overflow: "visible",
-                                  textOverflow: "clip",
-                                  wordBreak: "break-word",
-                                }}
-                              >
-                                {c.name}
-                              </div>
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  borderRadius: 999,
-                                  padding: "1px 7px",
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  border: "1px solid rgba(59,130,246,0.32)",
-                                  background: "rgba(219,234,254,0.92)",
-                                  color: "#1d4ed8",
-                                }}
-                              >
-                                {c.code}
-                              </span>
+                    (listItems as Camera[]).map((c) => {
+                      const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
+                      return (
+                        <div
+                          key={c.code}
+                          className="listItem"
+                          onClick={() => {
+                            setSelectedCode(c.code);
+                            setSelectedRadar(null);
+                            focusOnDetection(c.lng, c.lat);
+                            setPanelOpen(false);
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                            <div
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(59,130,246,0.30)",
+                                background: "rgba(219,234,254,0.90)",
+                                display: "grid",
+                                placeItems: "center",
+                                flex: "0 0 auto",
+                              }}
+                            >
+                              <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                             </div>
-                          <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
-                                  [c.city, c.uf].filter(Boolean).join(" - ") ||
-                                  "-"}
-                              </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 12,
+                                    lineHeight: 1.2,
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                    textOverflow: "clip",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {c.name}
+                                </div>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "1px 7px",
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(59,130,246,0.32)",
+                                    background: "rgba(219,234,254,0.92)",
+                                    color: "#1d4ed8",
+                                  }}
+                                >
+                                  {c.code}
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                  {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                                    [c.city, c.uf].filter(Boolean).join(" - ") ||
+                                    "-"}
+                                </span>
+                                {hasStreamingAccess && streamUrl && (
+                                  <a
+                                    href={streamUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      borderRadius: 999,
+                                      padding: "1px 7px",
+                                      fontSize: 10,
+                                      fontWeight: 800,
+                                      border: "1px solid rgba(15,23,42,0.18)",
+                                      background: "rgba(241,245,249,0.95)",
+                                      color: "#0f172a",
+                                      textDecoration: "none",
+                                    }}
+                                  >
+                                    Abrir streaming
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                   {listMode === "inteligentes" &&
                     (listItems as CameraIntel[]).map((c) => (
