@@ -713,10 +713,7 @@ export default function MapPage() {
   }, [dockOpen]);
 
   const role = normalizeRole(
-    me?.role ??
-      auth?.user?.role ??
-      sessionStorage.getItem("user_role") ??
-      localStorage.getItem("user_role")
+    me?.role ?? auth?.user?.role
   );
   const isAdmin = isAdminRole(role);
   const hasStreamingAccess = canAccessStreaming(role);
@@ -2188,6 +2185,11 @@ export default function MapPage() {
 
       setCamerasIntel(normalized);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (!hasStreamingAccess && (msg.startsWith("401") || msg.startsWith("403"))) {
+        setCamerasIntel([]);
+        return;
+      }
       console.error(e);
       alert(e?.message || "Falha ao carregar câmeras inteligentes");
     } finally {
@@ -2218,6 +2220,11 @@ export default function MapPage() {
 
       setCamerasLpr(normalized);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (!hasStreamingAccess && (msg.startsWith("401") || msg.startsWith("403"))) {
+        setCamerasLpr([]);
+        return;
+      }
       console.error(e);
       alert(e?.message || "Falha ao carregar câmeras LPR");
     } finally {

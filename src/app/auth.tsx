@@ -136,6 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (role) {
         sessionStorage.setItem("user_role", role);
         localStorage.removeItem("user_role");
+      } else {
+        sessionStorage.removeItem("user_role");
+        localStorage.removeItem("user_role");
       }
     } else {
       setUser(null);
