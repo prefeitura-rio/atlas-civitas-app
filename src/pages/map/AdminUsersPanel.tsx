@@ -320,8 +320,8 @@ export function AdminUsersPanel({
 
     if (!emailV) return setErr("Email é obrigatório.");
     if (!fullNameV || fullNameV.length < 3) return setErr("Nome completo inválido.");
-    if (!roleV) return setErr("Role é obrigatório (admin/user/user_stream).");
-    if (!isUserRole(roleV)) return setErr("Role deve ser admin, user ou user_stream.");
+    if (!roleV) return setErr("Role é obrigatório (admin/user).");
+    if (!isUserRole(roleV)) return setErr("Role deve ser admin ou user.");
     if (!matriculaV) return setErr("Matrícula é obrigatória.");
     if (!orgaoV) return setErr("Órgão é obrigatório.");
 
@@ -516,16 +516,6 @@ export function AdminUsersPanel({
                   }}
                 >
                   Administrador
-                </button>
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "user_stream" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("user_stream");
-                    setRoleOpen(false);
-                  }}
-                >
-                  Usuário com streaming
                 </button>
               </div>
             )}
