@@ -4,6 +4,7 @@ import { fetchJson } from "./shared";
 import radarIcon from "@/assets/radar-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
+const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
 
 export function AdminRadaresPanel({
   apiBase,
@@ -27,29 +28,7 @@ export function AdminRadaresPanel({
   const [deactivateMissing, setDeactivateMissing] = useState(true);
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
-  const cardRowStyle = {
-    border: "1px solid rgba(15,23,42,0.10)",
-    borderRadius: 14,
-    padding: 12,
-    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
-    boxShadow: "0 6px 20px rgba(15,23,42,0.06)",
-    display: "flex",
-    gap: 10,
-    alignItems: "center",
-    flexWrap: "nowrap",
-  } as const;
-  const chipStyle = {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: 999,
-    padding: "3px 9px",
-    fontSize: 11,
-    fontWeight: 800,
-    letterSpacing: 0.2,
-    border: "1px solid rgba(15,23,42,0.14)",
-    background: "rgba(248,250,252,0.95)",
-    color: "rgba(15,23,42,0.85)",
-  } as const;
+  const syncDisabled = true;
 
   async function load() {
     setErr(null);
@@ -135,16 +114,16 @@ export function AdminRadaresPanel({
         <div style={{ display: "grid", gap: 10 }}>
           <button
             onClick={runSyncRadares}
-            disabled={syncLoading}
+            disabled={syncDisabled || syncLoading}
             style={{
               padding: "10px 12px",
               borderRadius: 14,
               border: "1px solid rgba(0,0,0,0.12)",
               background: "rgba(0,0,0,0.86)",
               color: "#fff",
-              cursor: syncLoading ? "not-allowed" : "pointer",
+              cursor: syncDisabled || syncLoading ? "not-allowed" : "pointer",
               fontWeight: 900,
-              opacity: syncLoading ? 0.7 : 1,
+              opacity: syncDisabled || syncLoading ? 0.7 : 1,
             }}
           >
             {syncLoading ? "Sincronizando..." : "Sincronizar Radares"}
@@ -190,6 +169,7 @@ export function AdminRadaresPanel({
         </div>
 
         {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{SYNC_DISABLED_NOTICE}</div>
         {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
       </div>
 
