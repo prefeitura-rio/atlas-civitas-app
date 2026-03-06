@@ -460,7 +460,7 @@
 }
 
 .mapboxgl-popup {
-  z-index: 30;
+  z-index: 18;
 }
 .mapboxgl-popup-content {
   width: min(340px, calc(100vw - 28px));
