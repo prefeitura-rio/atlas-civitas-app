@@ -4,7 +4,6 @@ import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../app/auth";
 
 import civitasLogo from "@/assets/civitas_icon2.png";
-import civitasMapLogo from "@/assets/civitasmap_logo.png";
 import prefeituraLogo from "@/assets/prefeitura_icon.png";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -246,11 +245,22 @@ export default function Login() {
           }}
         >
           <div style={{ marginBottom: 38, textAlign: "center" }}>
-            <img
-              src={civitasMapLogo}
-              alt="CIVITAS Map"
-              style={{ height: 50, width: "auto", margin: "0 auto 6px", display: "block"}}
-            />
+            <div
+              aria-label="ATLAS CIVITAS"
+              style={{
+                margin: "0 auto 6px",
+                display: "block",
+                fontSize: 36,
+                fontWeight: 900,
+                fontFamily: '"Cera Pro Medium", "Cera Pro", "Segoe UI", sans-serif',
+                textTransform: "uppercase",
+                letterSpacing: 1.2,
+                lineHeight: 1.1,
+              }}
+            >
+              <span style={{ color: "#00c0f3" }}>ATLAS</span>{" "}
+              <span style={{ color: "#00c0f3" }}>CIVITAS</span>
+            </div>
             <p style={{ margin: "6px 0 0", opacity: 0.7, fontSize: 13 }}>
               
             </p>
@@ -333,8 +343,12 @@ export default function Login() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full border border-white/30 bg-white/20 text-black shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-white/30 hover:text-black"
-              style={{ color: "#000" }}
+              className="w-full border shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+              style={{
+                backgroundColor: "#00c0f3",
+                borderColor: "#00c0f3",
+                color: "#001018",
+              }}
             >
               {loading ? "Entrando..." : "Login"}
             </Button>
