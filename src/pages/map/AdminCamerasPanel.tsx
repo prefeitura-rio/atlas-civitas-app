@@ -36,12 +36,12 @@ export function AdminCamerasPanel({
   onSynced?: () => void;
   isMobile: boolean;
 }) {
-  const CAMS_URL = `${apiBase}/api/v1/cameras`;
-  const SYNC_CAMERAS_URL = `${apiBase}/api/v1/sync/cameras`;
-  const SYNC_CAMS_INTEL_URL = `${apiBase}/api/v1/sync/cameras-inteligentes`;
-  const SYNC_CAMS_LPR_URL = `${apiBase}/api/v1/sync/cameras-lpr`;
-  const CAMS_INTEL_URL = `${apiBase}/api/v1/cameras-inteligentes`;
-  const CAMS_LPR_URL = `${apiBase}/api/v1/cameras-lpr`;
+  const CAMS_URL = `${apiBase}/cameras`;
+  const SYNC_CAMERAS_URL = `${apiBase}/sync/cameras`;
+  const SYNC_CAMS_INTEL_URL = `${apiBase}/sync/cameras-inteligentes`;
+  const SYNC_CAMS_LPR_URL = `${apiBase}/sync/cameras-lpr`;
+  const CAMS_INTEL_URL = `${apiBase}/cameras-inteligentes`;
+  const CAMS_LPR_URL = `${apiBase}/cameras-lpr`;
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);

@@ -13,7 +13,7 @@ export function AdminLogsPanel({
   token: string;
   isMobile: boolean;
 }) {
-  const LOGS_URL = `${apiBase}/api/v1/logs`;
+  const LOGS_URL = `${apiBase}/logs`;
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);

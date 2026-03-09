@@ -32,7 +32,7 @@ export default function Terms({
     setSubmitErr(null);
 
     try {
-      await fetchJson(`${apiBase}/api/v1/auth/accept-terms`, {
+      await fetchJson(`${apiBase}/users/accept-terms`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

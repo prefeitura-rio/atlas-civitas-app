@@ -30,8 +30,12 @@ export default function Login() {
         auth?.logout?.();
       } catch {}
       sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("refresh_token");
+      sessionStorage.removeItem("user");
       sessionStorage.removeItem("user_role");
       localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("user");
       localStorage.removeItem("user_role");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -122,7 +122,7 @@ export function AdminUsersPanel({
   token: string;
   isMobile: boolean;
 }) {
-  const USERS_URL = `${apiBase}/api/v1/users`;
+  const USERS_URL = `${apiBase}/users`;
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);

@@ -30,7 +30,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     setTermsError(null);
 
     try {
-      const payload = await fetchJson<TermsStatus>(`${API_BASE}/api/v1/auth/terms/current`, {
+      const payload = await fetchJson<TermsStatus>(`${API_BASE}/users/terms/current`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,

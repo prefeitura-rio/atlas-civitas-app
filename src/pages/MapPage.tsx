@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { Eye, EyeOff } from "lucide-react";
+import { Building2, Eye, EyeOff, PenTool, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
@@ -1921,7 +1921,7 @@ export default function MapPage() {
     }
 
     try {
-      const data = await fetchJson<Me>(`${API_BASE}/api/v1/auth/me`, {
+      const data = await fetchJson<Me>(`${API_BASE}/users/me`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
@@ -2137,7 +2137,7 @@ export default function MapPage() {
   async function loadCameras() {
     setLoadingCameras(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/cameras`, {
+      const data = await fetchJson<any>(`${API_BASE}/cameras`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -2166,7 +2166,7 @@ export default function MapPage() {
   async function loadCamerasIntel() {
     setLoadingCamerasIntel(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/cameras-inteligentes`, {
+      const data = await fetchJson<any>(`${API_BASE}/cameras-inteligentes`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -2200,7 +2200,7 @@ export default function MapPage() {
   async function loadCamerasLpr() {
     setLoadingCamerasLpr(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/cameras-lpr`, {
+      const data = await fetchJson<any>(`${API_BASE}/cameras-lpr`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -2235,7 +2235,7 @@ export default function MapPage() {
   async function loadRadares() {
     setLoadingRadares(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/radares`, {
+      const data = await fetchJson<any>(`${API_BASE}/radares`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -2272,9 +2272,11 @@ export default function MapPage() {
     const url = resolveApiUrl(pathOrUrl);
     if (!url) throw new Error("URL de download inválida.");
 
+    const liveAccessToken =
+      sessionStorage.getItem("access_token") || localStorage.getItem("access_token") || accessToken;
     const res = await fetch(url, {
       headers: {
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(liveAccessToken ? { Authorization: `Bearer ${liveAccessToken}` } : {}),
       },
     });
     if (!res.ok) {
@@ -2299,7 +2301,7 @@ export default function MapPage() {
 
   async function waitForReportCompletion(reportId: string, maxAttempts = 20, intervalMs = 1500) {
     for (let i = 0; i < maxAttempts; i++) {
-      const detail = await fetchJson<any>(`${API_BASE}/api/v1/reports/${reportId}`, {
+      const detail = await fetchJson<any>(`${API_BASE}/reports/${reportId}`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -2333,7 +2335,7 @@ export default function MapPage() {
         format: "pdf",
       };
 
-      const created = await fetchJson<any>(`${API_BASE}/api/v1/reports/bairros`, {
+      const created = await fetchJson<any>(`${API_BASE}/reports/bairros`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2407,7 +2409,7 @@ export default function MapPage() {
         format: "pdf",
       };
 
-      const created = await fetchJson<any>(`${API_BASE}/api/v1/reports/areas`, {
+      const created = await fetchJson<any>(`${API_BASE}/reports/areas`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2913,11 +2915,11 @@ export default function MapPage() {
 
     if (!pwOld || !pwNew || !pwNew2) return setPwMsg("Preencha todos os campos.");
     if (pwNew !== pwNew2) return setPwMsg("As senhas novas não batem.");
-    if (pwNew.length < 6) return setPwMsg("Senha muito curta (mínimo 6).");
+    if (pwNew.length < 8) return setPwMsg("Senha muito curta (mínimo 8).");
 
     setPwLoading(true);
     try {
-      await fetchJson(`${API_BASE}/api/v1/auth/change-password`, {
+      await fetchJson(`${API_BASE}/users/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -3546,7 +3548,9 @@ export default function MapPage() {
               title={showBairros ? "Bairros ON" : "Bairros OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 12 }}>BA</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <Building2 size={15} strokeWidth={2.1} />
+                </span>
                 <span>Bairros</span>
                 <span className="chipDot" style={{ background: showBairros ? "#22c55e" : "#9ca3af" }} />
               </span>
@@ -3630,14 +3634,23 @@ export default function MapPage() {
             <button
               className="dockChip"
               onClick={() => {
+                if (areaDrawMode) {
+                  setAreaDrawMode(false);
+                  setAreaDrawPoints([]);
+                  setAreaToolsOpen(false);
+                  setAreaReportMsg(null);
+                  return;
+                }
                 setAreaToolsOpen(true);
-                if (!areaDrawMode) setAreaDrawMode(true);
+                setAreaDrawMode(true);
                 setAreaReportMsg(null);
               }}
               title="Desenhar área"
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>AR</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <PenTool size={15} strokeWidth={2.1} />
+                </span>
                 <span className="chipText">
                   <span>Desenhar área</span>
                   <span className="chipLegend">Abrir relatório por área</span>
@@ -3733,7 +3746,9 @@ export default function MapPage() {
               title={showRisp ? "RISP ON" : "RISP OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>R</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <Shield size={15} strokeWidth={2.1} />
+                </span>
                 <span className="chipText">
                   <span>RISP</span>
                   <span className="chipLegend">Regiões Integradas de Segurança Pública</span>
@@ -3766,7 +3781,9 @@ export default function MapPage() {
               title={showAisp ? "AISP ON" : "AISP OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>A</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <ShieldAlert size={15} strokeWidth={2.1} />
+                </span>
                 <span className="chipText">
                   <span>AISP</span>
                   <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
@@ -3799,7 +3816,9 @@ export default function MapPage() {
               title={showCisp ? "CISP ON" : "CISP OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>C</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <ShieldCheck size={15} strokeWidth={2.1} />
+                </span>
                 <span className="chipText">
                   <span>CISP</span>
                   <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>

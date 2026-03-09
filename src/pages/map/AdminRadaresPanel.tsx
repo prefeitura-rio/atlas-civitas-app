@@ -16,8 +16,8 @@ export function AdminRadaresPanel({
   onSynced?: () => void;
   isMobile: boolean;
 }) {
-  const RADARES_URL = `${apiBase}/api/v1/radares`;
-  const SYNC_RADARES_URL = `${apiBase}/api/v1/sync/radares`;
+  const RADARES_URL = `${apiBase}/radares`;
+  const SYNC_RADARES_URL = `${apiBase}/sync/radares`;
 
   const [loading, setLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
