@@ -3968,7 +3968,7 @@ export default function MapPage() {
             onClick={() => togglePanel("map")}
             title="Clique de novo pra fechar"
           >
-            Central
+            CENTRAL
           </button>
 
           <button
@@ -3976,7 +3976,7 @@ export default function MapPage() {
             onClick={() => togglePanel("profile")}
             title="Clique de novo pra fechar"
           >
-            Perfil
+            PERFIL
           </button>
 
           <button
@@ -3984,7 +3984,7 @@ export default function MapPage() {
             onClick={() => togglePanel("civitas")}
             title="Clique de novo pra fechar"
           >
-            Recursos
+            RECURSOS
           </button>
 
           {isAdmin && (
@@ -3993,7 +3993,7 @@ export default function MapPage() {
               onClick={() => togglePanel("admin")}
               title="Clique de novo pra fechar"
             >
-              Administrador
+              ADMINISTRADOR
             </button>
           )}
 
@@ -4010,7 +4010,7 @@ export default function MapPage() {
               style={{ ...inputStyle(), maxWidth: 320, padding: "8px 10px" }}
             />
             <button className="btnGhost" onClick={handleSearch} title="Buscar">
-              Buscar
+              BUSCAR
             </button>
           </div>
           {searchErr && <div style={{ fontSize: 11, color: "#991b1b" }}>{searchErr}</div>}
@@ -4040,7 +4040,7 @@ export default function MapPage() {
               }
             }}
           >
-            Sair
+            SAIR
           </button>
         </div>
       </div>
@@ -4913,7 +4913,7 @@ export default function MapPage() {
                   }}
                   style={{ width: "100%", borderRadius: 10 }}
                 >
-                  Buscar local
+                  BUSCAR LOCAL
                 </button>
                 <button
                   className="btnGhost"
@@ -4938,7 +4938,7 @@ export default function MapPage() {
                   }}
                   style={{ width: "100%", borderRadius: 10 }}
                 >
-                  Sair
+                  SAIR
                 </button>
               </div>
             )}
@@ -4979,7 +4979,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                Central
+                CENTRAL
               </button>
 
               <button
@@ -4992,7 +4992,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                Perfil
+                PERFIL
               </button>
 
               <button
@@ -5005,7 +5005,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                Recursos
+                RECURSOS
               </button>
 
               {isAdmin && (
@@ -5019,7 +5019,7 @@ export default function MapPage() {
                     });
                   }}
                 >
-                  Administrador
+                  ADMINISTRADOR
                 </button>
               )}
 
@@ -5831,7 +5831,7 @@ export default function MapPage() {
             }}
             title="Buscar"
           >
-            Buscar
+            BUSCAR
           </button>
           <button
             className="btnGhost"
