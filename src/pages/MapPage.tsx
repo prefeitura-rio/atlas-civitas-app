@@ -228,6 +228,40 @@ function pointInGeometry(point: [number, number], geom: Polygon | MultiPolygon) 
   return geom.type === "Polygon" ? pointInPolygon(point, geom) : pointInMultiPolygon(point, geom);
 }
 
+function normalizeCodeGeoByName(
+  data: FeatureCollection<Polygon | MultiPolygon, any>,
+  candidates: string[]
+) {
+  return {
+    ...data,
+    features: data.features.map((feature) => {
+      const props: any = { ...(feature.properties || {}) };
+      for (const key of candidates) {
+        const v = Number(props?.[key]);
+        if (Number.isFinite(v)) {
+          props.name = v;
+          break;
+        }
+      }
+      return { ...feature, properties: props };
+    }),
+  };
+}
+
+function keepOnlyCodes(
+  data: FeatureCollection<Polygon | MultiPolygon, any>,
+  allowed: number[]
+) {
+  const set = new Set(allowed);
+  return {
+    ...data,
+    features: data.features.filter((feature) => {
+      const code = Number((feature.properties as any)?.name);
+      return Number.isFinite(code) && set.has(code);
+    }),
+  };
+}
+
 function colorForIndex(i: number) {
   const palette = [
     "#22c55e",
@@ -1985,7 +2019,8 @@ export default function MapPage() {
         try {
           const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
           if (!active) return;
-          setRispGeo(data);
+          const normalized = normalizeCodeGeoByName(data, ["name", "risp", "RISP"]);
+          setRispGeo(keepOnlyCodes(normalized, [1, 2]));
           return;
         } catch (e) {
           console.warn("Falha ao carregar RISP de", url, e);
@@ -2009,7 +2044,7 @@ export default function MapPage() {
         try {
           const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
           if (!active) return;
-          setAispGeo(data);
+          setAispGeo(normalizeCodeGeoByName(data, ["name", "aisp", "AISP"]));
           return;
         } catch (e) {
           console.warn("Falha ao carregar AISP de", url, e);
@@ -2033,7 +2068,7 @@ export default function MapPage() {
         try {
           const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
           if (!active) return;
-          setCispGeo(data);
+          setCispGeo(normalizeCodeGeoByName(data, ["name", "cisp", "CISP"]));
           return;
         } catch (e) {
           console.warn("Falha ao carregar CISP de", url, e);
@@ -2527,7 +2562,7 @@ export default function MapPage() {
     const feats = rispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.RISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.RISP ?? (f.properties as any)?.risp);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
@@ -2538,7 +2573,7 @@ export default function MapPage() {
     const feats = aispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.AISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.AISP ?? (f.properties as any)?.aisp);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
@@ -2549,7 +2584,7 @@ export default function MapPage() {
     const feats = cispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.CISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.CISP ?? (f.properties as any)?.cisp);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
