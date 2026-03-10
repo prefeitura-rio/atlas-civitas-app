@@ -422,6 +422,30 @@ function makePoisGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
+type PoiKind = "camera" | "camera_intel" | "camera_lpr" | "radar";
+
+const POI_KIND_ORDER: PoiKind[] = ["camera_intel", "camera_lpr", "camera", "radar"];
+
+function asPoiKind(value: unknown): PoiKind | null {
+  if (value === "camera" || value === "camera_intel" || value === "camera_lpr" || value === "radar") {
+    return value;
+  }
+  return null;
+}
+
+function poiCoordKey(lng: number, lat: number) {
+  return `${lng.toFixed(6)}|${lat.toFixed(6)}`;
+}
+
+function featureCoordKey(feature: Feature<Point, any>): string | null {
+  const coords = feature.geometry?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const lng = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  return poiCoordKey(lng, lat);
+}
+
 function makeAreaDrawGeoJSON(points: Array<[number, number]>) {
   const features: Feature<any, any>[] = [];
 
@@ -473,6 +497,7 @@ export default function MapPage() {
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
   const hoverPreviewTimerRef = useRef<number | null>(null);
+  const poiCoordIndexRef = useRef<Map<string, Feature<Point, any>[]>>(new Map());
   const suppressHoverHideRef = useRef(false);
   const suppressHoverHideTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -1570,6 +1595,161 @@ export default function MapPage() {
       return Boolean(popupEl?.querySelector(".cameraPopupStreamLink"));
     }
 
+    function getPoiInfo(feature: Feature<Point, any>) {
+      const p = feature.properties || {};
+      const kind = asPoiKind(p.kind);
+
+      if (kind === "camera") {
+        return {
+          kind,
+          title: (p.name || "Câmera sem nome").toString(),
+          meta: `Zona: ${(p.zona_camera || "-").toString()}`,
+          streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
+        };
+      }
+      if (kind === "camera_intel") {
+        return {
+          kind,
+          title: (p.name || "Super Câmera Inteligente").toString(),
+          meta: `Responsável: ${(p.responsavel || "-").toString()}`,
+          streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
+        };
+      }
+      if (kind === "camera_lpr") {
+        return {
+          kind,
+          title: (p.name || "Câmera LPR").toString(),
+          meta: `Direção: ${(p.direction || "-").toString()}`,
+          streamingUrl: "",
+        };
+      }
+      if (kind === "radar") {
+        return {
+          kind,
+          title: (p.logradouro || "Radar sem logradouro").toString(),
+          meta: `Sentido: ${(p.sentido || "-").toString()}`,
+          streamingUrl: "",
+        };
+      }
+      return null;
+    }
+
+    function openStackedPopupIfNeeded(coords: [number, number]) {
+      const key = poiCoordKey(Number(coords[0]), Number(coords[1]));
+      const stack = (poiCoordIndexRef.current.get(key) || []).slice();
+      if (stack.length <= 1) return false;
+
+      const kindLabel: Record<PoiKind, string> = {
+        camera: "Câmera",
+        camera_intel: "Super Câmera",
+        camera_lpr: "LPR",
+        radar: "Radar",
+      };
+      const kindChipClass: Record<PoiKind, string> = {
+        camera: "stackPopupChip--camera",
+        camera_intel: "stackPopupChip--intel",
+        camera_lpr: "stackPopupChip--lpr",
+        radar: "stackPopupChip--radar",
+      };
+      const kindItemClass: Record<PoiKind, string> = {
+        camera: "stackPopupTag--camera",
+        camera_intel: "stackPopupTag--intel",
+        camera_lpr: "stackPopupTag--lpr",
+        radar: "stackPopupTag--radar",
+      };
+      const kindItemCardClass: Record<PoiKind, string> = {
+        camera: "stackPopupItem--camera",
+        camera_intel: "stackPopupItem--intel",
+        camera_lpr: "stackPopupItem--lpr",
+        radar: "stackPopupItem--radar",
+      };
+      const kindCodeClass: Record<PoiKind, string> = {
+        camera: "stackPopupCode--camera",
+        camera_intel: "stackPopupCode--intel",
+        camera_lpr: "stackPopupCode--lpr",
+        radar: "stackPopupCode--radar",
+      };
+
+      stack.sort((a, b) => {
+        const aKind = asPoiKind(a.properties?.kind);
+        const bKind = asPoiKind(b.properties?.kind);
+        const aWeight = aKind ? POI_KIND_ORDER.indexOf(aKind) : 999;
+        const bWeight = bKind ? POI_KIND_ORDER.indexOf(bKind) : 999;
+        if (aWeight !== bWeight) return aWeight - bWeight;
+        const aCode = (aKind === "radar" ? a.properties?.codcet : a.properties?.code) || "";
+        const bCode = (bKind === "radar" ? b.properties?.codcet : b.properties?.code) || "";
+        return String(aCode).localeCompare(String(bCode), "pt-BR", { numeric: true });
+      });
+
+      const counts: Record<PoiKind, number> = {
+        camera: 0,
+        camera_intel: 0,
+        camera_lpr: 0,
+        radar: 0,
+      };
+
+      for (const feature of stack) {
+        const kind = asPoiKind(feature.properties?.kind);
+        if (kind) counts[kind] += 1;
+      }
+
+      const chipsHtml = POI_KIND_ORDER
+        .filter((kind) => counts[kind] > 0)
+        .map(
+          (kind) =>
+            `<span class="stackPopupChip ${kindChipClass[kind]}">${escapeHtml(kindLabel[kind])}: ${counts[kind]}</span>`
+        )
+        .join("");
+
+      const itemsHtml = stack
+        .map((feature) => {
+          const info = getPoiInfo(feature);
+          if (!info || !info.kind) return "";
+          const p = feature.properties || {};
+          const code = info.kind === "radar" ? p.codcet || p.numero_equipamento || "-" : p.code || "-";
+          const streamLink =
+            hasStreamingAccessRef.current && info.streamingUrl
+              ? `<a class="cameraPopupStreamLink stackPopupStreamLink" href="${escapeHtml(info.streamingUrl)}" target="_blank" rel="noreferrer">Streaming</a>`
+              : "";
+
+          return `
+            <div class="stackPopupItem ${kindItemCardClass[info.kind]}">
+              <div class="stackPopupItemHead">
+                <span class="stackPopupTag ${kindItemClass[info.kind]}">${escapeHtml(kindLabel[info.kind])}</span>
+                <span class="stackPopupCode ${kindCodeClass[info.kind]}">${escapeHtml(String(code || "-"))}</span>
+              </div>
+              <div class="stackPopupTitle">${escapeHtml(info.title)}</div>
+              <div class="stackPopupMeta">${escapeHtml(info.meta)}</div>
+              ${streamLink}
+            </div>
+          `;
+        })
+        .join("");
+
+      setSelectedCode(null);
+      setSelectedRadar(null);
+      setPanelOpen(false);
+
+      popup
+        ?.setLngLat(coords)
+        .setHTML(`
+          <div class="cameraPopup cameraPopup--stack">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
+            <div class="stackPopupHead">
+              <div class="stackPopupKicker">Mesmo ponto no mapa</div>
+              <div class="stackPopupTitleMain">${stack.length} dispositivos neste local</div>
+            </div>
+            <div class="stackPopupChips">${chipsHtml}</div>
+            <div class="stackPopupList">${itemsHtml}</div>
+          </div>
+        `)
+        .addTo(map);
+
+      bindPopupCloseButton();
+      centerMobilePopup();
+      return true;
+    }
+
     function markMobileMapGesture() {
       if (!isMobileRef.current) return;
       suppressNextMapClickRef.current = true;
@@ -1681,6 +1861,7 @@ export default function MapPage() {
       const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
       const allowStreaming = hasStreamingAccessRef.current;
       setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedCode(p.code || null);
       setSelectedRadar(null);
@@ -1735,6 +1916,7 @@ export default function MapPage() {
       const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
       const allowStreaming = hasStreamingAccessRef.current;
       setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedCode(null);
       setSelectedRadar(null);
@@ -1787,6 +1969,7 @@ export default function MapPage() {
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
       setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedCode(null);
       setSelectedRadar(null);
@@ -1832,6 +2015,7 @@ export default function MapPage() {
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
       setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedRadar(p.codcet || null);
       setSelectedCode(null);
@@ -2546,6 +2730,21 @@ export default function MapPage() {
       ),
     [cameras, camerasIntel, camerasLpr, radares, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
   );
+
+  useEffect(() => {
+    const index = new Map<string, Feature<Point, any>[]>();
+    for (const feature of poisGeo.features) {
+      const key = featureCoordKey(feature);
+      if (!key) continue;
+      const atCoord = index.get(key);
+      if (atCoord) {
+        atCoord.push(feature);
+      } else {
+        index.set(key, [feature]);
+      }
+    }
+    poiCoordIndexRef.current = index;
+  }, [poisGeo]);
 
   const bairrosList = useMemo(() => {
     if (!bairrosGeo?.features?.length) return [];
