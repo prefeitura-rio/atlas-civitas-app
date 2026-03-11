@@ -3557,36 +3557,88 @@ export default function MapPage() {
             <table
               style={{
                 width: "100%",
-                height: "100%",
-                borderCollapse: "collapse",
+                borderCollapse: "separate",
+                borderSpacing: 0,
                 tableLayout: "fixed",
-                fontSize: 12.2,
-                lineHeight: 1.42,
+                fontSize: 12,
+                lineHeight: 1.35,
               }}
             >
               <colgroup>
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "26%" }} />
-                <col style={{ width: "29%" }} />
-                <col style={{ width: "31%" }} />
+                <col style={{ width: "27%" }} />
+                <col style={{ width: "73%" }} />
               </colgroup>
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>Ferramenta</th>
-                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>O que é</th>
-                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>Quando utilizar</th>
-                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>Resultado</th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "rgba(241,245,249,0.96)",
+                      borderTop: "1px solid rgba(15,23,42,0.12)",
+                      borderLeft: "1px solid rgba(15,23,42,0.12)",
+                      borderBottom: "1px solid rgba(15,23,42,0.12)",
+                    }}
+                  >
+                    Ferramenta
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "rgba(241,245,249,0.96)",
+                      borderTop: "1px solid rgba(15,23,42,0.12)",
+                      borderRight: "1px solid rgba(15,23,42,0.12)",
+                      borderBottom: "1px solid rgba(15,23,42,0.12)",
+                    }}
+                  >
+                    Resumo de uso
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {civitasToolsSummary.map((row) => (
-                  <tr key={row.tool}>
-                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9, fontWeight: 800 }}>{row.tool}</td>
-                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9 }}>{row.what}</td>
-                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9 }}>{row.when}</td>
-                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9 }}>{row.result}</td>
-                  </tr>
-                ))}
+                {civitasToolsSummary.map((row, idx) => {
+                  const rowBg = idx % 2 === 0 ? "rgba(248,250,252,0.9)" : "rgba(255,255,255,0.96)";
+                  return (
+                    <tr key={row.tool}>
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          fontWeight: 900,
+                          color: "#0f172a",
+                          verticalAlign: "top",
+                          background: rowBg,
+                          borderLeft: "1px solid rgba(15,23,42,0.12)",
+                          borderBottom: "1px solid rgba(15,23,42,0.12)",
+                        }}
+                      >
+                        {row.tool}
+                      </td>
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          verticalAlign: "top",
+                          color: "#1f2937",
+                          background: rowBg,
+                          borderRight: "1px solid rgba(15,23,42,0.12)",
+                          borderBottom: "1px solid rgba(15,23,42,0.12)",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <div>
+                            <strong style={{ fontWeight: 900 }}>O que é:</strong> {row.what}
+                          </div>
+                          <div>
+                            <strong style={{ fontWeight: 900 }}>Quando usar:</strong> {row.when}
+                          </div>
+                          <div>
+                            <strong style={{ fontWeight: 900 }}>Resultado:</strong> {row.result}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
