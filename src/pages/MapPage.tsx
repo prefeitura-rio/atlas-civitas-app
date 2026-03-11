@@ -3889,13 +3889,13 @@ export default function MapPage() {
         {!dockOpen && (
           <div
             className="dockHandle"
-            title="Abrir controles"
+            title="Abrir camadas"
             onClick={() => {
               setDockOpen(true);
               bumpDockAutoHide();
             }}
           >
-            Controles
+            CAMADAS
           </div>
         )}
 
