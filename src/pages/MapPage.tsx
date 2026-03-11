@@ -3634,7 +3634,7 @@ export default function MapPage() {
         <div style={{ fontSize: 12, lineHeight: 1.45, color: "rgba(15,23,42,0.86)", marginBottom: 10 }}>
           Use os botões abaixo para abrir o contato oficial da CIVITAS e baixar o modelo de ofício.
         </div>
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 20 }}>
           <a
             href={civitasContactHref}
             style={{
@@ -3647,9 +3647,9 @@ export default function MapPage() {
               textDecoration: "none",
               fontWeight: 900,
               color: "#fff",
-              border: "1px solid rgba(29,78,216,0.45)",
-              background: "linear-gradient(135deg, #0ea5e9, #1d4ed8)",
-              boxShadow: "0 10px 18px rgba(29,78,216,0.28)",
+              border: "none",
+              background: "linear-gradient(135deg, #00c0f3, #0a284b)",
+              boxShadow: "0 10px 18px rgba(10,40,75,0.30)",
             }}
           >
             <Mail size={15} />
@@ -3667,14 +3667,15 @@ export default function MapPage() {
               borderRadius: 12,
               textDecoration: "none",
               fontWeight: 900,
+              whiteSpace: "nowrap",
               color: "#0f172a",
-              border: "1px solid rgba(245,158,11,0.52)",
+              border: "none",
               background: "linear-gradient(135deg, rgba(254,243,199,0.96), rgba(255,251,235,0.98))",
               boxShadow: "0 8px 16px rgba(245,158,11,0.22)",
             }}
           >
             <FileDown size={15} />
-            Modelo de ofício para solicitar informações
+            Modelo de ofício
           </a>
         </div>
       </div>
@@ -3690,7 +3691,7 @@ export default function MapPage() {
         }}
       >
         <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>Como solicitar o uso das funcionalidades da CIVITAS</div>
-        <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
+        <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", textAlign: "justify", textJustify: "inter-word" }}>
           Para usufruir das funcionalidades disponíveis no App Civitas e dos relatórios analíticos associados ao cerco
           eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em lei,{" "}
           <a
@@ -3703,7 +3704,16 @@ export default function MapPage() {
           </a>
           .
         </div>
-        <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
+        <div
+          style={{
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "#111827",
+            marginTop: 8,
+            textAlign: "justify",
+            textJustify: "inter-word",
+          }}
+        >
           As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade competente do
           órgão e enviado ao endereço <strong style={{ fontWeight: 900 }}>{civitasContactEmail}</strong>. O documento deve
           conter o número e a data do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável
