@@ -169,10 +169,6 @@ export default function Login() {
           .loginLogo {
             height: 28px !important;
           }
-          .loginCard {
-            border-radius: 14px !important;
-            padding: 14px !important;
-          }
           .loginTitle {
             font-size: 18px !important;
           }
@@ -234,14 +230,13 @@ export default function Login() {
           style={{
             width: "100%",
             maxWidth: 420,
-            border: "1px solid rgba(255,255,255,0.14)",
-            borderRadius: 16,
-            padding: 18,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
-            boxShadow: "0 18px 50px rgba(56, 56, 56, 0.6)",
+            border: "none",
+            borderRadius: 0,
+            padding: 0,
+            background: "transparent",
+            boxShadow: "none",
             color: "#ffffff",
-            backdropFilter: "blur(18px) saturate(160%)",
+            backdropFilter: "none",
           }}
         >
           <div style={{ marginBottom: 38, textAlign: "center" }}>
@@ -256,10 +251,14 @@ export default function Login() {
                 textTransform: "uppercase",
                 letterSpacing: 1.2,
                 lineHeight: 1.1,
+                background: "linear-gradient(135deg, #00c0f3, #0a284b)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+                WebkitTextFillColor: "transparent",
               }}
             >
-              <span style={{ color: "#00c0f3" }}>ATLAS</span>{" "}
-              <span style={{ color: "#00c0f3" }}>CIVITAS</span>
+              ATLAS CIVITAS
             </div>
             <p style={{ margin: "6px 0 0", opacity: 0.7, fontSize: 13 }}>
               
