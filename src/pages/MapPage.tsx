@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { Building2, Eye, EyeOff, PenTool, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Building2, Eye, EyeOff, FileDown, Mail, PenTool, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
@@ -632,7 +632,20 @@ export default function MapPage() {
       when: "Investigações com múltiplos veículos ou análise de conexões entre ocorrências.",
       result: "Grafo de conexões entre veículos e tabela ordenada por nível de correlação.",
     },
+    {
+      tool: "Imagens e Gravações",
+      what:
+        "Solicitação de extração de imagens e/ou trechos de vídeo de câmeras específicas em determinado período e local.",
+      when: "Quando há necessidade de análise visual detalhada de um evento em ponto e intervalo de tempo.",
+      result:
+        "Pacote com imagens e/ou gravações correspondentes ao período solicitado, identificadas por câmera, data e horário.",
+    },
   ] as const;
+  const civitasTabLabel = "ACIONAR A CIVITAS";
+  const civitasPanelTitle = "Ferramentas da CIVITAS e Como Solicitar às Informações";
+  const civitasContactEmail = "civitas@dados.rio";
+  const civitasContactHref = `mailto:${civitasContactEmail}`;
+  const civitasModelPdfHref = "/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf";
   useEffect(() => {
     gpsOnRef.current = gpsOn;
   }, [gpsOn]);
@@ -3496,8 +3509,9 @@ export default function MapPage() {
     return radares.find((r) => r.codcet === selectedRadar) || null;
   }, [selectedRadar, radares]);
 
-  const panelWidth = panel === "admin" ? 860 : 560;
-  const panelMaxHeight = panel === "admin" || panel === "civitas" ? "74vh" : "56vh";
+  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1080 : 560;
+  const panelSideInset = panel === "civitas" ? 8 : 16;
+  const panelMaxHeight = panel === "admin" ? "74vh" : "56vh";
   const listTitle =
     listMode === "cameras"
       ? "Câmeras"
@@ -3523,6 +3537,211 @@ export default function MapPage() {
       ? "Carregando..."
       : `${radares.length}`;
   const listHeaderLabel = `${listTitle} - ${listCountLabel}`;
+
+  const renderCivitasPanel = () => {
+    const toolsTable = (
+      <div
+        style={{
+          padding: 12,
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.96)",
+          border: "1px solid rgba(0,0,0,0.10)",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: !isMobile ? "100%" : undefined,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>Quadro Resumo das Ferramentas da CIVITAS</div>
+        {!isMobile ? (
+          <div style={{ width: "100%", overflowX: "auto", flex: 1, display: "flex" }}>
+            <table
+              style={{
+                width: "100%",
+                height: "100%",
+                borderCollapse: "collapse",
+                tableLayout: "fixed",
+                fontSize: 12.2,
+                lineHeight: 1.42,
+              }}
+            >
+              <colgroup>
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "26%" }} />
+                <col style={{ width: "29%" }} />
+                <col style={{ width: "31%" }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>Ferramenta</th>
+                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>O que é</th>
+                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>Quando utilizar</th>
+                  <th style={{ textAlign: "left", border: "1px solid rgba(15,23,42,0.35)", padding: 9 }}>Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {civitasToolsSummary.map((row) => (
+                  <tr key={row.tool}>
+                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9, fontWeight: 800 }}>{row.tool}</td>
+                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9 }}>{row.what}</td>
+                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9 }}>{row.when}</td>
+                    <td style={{ border: "1px solid rgba(15,23,42,0.28)", padding: 9 }}>{row.result}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {civitasToolsSummary.map((row) => (
+              <div
+                key={row.tool}
+                style={{
+                  border: "1px solid rgba(0,0,0,0.14)",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "rgba(255,255,255,0.98)",
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{row.tool}</div>
+                <div style={{ fontSize: 12, lineHeight: 1.4, wordBreak: "break-word" }}>
+                  <strong>O que é:</strong> {row.what}
+                </div>
+                <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                  <strong>Quando utilizar:</strong> {row.when}
+                </div>
+                <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                  <strong>Resultado:</strong> {row.result}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+
+    const actionButtons = (
+      <div
+        style={{
+          padding: 12,
+          borderRadius: 16,
+          background: "linear-gradient(155deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))",
+          border: "1px solid rgba(30,41,59,0.14)",
+          boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>Ações rápidas</div>
+        <div style={{ fontSize: 12, lineHeight: 1.45, color: "rgba(15,23,42,0.86)", marginBottom: 10 }}>
+          Use os botões abaixo para abrir o contato oficial da CIVITAS e baixar o modelo de ofício.
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          <a
+            href={civitasContactHref}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "10px 12px",
+              borderRadius: 12,
+              textDecoration: "none",
+              fontWeight: 900,
+              color: "#fff",
+              border: "1px solid rgba(29,78,216,0.45)",
+              background: "linear-gradient(135deg, #0ea5e9, #1d4ed8)",
+              boxShadow: "0 10px 18px rgba(29,78,216,0.28)",
+            }}
+          >
+            <Mail size={15} />
+            Entrar em contato
+          </a>
+          <a
+            href={civitasModelPdfHref}
+            download
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "10px 12px",
+              borderRadius: 12,
+              textDecoration: "none",
+              fontWeight: 900,
+              color: "#0f172a",
+              border: "1px solid rgba(245,158,11,0.52)",
+              background: "linear-gradient(135deg, rgba(254,243,199,0.96), rgba(255,251,235,0.98))",
+              boxShadow: "0 8px 16px rgba(245,158,11,0.22)",
+            }}
+          >
+            <FileDown size={15} />
+            Modelo de ofício para solicitar informações
+          </a>
+        </div>
+      </div>
+    );
+
+    const requestGuide = (
+      <div
+        style={{
+          padding: 12,
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.95)",
+          border: "1px solid rgba(0,0,0,0.10)",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>Como solicitar o uso das funcionalidades da CIVITAS</div>
+        <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
+          Para usufruir das funcionalidades disponíveis no App Civitas e dos relatórios analíticos associados ao cerco
+          eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em lei,{" "}
+          <a
+            href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "#1d4ed8", textDecoration: "underline", fontWeight: 800 }}
+          >
+            DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
+          </a>
+          .
+        </div>
+        <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
+          As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade competente do
+          órgão e enviado ao endereço <strong style={{ fontWeight: 900 }}>{civitasContactEmail}</strong>. O documento deve
+          conter o número e a data do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável
+          (e-mail e telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
+          demais elementos relevantes para a análise da demanda.
+        </div>
+      </div>
+    );
+
+    return (
+      <>
+        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>{civitasPanelTitle}</div>
+
+        {!isMobile ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "minmax(0, 1.68fr) minmax(320px, 1fr)",
+              alignItems: "stretch",
+            }}
+          >
+            {toolsTable}
+            <div style={{ display: "grid", gap: 12 }}>
+              {actionButtons}
+              {requestGuide}
+            </div>
+          </div>
+        ) : (
+          <div className="scrollbarHidden" style={{ display: "grid", gap: 10, maxHeight: "62vh", overflow: "auto" }}>
+            {actionButtons}
+            {toolsTable}
+            {requestGuide}
+          </div>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""}`}>
@@ -4183,7 +4402,7 @@ export default function MapPage() {
             onClick={() => togglePanel("civitas")}
             title="Clique de novo pra fechar"
           >
-            RECURSOS
+            {civitasTabLabel}
           </button>
 
           {isAdmin && (
@@ -4251,9 +4470,9 @@ export default function MapPage() {
           style={{
             position: "absolute",
             top: 90,
-            left: 16,
+            left: panelSideInset,
             width: panelWidth,
-            maxWidth: "calc(100vw - 32px)",
+            maxWidth: `calc(100vw - ${panelSideInset * 2}px)`,
             zIndex: 20,
             padding: 14,
             color: "#0b0b0f",
@@ -4843,123 +5062,7 @@ export default function MapPage() {
             </>
           )}
 
-          {panel === "civitas" && (
-            <>
-              <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>
-                Ferramentas da CIVITAS e Como Solicitar as Informações
-              </div>
-
-              <div className="scrollbarHidden" style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Quadro-resumo das ferramentas da CIVITAS
-                  </div>
-                  {!isMobile ? (
-                    <div style={{ width: "100%", overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {civitasToolsSummary.map((row) => (
-                            <tr key={row.tool}>
-                              <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>{row.tool}</td>
-                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.what}</td>
-                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.when}</td>
-                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.result}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {civitasToolsSummary.map((row) => (
-                        <div
-                          key={row.tool}
-                          style={{
-                            border: "1px solid rgba(0,0,0,0.14)",
-                            borderRadius: 12,
-                            padding: 10,
-                            background: "rgba(255,255,255,0.96)",
-                            minWidth: 0,
-                          }}
-                        >
-                          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{row.tool}</div>
-                          <div style={{ fontSize: 12, lineHeight: 1.4, wordBreak: "break-word" }}>
-                            <strong>O que é:</strong> {row.what}
-                          </div>
-                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
-                            <strong>Quando utilizar:</strong> {row.when}
-                          </div>
-                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
-                            <strong>Resultado:</strong> {row.result}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Como solicitar o uso das funcionalidades da CIVITAS
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
-                    Para usufruir das funcionalidades disponíveis no App CIVITAS e dos relatórios analíticos associados ao
-                    cerco eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em
-                    lei,{" "}
-                    <a
-                      href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "#1d4ed8", textDecoration: "underline" }}
-                    >
-                      DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
-                    </a>
-                    .
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
-                    As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade
-                    competente do órgão e enviado ao endereço{" "}
-                    <strong style={{ fontWeight: 900 }}>civitas@dados.rio</strong>. O documento deve conter o número e a data
-                    do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável (e-mail e
-                    telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
-                    demais elementos relevantes para a análise da demanda.
-                  </div>
-                  <div style={{ marginTop: 10 }}>
-                    <a
-                      href="/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf"
-                      download
-                      className="btnGhost"
-                      style={{ display: "inline-block", padding: "8px 12px", borderRadius: 10 }}
-                    >
-                    Modelo de ofício para solicitar informações (baixar PDF)
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+          {panel === "civitas" && renderCivitasPanel()}
 
           {panel === "admin" && isAdmin && (
             <>
@@ -5204,7 +5307,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                RECURSOS
+                {civitasTabLabel}
               </button>
 
               {isAdmin && (
@@ -5824,122 +5927,7 @@ export default function MapPage() {
               </>
             )}
 
-            {panel === "civitas" && (
-              <>
-                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>
-                  Ferramentas da CIVITAS e Como Solicitar as Informações
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                    marginBottom: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Quadro-resumo das ferramentas da CIVITAS
-                  </div>
-                  {!isMobile ? (
-                    <div style={{ width: "100%", overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
-                            <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {civitasToolsSummary.map((row) => (
-                            <tr key={row.tool}>
-                              <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>{row.tool}</td>
-                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.what}</td>
-                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.when}</td>
-                              <td style={{ border: "1px solid #000", padding: 8 }}>{row.result}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {civitasToolsSummary.map((row) => (
-                        <div
-                          key={row.tool}
-                          style={{
-                            border: "1px solid rgba(0,0,0,0.14)",
-                            borderRadius: 12,
-                            padding: 10,
-                            background: "rgba(255,255,255,0.96)",
-                            minWidth: 0,
-                          }}
-                        >
-                          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{row.tool}</div>
-                          <div style={{ fontSize: 12, lineHeight: 1.4, wordBreak: "break-word" }}>
-                            <strong>O que é:</strong> {row.what}
-                          </div>
-                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
-                            <strong>Quando utilizar:</strong> {row.when}
-                          </div>
-                          <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
-                            <strong>Resultado:</strong> {row.result}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Como solicitar o uso das funcionalidades da CIVITAS
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
-                    Para usufruir das funcionalidades disponíveis no App CIVITAS e dos relatórios analíticos associados ao
-                    cerco eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em
-                    lei,{" "}
-                    <a
-                      href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "#1d4ed8", textDecoration: "underline" }}
-                    >
-                      DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
-                    </a>
-                    .
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
-                    As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade
-                    competente do órgão e enviado ao endereço{" "}
-                    <strong style={{ fontWeight: 900 }}>civitas@dados.rio</strong>. O documento deve conter o número e a data
-                    do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável (e-mail e
-                    telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
-                    demais elementos relevantes para a análise da demanda.
-                  </div>
-                  <div style={{ marginTop: 10 }}>
-                    <a
-                      href="/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf"
-                      download
-                      className="btnGhost"
-                      style={{ display: "inline-block", padding: "8px 12px", borderRadius: 10 }}
-                    >
-                      Modelo de ofício para solicitar informações (baixar PDF)
-                    </a>
-                  </div>
-                </div>
-              </>
-            )}
+            {panel === "civitas" && renderCivitasPanel()}
 
             {panel === "admin" && isAdmin && (
               <>
