@@ -96,23 +96,6 @@ function getUserExpirationBadge(expiresAt?: string | null) {
   };
 }
 
-function formatBirthDateMasked(v: string) {
-  const digits = v.replace(/\D/g, "").slice(0, 8);
-  const d = digits.slice(0, 2);
-  const m = digits.slice(2, 4);
-  const y = digits.slice(4, 8);
-  if (digits.length <= 2) return d;
-  if (digits.length <= 4) return `${d}/${m}`;
-  return `${d}/${m}/${y}`;
-}
-
-function formatBirthDateForMobile(v: string) {
-  if (!v) return "";
-  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-  return formatBirthDateMasked(v);
-}
-
 export function AdminUsersPanel({
   apiBase,
   token,
@@ -133,7 +116,6 @@ export function AdminUsersPanel({
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [cpf, setCpf] = useState("");
-  const [birthDate, setBirthDate] = useState("");
   const [matricula, setMatricula] = useState("");
   const [unidade, setUnidade] = useState("");
   const [orgao, setOrgao] = useState("");
@@ -157,7 +139,6 @@ export function AdminUsersPanel({
     setEmail("");
     setFullName("");
     setCpf("");
-    setBirthDate("");
     setMatricula("");
     setUnidade("");
     setOrgao("");
@@ -223,7 +204,6 @@ export function AdminUsersPanel({
     setEmail(u.email || "");
     setFullName(u.full_name || "");
     setCpf(formatCpf(u.cpf || ""));
-    setBirthDate(isMobile ? formatBirthDateForMobile(u.birth_date || "") : (u.birth_date || ""));
     setMatricula(u.matricula || "");
     setUnidade(u.unidade || "");
     setOrgao(u.orgao || "");
@@ -296,15 +276,6 @@ export function AdminUsersPanel({
     return out;
   }
 
-  function normalizeBirthDateInput(v: string) {
-    const raw = v.trim();
-    if (!raw) return "";
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-    const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
-    return raw;
-  }
-
   async function save() {
     setErr(null);
     setSuccess(null);
@@ -313,7 +284,6 @@ export function AdminUsersPanel({
     const fullNameV = fullName.trim();
     const roleV = role.trim().toLowerCase();
     const cpfV = normalizeCpf(cpf.trim());
-    const birthDateV = normalizeBirthDateInput(birthDate);
     const matriculaV = matricula.trim();
     const unidadeV = unidade.trim();
     const orgaoV = orgao.trim();
@@ -327,7 +297,6 @@ export function AdminUsersPanel({
 
     if (!id) {
       if (cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
-      if (!birthDateV) return setErr("Data de nascimento é obrigatória.");
       if (!password || password.length < 8) return setErr("Senha mínima: 8 caracteres.");
     }
 
@@ -345,7 +314,6 @@ export function AdminUsersPanel({
             email: emailV,
             full_name: fullNameV,
             cpf: cpfV,
-            birth_date: birthDateV,
             matricula: matriculaV,
             unidade: unidadeV || null,
             orgao: orgaoV,
@@ -359,7 +327,6 @@ export function AdminUsersPanel({
         if (fullNameV) payload.full_name = fullNameV;
         if (roleV) payload.role = roleV;
         if (cpfV) payload.cpf = cpfV;
-        if (birthDateV) payload.birth_date = birthDateV;
         if (matriculaV) payload.matricula = matriculaV;
         payload.unidade = unidadeV || null;
         if (orgaoV) payload.orgao = orgaoV;
@@ -464,21 +431,17 @@ export function AdminUsersPanel({
             placeholder="cpf (11 dígitos)"
             style={inputStyle()}
           />
-          <input
-            value={birthDate}
-            onChange={(e) => setBirthDate(formatBirthDateMasked(e.target.value))}
-            type="text"
-            inputMode="numeric"
-            maxLength={10}
-            placeholder="dd/mm/aaaa (data de nascimento)"
-            title="Data de nascimento"
-            style={inputStyle()}
-          />
 
           <input
             value={matricula}
             onChange={(e) => setMatricula(e.target.value)}
             placeholder="matrícula"
+            style={inputStyle()}
+          />
+          <input
+            value={orgao}
+            onChange={(e) => setOrgao(e.target.value)}
+            placeholder="órgão"
             style={inputStyle()}
           />
           <input
@@ -488,38 +451,6 @@ export function AdminUsersPanel({
             style={inputStyle()}
           />
 
-          <input value={orgao} onChange={(e) => setOrgao(e.target.value)} placeholder="órgão" style={inputStyle()} />
-
-          <div className="customSelect" ref={roleWrapRef}>
-            <button type="button" className="customSelectBtn" onClick={() => setRoleOpen((v) => !v)}>
-              <span>{roleLabel(role)}</span>
-              <span className="customSelectChevron" />
-            </button>
-            {roleOpen && (
-              <div className="customSelectMenu">
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "user" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("user");
-                    setRoleOpen(false);
-                  }}
-                >
-                  Usuário sem streaming
-                </button>
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "admin" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("admin");
-                    setRoleOpen(false);
-                  }}
-                >
-                  Administrador
-                </button>
-              </div>
-            )}
-          </div>
           <div style={{ display: "grid", gap: 6 }}>
             <div style={{ position: "relative" }}>
               <input
@@ -625,6 +556,37 @@ export function AdminUsersPanel({
                   {suggestedPassword}
                 </span>
               </button>
+            )}
+          </div>
+
+          <div className="customSelect" ref={roleWrapRef}>
+            <button type="button" className="customSelectBtn" onClick={() => setRoleOpen((v) => !v)}>
+              <span>{roleLabel(role)}</span>
+              <span className="customSelectChevron" />
+            </button>
+            {roleOpen && (
+              <div className="customSelectMenu">
+                <button
+                  type="button"
+                  className={`customSelectItem ${role === "user" ? "customSelectItemActive" : ""}`}
+                  onClick={() => {
+                    setRole("user");
+                    setRoleOpen(false);
+                  }}
+                >
+                  Usuário sem streaming
+                </button>
+                <button
+                  type="button"
+                  className={`customSelectItem ${role === "admin" ? "customSelectItemActive" : ""}`}
+                  onClick={() => {
+                    setRole("admin");
+                    setRoleOpen(false);
+                  }}
+                >
+                  Administrador
+                </button>
+              </div>
             )}
           </div>
 
@@ -818,8 +780,8 @@ export function AdminUsersPanel({
                     {u.is_active ? "ATIVO" : "INATIVO"}
                     {u.cpf ? ` • CPF: ${u.cpf}` : ""}
                     {u.matricula ? ` • Matrícula: ${u.matricula}` : ""}
-                    {u.unidade ? ` • ${u.unidade}` : ""}
                     {u.orgao ? ` • ${u.orgao}` : ""}
+                    {u.unidade ? ` • ${u.unidade}` : ""}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                     <span
