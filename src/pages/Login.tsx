@@ -251,7 +251,7 @@ export default function Login() {
                 textTransform: "uppercase",
                 letterSpacing: 1.2,
                 lineHeight: 1.1,
-                background: "linear-gradient(135deg, #00c0f3, #0a284b)",
+                background: "linear-gradient(135deg, #00c0f3 0%, #00afe6 58%, #0096d0 100%)",
                 WebkitBackgroundClip: "text",
                 backgroundClip: "text",
                 color: "transparent",
