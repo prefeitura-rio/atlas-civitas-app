@@ -4771,14 +4771,19 @@ export default function MapPage() {
                               {c.code}
                             </span>
                           </div>
-                          {/* <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                opacity: 0.8,
+                                border: "1px solid rgba(15,23,42,0.14)",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                              }}
+                            >
                               Responsável: {c.responsavel || (c as any).responsavel || "-"}
                             </span>
-                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              Direção: {c.direction || "-"}
-                            </span>
-                          </div> */}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -5627,14 +5632,19 @@ export default function MapPage() {
                                 {c.code}
                               </span>
                             </div>
-                            {/* <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  opacity: 0.8,
+                                  border: "1px solid rgba(15,23,42,0.14)",
+                                  borderRadius: 999,
+                                  padding: "1px 7px",
+                                }}
+                              >
                                 Responsável: {c.responsavel || (c as any).responsavel || "-"}
                               </span>
-                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                Direção: {c.direction || "-"}
-                              </span>
-                            </div> */}
+                            </div>
                           </div>
                         </div>
                       </div>
