@@ -1654,7 +1654,7 @@ export default function MapPage() {
 
       const kindLabel: Record<PoiKind, string> = {
         camera: "Câmera",
-        camera_intel: "Super Câmera",
+        camera_intel: "Super Câmera Inteligente",
         camera_lpr: "LPR",
         radar: "Radar",
       };
@@ -1747,10 +1747,14 @@ export default function MapPage() {
         ?.setLngLat(coords)
         .setHTML(`
           <div class="cameraPopup cameraPopup--stack">
-            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
             <div class="stackPopupHead">
-              <div class="stackPopupKicker">Mesmo ponto no mapa</div>
-              <div class="stackPopupTitleMain">${stack.length} dispositivos neste local</div>
+              <div class="stackPopupHeadRow">
+                <div class="stackPopupHeadText">
+                  <div class="stackPopupKicker">Mesmo ponto no mapa</div>
+                  <div class="stackPopupTitleMain">${stack.length} dispositivos neste local</div>
+                </div>
+                <button type="button" class="stackPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
+              </div>
             </div>
             <div class="stackPopupChips">${chipsHtml}</div>
             <div class="stackPopupList">${itemsHtml}</div>
