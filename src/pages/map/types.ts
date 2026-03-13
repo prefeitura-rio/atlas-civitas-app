@@ -84,7 +84,6 @@ export type AdminUser = {
   full_name?: string | null;
   role: UserRole;
   cpf?: string | null;
-  birth_date?: string | null;
   matricula?: string | null;
   unidade?: string | null;
   orgao?: string | null;
