@@ -1,3 +1,5 @@
+import type { UserRole } from "./roles";
+
 export type Camera = {
   id?: string;
   name: string;
@@ -7,18 +9,20 @@ export type Camera = {
   address: string;
   city: string;
   uf: string;
-  stream_url?: string;
+  streaming_url?: string | null;
+  stream_url?: string | null;
   is_active: boolean;
 };
 
 export type CameraIntel = {
   id?: string;
-  ip?: string | null;
   code: string;
   name: string;
   lat: number;
   lng: number;
+  responsavel?: string | null;
   direction?: string | null;
+  streaming_url?: string | null;
   is_active?: boolean;
   source_file?: string | null;
   last_seen_at?: string | null;
@@ -28,11 +32,11 @@ export type CameraIntel = {
 
 export type CameraLpr = {
   id?: string;
-  ip?: string | null;
   code: string;
   name: string;
   lat: number;
   lng: number;
+  neighborhood?: string | null;
   direction?: string | null;
   is_active?: boolean;
   source_file?: string | null;
@@ -68,7 +72,7 @@ export type Me = {
   id: string;
   email: string;
   full_name: string;
-  role: string;
+  role: UserRole;
   is_active: boolean;
   expires_at?: string | null;
   last_login_at?: string | null;
@@ -78,9 +82,8 @@ export type AdminUser = {
   id: string;
   email: string;
   full_name?: string | null;
-  role: string;
+  role: UserRole;
   cpf?: string | null;
-  birth_date?: string | null;
   matricula?: string | null;
   unidade?: string | null;
   orgao?: string | null;
@@ -88,6 +91,8 @@ export type AdminUser = {
   created_at?: string;
   expires_at?: string | null;
   last_login_at?: string | null;
+  accepted_terms_version?: string | null;
+  terms_accepted_at?: string | null;
 };
 
 export type AdminLog = {
