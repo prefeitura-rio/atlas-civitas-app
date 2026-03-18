@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import type { Radar } from "./types";
 import { fetchJson } from "./shared";
+import radarIcon from "@/assets/radar-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
 const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
+const syncDisabled = true;
 
 export function AdminRadaresPanel({
   apiBase,
@@ -16,8 +18,8 @@ export function AdminRadaresPanel({
   onSynced?: () => void;
   isMobile: boolean;
 }) {
-  const RADARES_URL = `${apiBase}/api/v1/radares`;
-  const SYNC_RADARES_URL = `${apiBase}/api/v1/sync/radares`;
+  const RADARES_URL = `${apiBase}/radares`;
+  const SYNC_RADARES_URL = `${apiBase}/sync/radares`;
 
   const [loading, setLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
@@ -27,7 +29,29 @@ export function AdminRadaresPanel({
   const [deactivateMissing, setDeactivateMissing] = useState(true);
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
-  const syncDisabled = true;
+  const cardRowStyle = {
+    border: "1px solid rgba(15,23,42,0.10)",
+    borderRadius: 14,
+    padding: 12,
+    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+    boxShadow: "0 6px 20px rgba(15,23,42,0.06)",
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "nowrap",
+  } as const;
+  const chipStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    padding: "3px 9px",
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.2,
+    border: "1px solid rgba(15,23,42,0.14)",
+    background: "rgba(248,250,252,0.95)",
+    color: "rgba(15,23,42,0.85)",
+  } as const;
 
   async function load() {
     setErr(null);
@@ -73,7 +97,7 @@ export function AdminRadaresPanel({
       });
 
       setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
+        `Sincronização concluída. (criados=${resp?.result?.created ?? "-"}, atualizados=${resp?.result?.updated ?? "-"}, desativados=${
           resp?.result?.deactivated ?? "-"
         })`
       );
@@ -81,7 +105,7 @@ export function AdminRadaresPanel({
       await load();
       onSynced?.();
     } catch (e: any) {
-      setErr(e?.message || "Erro no sync RADARES");
+      setErr(e?.message || "Erro na sincronização de radares");
     } finally {
       setSyncLoading(false);
     }
@@ -108,7 +132,7 @@ export function AdminRadaresPanel({
           border: "1px solid rgba(0,0,0,0.10)",
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Radares (SYNC)</div>
+        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Radares</div>
 
         <div style={{ display: "grid", gap: 10 }}>
           <button
@@ -125,7 +149,7 @@ export function AdminRadaresPanel({
               opacity: syncDisabled || syncLoading ? 0.7 : 1,
             }}
           >
-            {syncLoading ? "Sincronizando..." : "SYNC RADARES"}
+            {syncLoading ? "Sincronizando..." : "Sincronizar Radares"}
           </button>
 
           <label
@@ -148,7 +172,7 @@ export function AdminRadaresPanel({
               onChange={(e) => setDeactivateMissing(e.target.checked)}
               style={{ transform: "scale(1.1)" }}
             />
-            Desativar no banco os que sumirem da fonte (deactivate_missing)
+            Desativar registros ausentes na fonte de dados
           </label>
 
           <button
@@ -187,6 +211,7 @@ export function AdminRadaresPanel({
         </div>
 
         <div
+          className="scrollbarHidden"
           style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
           onScroll={(e) => {
             if (!isMobile) return;
@@ -202,22 +227,57 @@ export function AdminRadaresPanel({
           ).map((r) => (
             <div
               key={r.id || r.codcet}
-              style={{
-                border: "1px solid rgba(0,0,0,0.10)",
-                borderRadius: 14,
-                padding: 10,
-                background: "rgba(255,255,255,0.75)",
-              }}
+              style={cardRowStyle}
             >
-              <div style={{ fontWeight: 900, fontSize: 13 }}>
-                Radar <span style={{ opacity: 0.65 }}>({r.codcet})</span>
+              <div
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 999,
+                  border: "1px solid rgba(234,88,12,0.30)",
+                  background: "rgba(255,237,213,0.92)",
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto",
+                }}
+              >
+                <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
               </div>
-              <div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>
-                {r.bairro || "-"} • {r.logradouro || r.localidade || "-"} • {r.sentido || "-"}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>
-                Empresa: {r.empresa || "-"} • Vel: {r.velofisc ?? "-"} • Equip: {r.numero_equipamento || "-"} • Status:{" "}
-                {r.status || (r.is_active !== false ? "ATIVO" : "INATIVO")}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      fontSize: 13,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      color: "#0f172a",
+                    }}
+                  >
+                    {r.logradouro || r.localidade || "Radar"}
+                  </div>
+                  <span
+                    style={{
+                      ...chipStyle,
+                      borderColor: "rgba(234,88,12,0.30)",
+                      background: "rgba(255,237,213,0.92)",
+                      color: "#c2410c",
+                    }}
+                  >
+                    {r.codcet}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                  <span style={chipStyle}>Bairro: {r.bairro || "-"}</span>
+                  <span style={chipStyle}>Sentido: {r.sentido || "-"}</span>
+                  <span style={chipStyle}>Empresa: {r.empresa || "-"}</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                  <span style={chipStyle}>Vel: {r.velofisc ?? "-"}</span>
+                  <span style={chipStyle}>Equip: {r.numero_equipamento || "-"}</span>
+                  <span style={chipStyle}>Status: {r.status || (r.is_active !== false ? "ATIVO" : "INATIVO")}</span>
+                </div>
               </div>
             </div>
           ))}
@@ -226,7 +286,7 @@ export function AdminRadaresPanel({
         </div>
 
         {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
             <button
               className="btnGhost"
               onClick={() => setPage((v) => Math.max(1, v - 1))}

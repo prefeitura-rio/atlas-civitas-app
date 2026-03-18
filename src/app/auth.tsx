@@ -20,7 +20,9 @@ type AuthCtx = {
 const AuthContext = createContext<AuthCtx | null>(null);
 
 const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.toString() || "http://127.0.0.1:8000";
+  (import.meta as any).env?.VITE_API_URL?.toString() ||
+  (import.meta as any).env?.VITE_API_BASE_URL?.toString() ||
+  "http://127.0.0.1:8000";
 
 function safeJsonParse<T>(s: string | null): T | null {
   if (!s) return null;
@@ -38,24 +40,93 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const migrateItem = (key: string) => {
+      const existing = sessionStorage.getItem(key);
+      if (existing !== null) return existing;
+      const legacy = localStorage.getItem(key);
+      if (legacy !== null) {
+        sessionStorage.setItem(key, legacy);
+        localStorage.removeItem(key);
+      }
+      return legacy;
+    };
+
     // carrega estado inicial do storage
-    const token = localStorage.getItem("access_token");
-    const storedUser = safeJsonParse<User>(localStorage.getItem("user"));
+    const token = migrateItem("access_token");
+    migrateItem("refresh_token");
+    const storedUser = safeJsonParse<User>(migrateItem("user"));
+    migrateItem("user_role");
 
     setAccessToken(token);
     setUser(storedUser);
     setLoading(false);
   }, []);
 
-  async function login(email: string, password: string) {
-    // DEBUG (você vai ver isso no console)
-    console.log("POST", `${API_BASE}/api/v1/auth/login`);
+  function clearAuthStorage() {
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("refresh_token");
+    sessionStorage.removeItem("user");
+    sessionStorage.removeItem("user_role");
+    sessionStorage.removeItem("tokens");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_role");
+    localStorage.removeItem("tokens");
+  }
 
-    const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
+  function persistUser(nextUser: User | null) {
+    if (nextUser) {
+      sessionStorage.setItem("user", JSON.stringify(nextUser));
+      localStorage.removeItem("user");
+      setUser(nextUser);
+      const role = nextUser.role || nextUser.roles?.[0];
+      if (role) {
+        sessionStorage.setItem("user_role", role);
+        localStorage.removeItem("user_role");
+      } else {
+        sessionStorage.removeItem("user_role");
+        localStorage.removeItem("user_role");
+      }
+      return;
+    }
+    setUser(null);
+    sessionStorage.removeItem("user");
+    sessionStorage.removeItem("user_role");
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_role");
+  }
+
+  async function loadCurrentUser(token: string) {
+    try {
+      const res = await fetch(`${API_BASE}/users/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) return;
+      const payload = await res.json().catch(() => null);
+      const nextUser: User | null = payload
+        ? {
+            id: payload.id,
+            email: payload.email,
+            role: payload.role,
+            name: payload.full_name || payload.name,
+          }
+        : null;
+      persistUser(nextUser);
+    } catch {}
+  }
+
+  async function login(email: string, password: string) {
+    const body = new URLSearchParams();
+    body.set("username", email);
+    body.set("password", password);
+
+    const res = await fetch(`${API_BASE}/auth/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // ajuste os nomes se teu back pedir diferente
-      body: JSON.stringify({ email, password }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
     });
 
     // tenta ler json; se falhar, lê texto
@@ -75,52 +146,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(msg);
     }
 
-    // aceita formatos comuns:
-    // { access_token: "...", user: {...} }
-    // { token: "...", user: {...} }
-    // ou qualquer variação parecida
     const token =
       payload?.access_token ||
       payload?.token ||
       payload?.accessToken ||
       payload?.data?.access_token ||
       null;
+    const refreshToken =
+      payload?.refresh_token ||
+      payload?.data?.refresh_token ||
+      null;
 
     if (!token) {
       throw new Error("Login OK, mas não veio access_token na resposta.");
     }
 
-    // tenta pegar user/role se o back mandar
-    const nextUser: User | null =
-      payload?.user ||
-      payload?.me ||
-      payload?.data?.user ||
-      null;
-
-    localStorage.setItem("access_token", token);
-    setAccessToken(token);
-
-    if (nextUser) {
-      localStorage.setItem("user", JSON.stringify(nextUser));
-      setUser(nextUser);
-
-      // opcional: se você usa user_role em algum lugar
-      const role = nextUser.role || nextUser.roles?.[0];
-      if (role) localStorage.setItem("user_role", role);
-    } else {
-      localStorage.removeItem("user");
-      setUser(null);
-      localStorage.removeItem("user_role");
+    sessionStorage.setItem("access_token", token);
+    localStorage.removeItem("access_token");
+    if (refreshToken) {
+      sessionStorage.setItem("refresh_token", refreshToken);
+      localStorage.removeItem("refresh_token");
     }
+    setAccessToken(token);
+    await loadCurrentUser(token);
   }
 
   function logout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("user_role");
+    clearAuthStorage();
     setAccessToken(null);
     setUser(null);
   }
+
+  useEffect(() => {
+    const onTokens = (event: Event) => {
+      const custom = event as CustomEvent<{ accessToken?: string | null }>;
+      const next = custom.detail?.accessToken;
+      if (typeof next === "string" && next) {
+        setAccessToken(next);
+      }
+    };
+    window.addEventListener("auth:tokens", onTokens as EventListener);
+    return () => window.removeEventListener("auth:tokens", onTokens as EventListener);
+  }, []);
 
   const isAuthed = !!accessToken;
 

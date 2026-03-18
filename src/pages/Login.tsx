@@ -4,7 +4,6 @@ import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../app/auth";
 
 import civitasLogo from "@/assets/civitas_icon2.png";
-import civitasMapLogo from "@/assets/civitasmap_logo.png";
 import prefeituraLogo from "@/assets/prefeitura_icon.png";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -20,6 +19,7 @@ export default function Login() {
     auth?.isAuthed === true ||
     !!auth?.accessToken ||
     !!auth?.token ||
+    !!sessionStorage.getItem("access_token") ||
     !!localStorage.getItem("access_token");
 
   // ✅ Se voltar pra /login estando logado, desloga e exige autenticação de novo
@@ -28,7 +28,13 @@ export default function Login() {
       try {
         auth?.logout?.();
       } catch {}
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("refresh_token");
+      sessionStorage.removeItem("user");
+      sessionStorage.removeItem("user_role");
       localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("user");
       localStorage.removeItem("user_role");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -163,10 +169,6 @@ export default function Login() {
           .loginLogo {
             height: 28px !important;
           }
-          .loginCard {
-            border-radius: 14px !important;
-            padding: 14px !important;
-          }
           .loginTitle {
             font-size: 18px !important;
           }
@@ -228,22 +230,36 @@ export default function Login() {
           style={{
             width: "100%",
             maxWidth: 420,
-            border: "1px solid rgba(255,255,255,0.14)",
-            borderRadius: 16,
-            padding: 18,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
-            boxShadow: "0 18px 50px rgba(56, 56, 56, 0.6)",
+            border: "none",
+            borderRadius: 0,
+            padding: 0,
+            background: "transparent",
+            boxShadow: "none",
             color: "#ffffff",
-            backdropFilter: "blur(18px) saturate(160%)",
+            backdropFilter: "none",
           }}
         >
           <div style={{ marginBottom: 38, textAlign: "center" }}>
-            <img
-              src={civitasMapLogo}
-              alt="CIVITAS Map"
-              style={{ height: 50, width: "auto", margin: "0 auto 6px", display: "block"}}
-            />
+            <div
+              aria-label="ATLAS CIVITAS"
+              style={{
+                margin: "0 auto 6px",
+                display: "block",
+                fontSize: 36,
+                fontWeight: 900,
+                fontFamily: '"Cera Pro Medium", "Cera Pro", "Segoe UI", sans-serif',
+                textTransform: "uppercase",
+                letterSpacing: 1.2,
+                lineHeight: 1.1,
+                background: "linear-gradient(135deg, #00c0f3 0%, #00afe6 58%, #0096d0 100%)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              ATLAS CIVITAS
+            </div>
             <p style={{ margin: "6px 0 0", opacity: 0.7, fontSize: 13 }}>
               
             </p>
@@ -326,8 +342,12 @@ export default function Login() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full border border-white/30 bg-white/20 text-black shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-white/30 hover:text-black"
-              style={{ color: "#000" }}
+              className="w-full border shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+              style={{
+                backgroundColor: "#00c0f3",
+                borderColor: "#00c0f3",
+                color: "#001018",
+              }}
             >
               {loading ? "Entrando..." : "Login"}
             </Button>

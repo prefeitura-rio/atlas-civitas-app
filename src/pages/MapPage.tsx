@@ -1,11 +1,14 @@
 // src/pages/MapPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { Building2, Eye, EyeOff, FileDown, Mail, PenTool, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
+import { canAccessStreaming, isAdminRole, normalizeRole, roleLabel } from "./map/roles";
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
@@ -27,7 +30,9 @@ type AdminTab = "users" | "logs" | "cameras" | "radares";
 
 
 const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.toString() || "http://localhost:8000";
+  (import.meta as any).env?.VITE_API_URL?.toString() ||
+  (import.meta as any).env?.VITE_API_BASE_URL?.toString() ||
+  "http://localhost:8000";
 
 const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN?.toString() || "";
 
@@ -40,6 +45,8 @@ const SOURCES = {
   pois: "src-pois",
   gps: "src-gps",
   search: "src-search",
+  selection: "src-selection",
+  area_draw: "src-area-draw",
   bairros: "src-bairros",
   risp: "src-risp",
   aisp: "src-aisp",
@@ -55,7 +62,12 @@ const LAYERS = {
   radares_points: "lyr-radares-points",
   gps_point: "lyr-gps-point",
   gps_accuracy: "lyr-gps-accuracy",
+  gps_pulse: "lyr-gps-pulse",
   search_pin: "lyr-search-pin",
+  selection_ring: "lyr-selection-ring",
+  area_draw_fill: "lyr-area-draw-fill",
+  area_draw_line: "lyr-area-draw-line",
+  area_draw_points: "lyr-area-draw-points",
   bairros_fill: "lyr-bairros-fill",
   bairros_line: "lyr-bairros-line",
   bairros_selected_fill: "lyr-bairros-selected-fill",
@@ -84,6 +96,43 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function coerceCoord(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
+}
+
+function getLat(value: any) {
+  return coerceCoord(value?.lat ?? value?.latitude ?? value?.latitud ?? value?.y);
+}
+
+function getLng(value: any) {
+  return coerceCoord(value?.lng ?? value?.lon ?? value?.long ?? value?.longitude ?? value?.longitud ?? value?.x);
+}
+
+function getLprNeighborhood(value: any) {
+  const candidates = [
+    value?.neighborhood,
+    value?.bairro,
+    value?.neighbourhood,
+    value?.district,
+    value?.bairro_nome,
+    value?.bairro_name,
+    value?.BAIRRO,
+    value?.Bairro,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+}
+
 function escapeHtml(s: string) {
   return (s || "")
     .replaceAll("&", "&amp;")
@@ -91,6 +140,13 @@ function escapeHtml(s: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function normalizeExternalUrl(value: unknown) {
+  if (typeof value !== "string") return "";
+  const raw = value.trim();
+  if (!raw) return "";
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
 function loadImagePromise(map: mapboxgl.Map, url: string) {
@@ -172,6 +228,40 @@ function pointInGeometry(point: [number, number], geom: Polygon | MultiPolygon) 
   return geom.type === "Polygon" ? pointInPolygon(point, geom) : pointInMultiPolygon(point, geom);
 }
 
+function normalizeCodeGeoByName(
+  data: FeatureCollection<Polygon | MultiPolygon, any>,
+  candidates: string[]
+) {
+  return {
+    ...data,
+    features: data.features.map((feature) => {
+      const props: any = { ...(feature.properties || {}) };
+      for (const key of candidates) {
+        const v = Number(props?.[key]);
+        if (Number.isFinite(v)) {
+          props.name = v;
+          break;
+        }
+      }
+      return { ...feature, properties: props };
+    }),
+  };
+}
+
+function keepOnlyCodes(
+  data: FeatureCollection<Polygon | MultiPolygon, any>,
+  allowed: number[]
+) {
+  const set = new Set(allowed);
+  return {
+    ...data,
+    features: data.features.filter((feature) => {
+      const code = Number((feature.properties as any)?.name);
+      return Number.isFinite(code) && set.has(code);
+    }),
+  };
+}
+
 function colorForIndex(i: number) {
   const palette = [
     "#22c55e",
@@ -191,6 +281,7 @@ function colorForIndex(i: number) {
 }
 
 function buildMatchExpr(key: string, values: number[]) {
+  if (!values.length) return "rgba(0,0,0,0)";
   const expr: any[] = ["match", ["to-number", ["get", key]]];
   values.forEach((v, i) => {
     expr.push(v, colorForIndex(i));
@@ -220,34 +311,51 @@ async function addImageOnce(map: mapboxgl.Map, id: string, url: string) {
 }
 
 function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
-  return list.map((c) => ({
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [c.lng, c.lat] },
-    properties: {
-      kind: "camera",
-      code: c.code,
-      name: c.name,
-      city: c.city,
-      uf: c.uf,
-      address: c.address || "",
-      is_active: c.is_active ? 1 : 0,
-    },
-  }));
+  return list.map((c) => {
+    const rawStreamingUrl = ((c as any).streaming_url ?? c.stream_url ?? "").toString().trim();
+    const streamingUrl = normalizeExternalUrl(rawStreamingUrl);
+
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [c.lng, c.lat] },
+      properties: {
+        kind: "camera",
+        code: c.code,
+        name: c.name,
+        zona_camera: (c as any).zona_camera ?? (c as any).zone ?? "",
+        sistema_origem: (c as any).sistema_origem ?? "",
+        responsavel: (c as any).responsavel ?? "",
+        streaming_url: streamingUrl,
+        streaming_url_raw: rawStreamingUrl,
+        city: c.city,
+        uf: c.uf,
+        address: c.address || "",
+        is_active: c.is_active ? 1 : 0,
+      },
+    };
+  });
 }
 
 function camerasIntelToFeatures(list: CameraIntel[]): Feature<Point, any>[] {
-  return list.map((c) => ({
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [c.lng, c.lat] },
-    properties: {
-      kind: "camera_intel",
-      code: c.code,
-      name: c.name,
-      ip: c.ip ?? "",
-      direction: c.direction ?? "",
-      is_active: c.is_active ? 1 : 0,
-    },
-  }));
+  return list.map((c) => {
+    const rawStreamingUrl = (c.streaming_url ?? "").toString().trim();
+    const streamingUrl = normalizeExternalUrl(rawStreamingUrl);
+
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [c.lng, c.lat] },
+      properties: {
+        kind: "camera_intel",
+        code: c.code,
+        name: c.name,
+        responsavel: c.responsavel ?? (c as any).responsavel ?? "",
+        direction: c.direction ?? "",
+        streaming_url: streamingUrl,
+        streaming_url_raw: rawStreamingUrl,
+        is_active: c.is_active ? 1 : 0,
+      },
+    };
+  });
 }
 
 function camerasLprToFeatures(list: CameraLpr[]): Feature<Point, any>[] {
@@ -258,7 +366,7 @@ function camerasLprToFeatures(list: CameraLpr[]): Feature<Point, any>[] {
       kind: "camera_lpr",
       code: c.code,
       name: c.name,
-      ip: c.ip ?? "",
+      neighborhood: getLprNeighborhood(c),
       direction: c.direction ?? "",
       is_active: c.is_active ? 1 : 0,
     },
@@ -314,19 +422,89 @@ function makePoisGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
+type PoiKind = "camera" | "camera_intel" | "camera_lpr" | "radar";
+
+const POI_KIND_ORDER: PoiKind[] = ["camera_intel", "camera_lpr", "camera", "radar"];
+
+function asPoiKind(value: unknown): PoiKind | null {
+  if (value === "camera" || value === "camera_intel" || value === "camera_lpr" || value === "radar") {
+    return value;
+  }
+  return null;
+}
+
+function poiCoordKey(lng: number, lat: number) {
+  return `${lng.toFixed(6)}|${lat.toFixed(6)}`;
+}
+
+function featureCoordKey(feature: Feature<Point, any>): string | null {
+  const coords = feature.geometry?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const lng = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  return poiCoordKey(lng, lat);
+}
+
+function makeAreaDrawGeoJSON(points: Array<[number, number]>) {
+  const features: Feature<any, any>[] = [];
+
+  if (points.length >= 3) {
+    const ring = [...points, points[0]];
+    features.push({
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: [ring] },
+      properties: { kind: "area_polygon" },
+    } as any);
+  }
+
+  if (points.length >= 2) {
+    features.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: points },
+      properties: { kind: "area_line" },
+    } as any);
+  }
+
+  for (const pt of points) {
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: pt },
+      properties: { kind: "area_point" },
+    } as any);
+  }
+
+  return { type: "FeatureCollection", features } as FeatureCollection<any, any>;
+}
+
 export default function MapPage() {
   const auth: any = useAuth();
+  const nav = useNavigate();
 
   const accessToken =
-    auth?.accessToken || auth?.token || localStorage.getItem("access_token") || "";
+    auth?.accessToken ||
+    auth?.token ||
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token") ||
+    "";
+  const authLoading = !!auth?.loading;
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const areaDrawModeRef = useRef(false);
+  const hasStreamingAccessRef = useRef(false);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
+  const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
+  const hoverPreviewTimerRef = useRef<number | null>(null);
+  const poiCoordIndexRef = useRef<Map<string, Feature<Point, any>[]>>(new Map());
+  const suppressHoverHideRef = useRef(false);
+  const suppressHoverHideTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   const handlersBoundRef = useRef(false);
   const iconsLoadedRef = useRef(false);
+  const selectionRingTimerRef = useRef<number | null>(null);
 
   const [panel, setPanel] = useState<PanelKey>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -364,6 +542,17 @@ export default function MapPage() {
   const [cispGeo, setCispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [selectedBairro, setSelectedBairro] = useState<string>("");
   const [bairroQuery, setBairroQuery] = useState<string>("");
+  const [bairroReportLoading, setBairroReportLoading] = useState(false);
+  const [bairroReportMsg, setBairroReportMsg] = useState<string | null>(null);
+  const [areaDrawMode, setAreaDrawMode] = useState(false);
+  const [areaToolsOpen, setAreaToolsOpen] = useState(false);
+  const [areaDrawPoints, setAreaDrawPoints] = useState<Array<[number, number]>>([]);
+  const [areaReportLoading, setAreaReportLoading] = useState(false);
+  const [areaReportMsg, setAreaReportMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    areaDrawModeRef.current = areaDrawMode;
+  }, [areaDrawMode]);
 
   const [listMode, setListMode] = useState<"cameras" | "inteligentes" | "lpr" | "radares">("cameras");
   const [query, setQuery] = useState("");
@@ -371,15 +560,23 @@ export default function MapPage() {
   const [pageIntel, setPageIntel] = useState(1);
   const [pageLpr, setPageLpr] = useState(1);
   const [pageRadares, setPageRadares] = useState(1);
+  const [pagePulse, setPagePulse] = useState(false);
   const [mobileCountCameras, setMobileCountCameras] = useState(PAGE_SIZE);
   const [mobileCountIntel, setMobileCountIntel] = useState(PAGE_SIZE);
   const [mobileCountLpr, setMobileCountLpr] = useState(PAGE_SIZE);
   const [mobileCountRadares, setMobileCountRadares] = useState(PAGE_SIZE);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const listScrollMobileRef = useRef<HTMLDivElement | null>(null);
+  const listScrollAnimFrameRef = useRef<number | null>(null);
+  const pagePulseTimerRef = useRef<number | null>(null);
 
   const [me, setMe] = useState<Me | null>(null);
   const [pwOld, setPwOld] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwNew2, setPwNew2] = useState("");
+  const [showPwOld, setShowPwOld] = useState(false);
+  const [showPwNew, setShowPwNew] = useState(false);
+  const [showPwNew2, setShowPwNew2] = useState(false);
   const [pwLoading, setPwLoading] = useState(false);
   const [pwMsg, setPwMsg] = useState<string | null>(null);
 
@@ -402,9 +599,86 @@ export default function MapPage() {
   }, [gps]);
 
   const gpsOnRef = useRef<boolean>(false);
+  const gpsPulseTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (selectionRingTimerRef.current) window.clearTimeout(selectionRingTimerRef.current);
+    };
+  }, []);
+
+  const civitasToolsSummary = [
+    {
+      tool: "Pontos de Detecção",
+      what: "Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.",
+      when: "Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais específicos.",
+      result:
+        "Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios de clonagem.",
+    },
+    {
+      tool: "Busca por Radar",
+      what: "Identificar veículos que passaram em determinado local e período.",
+      when: "Quando não há placa definida, mas há local e horário da ocorrência.",
+      result: "Lista cronológica de placas detectadas em radar ou conjunto de radares.",
+    },
+    {
+      tool: "Placas Conjuntas",
+      what: "Identificar veículos que trafegam junto com uma placa monitorada.",
+      when: "Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.",
+      result: "Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.",
+    },
+    {
+      tool: "Placas Correlatas",
+      what: "Identificar vínculos e padrões entre diferentes veículos monitorados.",
+      when: "Investigações com múltiplos veículos ou análise de conexões entre ocorrências.",
+      result: "Grafo de conexões entre veículos e tabela ordenada por nível de correlação.",
+    },
+    {
+      tool: "Imagens e Gravações",
+      what:
+        "Solicitação de extração de imagens e/ou trechos de vídeo de câmeras específicas em determinado período e local.",
+      when: "Quando há necessidade de análise visual detalhada de um evento em ponto e intervalo de tempo.",
+      result:
+        "Pacote com imagens e/ou gravações correspondentes ao período solicitado, identificadas por câmera, data e horário.",
+    },
+  ] as const;
+  const civitasTabLabel = "ACIONAR A CIVITAS";
+  const civitasPanelTitle = "Ferramentas da CIVITAS e Como Solicitar às Informações";
+  const civitasContactEmail = "civitas@dados.rio";
+  const civitasContactHref = `mailto:${civitasContactEmail}`;
+  const civitasModelPdfHref = "/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf";
   useEffect(() => {
     gpsOnRef.current = gpsOn;
   }, [gpsOn]);
+
+  useEffect(() => {
+    if (gpsPulseTimerRef.current) {
+      window.clearInterval(gpsPulseTimerRef.current);
+      gpsPulseTimerRef.current = null;
+    }
+
+    if (!gpsOn || !gps) {
+      const map = mapRef.current;
+      if (map && map.isStyleLoaded()) updateGpsData(map, gpsRef.current, gpsOnRef.current, 0);
+      return;
+    }
+
+    const tick = () => {
+      const map = mapRef.current;
+      if (!map || !map.isStyleLoaded()) return;
+      const phase = (Date.now() % 1600) / 1600;
+      updateGpsData(map, gpsRef.current, gpsOnRef.current, phase);
+    };
+
+    tick();
+    gpsPulseTimerRef.current = window.setInterval(tick, 80);
+
+    return () => {
+      if (gpsPulseTimerRef.current) {
+        window.clearInterval(gpsPulseTimerRef.current);
+        gpsPulseTimerRef.current = null;
+      }
+    };
+  }, [gpsOn, gps]);
 
   const [dockOpen, setDockOpen] = useState(true);
   const DOCK_AUTOHIDE_MS = 0;
@@ -417,10 +691,78 @@ export default function MapPage() {
   const panelRef = useRef<PanelKey>(null);
   const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const mapResizeFrameRef = useRef<number | null>(null);
+  const suppressNextMapClickRef = useRef(false);
+  const suppressMapClickTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     panelRef.current = panel;
   }, [panel]);
+
+  useEffect(() => {
+    const setViewportHeightVar = () => {
+      const vv = window.visualViewport;
+      const height = vv?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty("--vvh", `${Math.round(height)}px`);
+      const map = mapRef.current;
+      if (map) {
+        window.requestAnimationFrame(() => map.resize());
+      }
+    };
+
+    setViewportHeightVar();
+    window.addEventListener("resize", setViewportHeightVar);
+    window.addEventListener("orientationchange", setViewportHeightVar);
+    window.visualViewport?.addEventListener("resize", setViewportHeightVar);
+    window.visualViewport?.addEventListener("scroll", setViewportHeightVar);
+
+    return () => {
+      window.removeEventListener("resize", setViewportHeightVar);
+      window.removeEventListener("orientationchange", setViewportHeightVar);
+      window.visualViewport?.removeEventListener("resize", setViewportHeightVar);
+      window.visualViewport?.removeEventListener("scroll", setViewportHeightVar);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const triggerMapResize = () => {
+      if (mapResizeFrameRef.current) {
+        window.cancelAnimationFrame(mapResizeFrameRef.current);
+      }
+      mapResizeFrameRef.current = window.requestAnimationFrame(() => {
+        mapRef.current?.resize();
+        mapResizeFrameRef.current = null;
+      });
+    };
+
+    const ro = new ResizeObserver(() => triggerMapResize());
+    ro.observe(el);
+    window.addEventListener("orientationchange", triggerMapResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", triggerMapResize);
+      if (mapResizeFrameRef.current) {
+        window.cancelAnimationFrame(mapResizeFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverPreviewTimerRef.current) {
+        window.clearTimeout(hoverPreviewTimerRef.current);
+      }
+      if (suppressHoverHideTimerRef.current) {
+        window.clearTimeout(suppressHoverHideTimerRef.current);
+        suppressHoverHideTimerRef.current = null;
+      }
+      hoverPreviewPopupRef.current?.remove();
+    };
+  }, []);
 
   function bumpDockAutoHide() {
     if (dockTimerRef.current) window.clearTimeout(dockTimerRef.current);
@@ -442,8 +784,15 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dockOpen]);
 
-  const role = (me?.role || "user").toLowerCase();
-  const isAdmin = role === "admin";
+  const role = normalizeRole(
+    me?.role ?? auth?.user?.role
+  );
+  const isAdmin = isAdminRole(role);
+  const hasStreamingAccess = canAccessStreaming(role);
+
+  useEffect(() => {
+    hasStreamingAccessRef.current = hasStreamingAccess;
+  }, [hasStreamingAccess]);
 
   function togglePanel(next: TabKey) {
     setPanel((cur) => (cur === next ? null : next));
@@ -458,11 +807,45 @@ export default function MapPage() {
     if (!map) return;
     map.flyTo({
       center: [lng, lat],
-      zoom: zoom ?? clamp(map.getZoom(), 12, 15),
+      zoom: zoom ?? clamp(map.getZoom(), 16, 18),
       speed: 1.2,
       curve: 1.4,
       essential: true,
     });
+  }
+
+  function setSelectionRing(lng: number, lat: number) {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource(SOURCES.selection) as mapboxgl.GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [lng, lat] },
+          properties: {},
+        },
+      ],
+    } as any);
+
+    if (selectionRingTimerRef.current) {
+      window.clearTimeout(selectionRingTimerRef.current);
+    }
+    selectionRingTimerRef.current = window.setTimeout(() => {
+      const currentMap = mapRef.current;
+      if (!currentMap) return;
+      const currentSrc = currentMap.getSource(SOURCES.selection) as mapboxgl.GeoJSONSource | undefined;
+      if (!currentSrc) return;
+      currentSrc.setData({ type: "FeatureCollection", features: [] } as any);
+      selectionRingTimerRef.current = null;
+    }, 5000);
+  }
+
+  function focusOnDetection(lng: number, lat: number, zoom = 17.2) {
+    setSelectionRing(lng, lat);
+    flyToPoint(lng, lat, zoom);
   }
 
   function ensureSourcesAndLayers(map: mapboxgl.Map) {
@@ -487,6 +870,20 @@ export default function MapPage() {
 
     if (!map.getSource(SOURCES.search)) {
       map.addSource(SOURCES.search, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.selection)) {
+      map.addSource(SOURCES.selection, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
+    if (!map.getSource(SOURCES.area_draw)) {
+      map.addSource(SOURCES.area_draw, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
@@ -638,6 +1035,20 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getLayer(LAYERS.gps_pulse)) {
+      map.addLayer({
+        id: LAYERS.gps_pulse,
+        type: "circle",
+        source: SOURCES.gps,
+        filter: ["==", ["get", "kind"], "gps_point"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["get", "pulse"], 0, 14, 1, 40],
+          "circle-color": "rgba(34,197,94,0.45)",
+          "circle-opacity": ["interpolate", ["linear"], ["get", "pulse"], 0, 0.5, 1, 0],
+        },
+      });
+    }
+
     if (!map.getLayer(LAYERS.gps_point)) {
       map.addLayer({
         id: LAYERS.gps_point,
@@ -664,6 +1075,63 @@ export default function MapPage() {
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "icon-anchor": "bottom",
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.selection_ring)) {
+      map.addLayer({
+        id: LAYERS.selection_ring,
+        type: "circle",
+        source: SOURCES.selection,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 9, 14, 14, 17, 20, 19, 24],
+          "circle-color": "rgba(239,68,68,0.08)",
+          "circle-stroke-color": "rgba(220,38,38,0.98)",
+          "circle-stroke-width": 2.5,
+          "circle-opacity": 1,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.area_draw_fill)) {
+      map.addLayer({
+        id: LAYERS.area_draw_fill,
+        type: "fill",
+        source: SOURCES.area_draw,
+        filter: ["==", ["get", "kind"], "area_polygon"],
+        paint: {
+          "fill-color": "#38bdf8",
+          "fill-opacity": 0.18,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.area_draw_line)) {
+      map.addLayer({
+        id: LAYERS.area_draw_line,
+        type: "line",
+        source: SOURCES.area_draw,
+        filter: ["any", ["==", ["get", "kind"], "area_line"], ["==", ["get", "kind"], "area_polygon"]],
+        paint: {
+          "line-color": "#0ea5e9",
+          "line-width": 2.5,
+          "line-opacity": 0.95,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.area_draw_points)) {
+      map.addLayer({
+        id: LAYERS.area_draw_points,
+        type: "circle",
+        source: SOURCES.area_draw,
+        filter: ["==", ["get", "kind"], "area_point"],
+        paint: {
+          "circle-radius": 4.5,
+          "circle-color": "#e0f2fe",
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#0284c7",
         },
       });
     }
@@ -879,7 +1347,12 @@ export default function MapPage() {
       LAYERS.cameras_lpr_points,
       LAYERS.radares_points,
       LAYERS.search_pin,
+      LAYERS.selection_ring,
+      LAYERS.area_draw_fill,
+      LAYERS.area_draw_line,
+      LAYERS.area_draw_points,
       LAYERS.gps_accuracy,
+      LAYERS.gps_pulse,
       LAYERS.gps_point,
     ];
     for (const id of aboveBairros) {
@@ -914,6 +1387,12 @@ export default function MapPage() {
     } else {
       searchMarkerRef.current.setLngLat([pin.lng, pin.lat]);
     }
+  }
+
+  function updateAreaDrawData(map: mapboxgl.Map, points: Array<[number, number]>) {
+    const src: any = map.getSource(SOURCES.area_draw);
+    if (!src || typeof src.setData !== "function") return;
+    src.setData(makeAreaDrawGeoJSON(points));
   }
 
   function updateBairrosData(
@@ -986,7 +1465,12 @@ export default function MapPage() {
     return meters / Math.max(0.000001, metersPerPixel);
   }
 
-  function updateGpsData(map: mapboxgl.Map, gpsData: typeof gps | null, isOn: boolean) {
+  function updateGpsData(
+    map: mapboxgl.Map,
+    gpsData: typeof gps | null,
+    isOn: boolean,
+    pulse = 0
+  ) {
     const src: any = map.getSource(SOURCES.gps);
     if (!src || typeof src.setData !== "function") return;
 
@@ -1012,7 +1496,7 @@ export default function MapPage() {
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [gpsData.lng, gpsData.lat] },
-      properties: { kind: "gps_point" },
+      properties: { kind: "gps_point", pulse },
     });
 
     src.setData({ type: "FeatureCollection", features });
@@ -1023,9 +1507,287 @@ export default function MapPage() {
     handlersBoundRef.current = true;
 
     if (!popupRef.current) {
-      popupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true });
+      popupRef.current = new mapboxgl.Popup({
+        offset: 12,
+        closeButton: false,
+        closeOnClick: false,
+        closeOnMove: false,
+        maxWidth: "360px",
+      });
     }
     const popup = popupRef.current;
+
+    function ensureHoverPreviewPopup(anchor: "top" | "bottom") {
+      if (hoverPreviewPopupRef.current && hoverPreviewAnchorRef.current === anchor) {
+        return hoverPreviewPopupRef.current;
+      }
+      hoverPreviewPopupRef.current?.remove();
+      hoverPreviewPopupRef.current = new mapboxgl.Popup({
+        offset: 14,
+        closeButton: false,
+        closeOnClick: false,
+        className: "cameraHoverPreviewPopup",
+        anchor,
+      });
+      hoverPreviewAnchorRef.current = anchor;
+      return hoverPreviewPopupRef.current;
+    }
+
+    function clearHoverPreviewTimer() {
+      if (!hoverPreviewTimerRef.current) return;
+      window.clearTimeout(hoverPreviewTimerRef.current);
+      hoverPreviewTimerRef.current = null;
+    }
+
+    function hideHoverPreview() {
+      if (suppressHoverHideRef.current && hoverPreviewPopupRef.current?.isOpen()) return;
+      clearHoverPreviewTimer();
+      hoverPreviewPopupRef.current?.remove();
+    }
+
+    function bindPopupCloseButton() {
+      if (!popup?.isOpen()) return;
+      const btn = popup.getElement()?.querySelector<HTMLButtonElement>("[data-popup-close]");
+      if (!btn) return;
+      btn.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        popup.remove();
+      };
+    }
+
+    function centerMobilePopup(target?: mapboxgl.Popup | null) {
+      const activePopup = target ?? popup;
+      if (!isMobileRef.current || !activePopup?.isOpen()) return;
+      const popupEl = activePopup.getElement();
+      const mapEl = map.getContainer();
+      if (!popupEl || !mapEl) return;
+
+      const isHoverPreview = popupEl.classList.contains("cameraHoverPreviewPopup");
+
+      const run = () => {
+        const popupRect = popupEl.getBoundingClientRect();
+        const mapRect = mapEl.getBoundingClientRect();
+        const popupCenterX = popupRect.left + popupRect.width / 2;
+        const popupCenterY = popupRect.top + popupRect.height / 2;
+        const mapCenterX = mapRect.left + mapRect.width / 2;
+        const mapCenterY = mapRect.top + mapRect.height / 2;
+        const dx = popupCenterX - mapCenterX;
+        const dy = popupCenterY - mapCenterY;
+
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        if (isHoverPreview) {
+          suppressHoverHideRef.current = true;
+          if (suppressHoverHideTimerRef.current) {
+            window.clearTimeout(suppressHoverHideTimerRef.current);
+          }
+          suppressHoverHideTimerRef.current = window.setTimeout(() => {
+            suppressHoverHideRef.current = false;
+            suppressHoverHideTimerRef.current = null;
+          }, 600);
+          map.once("moveend", () => {
+            suppressHoverHideRef.current = false;
+            if (suppressHoverHideTimerRef.current) {
+              window.clearTimeout(suppressHoverHideTimerRef.current);
+              suppressHoverHideTimerRef.current = null;
+            }
+          });
+        }
+        map.panBy([dx, dy], { duration: 240 });
+      };
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(run);
+      });
+    }
+
+    function keepMobileStreamingPopupOpen() {
+      if (!hasStreamingAccessRef.current) return false;
+      if (!isMobileRef.current || !popup?.isOpen()) return false;
+      const popupEl = popup.getElement();
+      return Boolean(popupEl?.querySelector(".cameraPopupStreamLink"));
+    }
+
+    function getPoiInfo(feature: Feature<Point, any>) {
+      const p = feature.properties || {};
+      const kind = asPoiKind(p.kind);
+
+      if (kind === "camera") {
+        return {
+          kind,
+          title: (p.name || "Câmera sem nome").toString(),
+          meta: `Zona: ${(p.zona_camera || "-").toString()}`,
+          streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
+        };
+      }
+      if (kind === "camera_intel") {
+        return {
+          kind,
+          title: (p.name || "Super Câmera Inteligente").toString(),
+          meta: `Responsável: ${(p.responsavel || "-").toString()}`,
+          streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
+        };
+      }
+      if (kind === "camera_lpr") {
+        return {
+          kind,
+          title: (p.name || "Câmera LPR").toString(),
+          meta: `Direção: ${(p.direction || "-").toString()}`,
+          streamingUrl: "",
+        };
+      }
+      if (kind === "radar") {
+        return {
+          kind,
+          title: (p.logradouro || "Radar sem logradouro").toString(),
+          meta: `Sentido: ${(p.sentido || "-").toString()}`,
+          streamingUrl: "",
+        };
+      }
+      return null;
+    }
+
+    function openStackedPopupIfNeeded(coords: [number, number]) {
+      const key = poiCoordKey(Number(coords[0]), Number(coords[1]));
+      const stack = (poiCoordIndexRef.current.get(key) || []).slice();
+      if (stack.length <= 1) return false;
+
+      const kindLabel: Record<PoiKind, string> = {
+        camera: "Câmera",
+        camera_intel: "Super Câmera Inteligente",
+        camera_lpr: "LPR",
+        radar: "Radar",
+      };
+      const kindChipClass: Record<PoiKind, string> = {
+        camera: "stackPopupChip--camera",
+        camera_intel: "stackPopupChip--intel",
+        camera_lpr: "stackPopupChip--lpr",
+        radar: "stackPopupChip--radar",
+      };
+      const kindItemClass: Record<PoiKind, string> = {
+        camera: "stackPopupTag--camera",
+        camera_intel: "stackPopupTag--intel",
+        camera_lpr: "stackPopupTag--lpr",
+        radar: "stackPopupTag--radar",
+      };
+      const kindItemCardClass: Record<PoiKind, string> = {
+        camera: "stackPopupItem--camera",
+        camera_intel: "stackPopupItem--intel",
+        camera_lpr: "stackPopupItem--lpr",
+        radar: "stackPopupItem--radar",
+      };
+      const kindCodeClass: Record<PoiKind, string> = {
+        camera: "stackPopupCode--camera",
+        camera_intel: "stackPopupCode--intel",
+        camera_lpr: "stackPopupCode--lpr",
+        radar: "stackPopupCode--radar",
+      };
+
+      stack.sort((a, b) => {
+        const aKind = asPoiKind(a.properties?.kind);
+        const bKind = asPoiKind(b.properties?.kind);
+        const aWeight = aKind ? POI_KIND_ORDER.indexOf(aKind) : 999;
+        const bWeight = bKind ? POI_KIND_ORDER.indexOf(bKind) : 999;
+        if (aWeight !== bWeight) return aWeight - bWeight;
+        const aCode = (aKind === "radar" ? a.properties?.codcet : a.properties?.code) || "";
+        const bCode = (bKind === "radar" ? b.properties?.codcet : b.properties?.code) || "";
+        return String(aCode).localeCompare(String(bCode), "pt-BR", { numeric: true });
+      });
+
+      const counts: Record<PoiKind, number> = {
+        camera: 0,
+        camera_intel: 0,
+        camera_lpr: 0,
+        radar: 0,
+      };
+
+      for (const feature of stack) {
+        const kind = asPoiKind(feature.properties?.kind);
+        if (kind) counts[kind] += 1;
+      }
+
+      const chipsHtml = POI_KIND_ORDER
+        .filter((kind) => counts[kind] > 0)
+        .map(
+          (kind) =>
+            `<span class="stackPopupChip ${kindChipClass[kind]}">${escapeHtml(kindLabel[kind])}: ${counts[kind]}</span>`
+        )
+        .join("");
+
+      const itemsHtml = stack
+        .map((feature) => {
+          const info = getPoiInfo(feature);
+          if (!info || !info.kind) return "";
+          const p = feature.properties || {};
+          const code = info.kind === "radar" ? p.codcet || p.numero_equipamento || "-" : p.code || "-";
+          const streamLink =
+            hasStreamingAccessRef.current && info.streamingUrl
+              ? `<a class="cameraPopupStreamLink stackPopupStreamLink" href="${escapeHtml(info.streamingUrl)}" target="_blank" rel="noreferrer">Streaming</a>`
+              : "";
+
+          return `
+            <div class="stackPopupItem ${kindItemCardClass[info.kind]}">
+              <div class="stackPopupItemHead">
+                <span class="stackPopupTag ${kindItemClass[info.kind]}">${escapeHtml(kindLabel[info.kind])}</span>
+                <span class="stackPopupCode ${kindCodeClass[info.kind]}">${escapeHtml(String(code || "-"))}</span>
+              </div>
+              <div class="stackPopupTitle">${escapeHtml(info.title)}</div>
+              <div class="stackPopupMeta">${escapeHtml(info.meta)}</div>
+              ${streamLink}
+            </div>
+          `;
+        })
+        .join("");
+
+      setSelectedCode(null);
+      setSelectedRadar(null);
+      setPanelOpen(false);
+
+      popup
+        ?.setLngLat(coords)
+        .setHTML(`
+          <div class="cameraPopup cameraPopup--stack">
+            <div class="stackPopupHead">
+              <div class="stackPopupHeadRow">
+                <div class="stackPopupHeadText">
+                  <div class="stackPopupKicker">Mesmo ponto no mapa</div>
+                  <div class="stackPopupTitleMain">${stack.length} dispositivos neste local</div>
+                </div>
+                <button type="button" class="stackPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
+              </div>
+            </div>
+            <div class="stackPopupChips">${chipsHtml}</div>
+            <div class="stackPopupList">${itemsHtml}</div>
+          </div>
+        `)
+        .addTo(map);
+
+      bindPopupCloseButton();
+      centerMobilePopup();
+      return true;
+    }
+
+    function markMobileMapGesture() {
+      if (!isMobileRef.current) return;
+      suppressNextMapClickRef.current = true;
+      if (suppressMapClickTimerRef.current) {
+        window.clearTimeout(suppressMapClickTimerRef.current);
+      }
+      suppressMapClickTimerRef.current = window.setTimeout(() => {
+        suppressNextMapClickRef.current = false;
+        suppressMapClickTimerRef.current = null;
+      }, 380);
+    }
+
+    function consumeSuppressedMapClick() {
+      if (!suppressNextMapClickRef.current) return false;
+      suppressNextMapClickRef.current = false;
+      if (suppressMapClickTimerRef.current) {
+        window.clearTimeout(suppressMapClickTimerRef.current);
+        suppressMapClickTimerRef.current = null;
+      }
+      return true;
+    }
 
     function setCursorPointer() {
       map.getCanvas().style.cursor = "pointer";
@@ -1034,19 +1796,65 @@ export default function MapPage() {
       map.getCanvas().style.cursor = "";
     }
 
-    const hoverLayerIds = [
-      LAYERS.cameras_points,
-      LAYERS.cameras_intel_points,
-      LAYERS.cameras_lpr_points,
-      LAYERS.radares_points,
-      LAYERS.clusters,
-    ];
+    const hoverLayerIds = [LAYERS.cameras_intel_points, LAYERS.cameras_lpr_points, LAYERS.radares_points, LAYERS.clusters];
     for (const lid of hoverLayerIds) {
       map.on("mouseenter", lid, setCursorPointer);
       map.on("mouseleave", lid, setCursorDefault);
     }
 
+    map.on("mouseenter", LAYERS.cameras_points, (e) => {
+      setCursorPointer();
+      clearHoverPreviewTimer();
+      if (!hasStreamingAccessRef.current) return;
+      const f: any = e.features?.[0];
+      if (!f) return;
+
+      const p = f.properties || {};
+      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      if (!streamingUrl) return;
+      const coords = (f.geometry as any).coordinates as [number, number];
+      const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
+      const navSafeTop = 96;
+      const previewHeight = 240;
+      const minTop = navSafeTop + 6;
+      const isNearTop = pointY < minTop + previewHeight;
+      const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
+      const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
+
+      hoverPreviewTimerRef.current = window.setTimeout(() => {
+      hoverPreviewPopup
+          ?.setLngLat(coords)
+          .setOffset(isNearTop ? [0, offsetY] : 14)
+          .setHTML(`
+            <div style="width:360px;background:#000;">
+              <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
+                <iframe
+                  src="${escapeHtml(streamingUrl)}"
+                  title="Preview câmera"
+                  loading="lazy"
+                  referrerpolicy="no-referrer"
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                  scrolling="no"
+                  style="position:absolute;top:0;left:0;width:1600px;height:900px;border:0;background:#000;transform:scale(0.225);transform-origin:top left;"
+                ></iframe>
+              </div>
+              <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
+                Para abrir a imagem maior, clique na c&acirc;mera e abra o link.
+              </div>
+            </div>
+          `)
+          .addTo(map);
+        centerMobilePopup(hoverPreviewPopup);
+      }, 120);
+    });
+
+    map.on("mouseleave", LAYERS.cameras_points, () => {
+      setCursorDefault();
+      hideHoverPreview();
+    });
+
     map.on("click", LAYERS.clusters, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
       const coords = (f.geometry as any).coordinates;
@@ -1061,11 +1869,16 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.cameras_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      const allowStreaming = hasStreamingAccessRef.current;
+      setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedCode(p.code || null);
       setSelectedRadar(null);
@@ -1074,28 +1887,53 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              📷 ${escapeHtml(p.name || "")}
-              <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
+          <div class="cameraPopup">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${cameraIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Câmera</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.name || "Câmera sem nome")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.code || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
-              ${escapeHtml(p.city || "")} - ${escapeHtml(p.uf || "")}
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Código</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.code || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Zona</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.zona_camera || "-")}</span>
+              </div>
             </div>
-            <div style="font-size: 12px; opacity:.8;">
-              ${escapeHtml(p.address || "")}
+
+            <div class="cameraPopupStreamBlock">
+              ${allowStreaming && streamingUrl
+                ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+                : ""}
             </div>
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
+      if (allowStreaming && streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
+      const allowStreaming = hasStreamingAccessRef.current;
+      setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedCode(null);
       setSelectedRadar(null);
@@ -1104,31 +1942,51 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              🟠 Super Câmera Inteligente
-              <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
+          <div class="cameraPopup cameraPopup--intel">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${cameraIntelIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Super Câmera Inteligente</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.name || "Super Câmera Inteligente")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.code || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
-              ${escapeHtml(p.name || "-")}
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Responsável</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.responsavel || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Direção</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
+              </div>
             </div>
-            <div style="font-size: 12px; opacity:.8;">
-              Direção: ${escapeHtml(p.direction || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              IP: ${escapeHtml(p.ip || "-")}
+
+            <div class="cameraPopupStreamBlock">
+              ${allowStreaming && streamingUrl
+                ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+                : ""}
             </div>
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
+      if (allowStreaming && streamingUrl) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedCode(null);
       setSelectedRadar(null);
@@ -1137,31 +1995,44 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              🟢 Câmera LPR
-              <span style="opacity:.65;font-weight:700">(${escapeHtml(p.code || "")})</span>
+          <div class="cameraPopup cameraPopup--lpr">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${cameraLprIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Câmera LPR</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.name || "Câmera LPR")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.code || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
-              ${escapeHtml(p.name || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              Direção: ${escapeHtml(p.direction || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              IP: ${escapeHtml(p.ip || "-")}
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Bairro</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(getLprNeighborhood(p) || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Direção</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
+              </div>
             </div>
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
     });
 
     map.on("click", LAYERS.radares_points, (e) => {
+      hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
+      setSelectionRing(coords[0], coords[1]);
+      if (openStackedPopupIfNeeded(coords)) return;
 
       setSelectedRadar(p.codcet || null);
       setSelectedCode(null);
@@ -1170,27 +2041,58 @@ export default function MapPage() {
       popup
         ?.setLngLat(coords)
         .setHTML(`
-          <div style="font-family: system-ui; width: 100%; max-width: 100%;">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-              📡 Radar <span style="opacity:.75">(${escapeHtml(p.codcet || "")})</span>
+          <div class="cameraPopup cameraPopup--radar">
+            <button type="button" class="cameraPopupCloseBtn" data-popup-close aria-label="Fechar popup">×</button>
+            <div class="cameraPopupHead">
+              <div class="cameraPopupTitleWrap">
+                <div class="cameraPopupKickerRow">
+                  <img src="${radarIcon}" alt="" class="cameraPopupIcon" />
+                  <div class="cameraPopupKicker">Radar</div>
+                </div>
+                <div class="cameraPopupTitle">${escapeHtml(p.logradouro || "Radar sem logradouro")}</div>
+              </div>
+              <span class="cameraPopupCode">${escapeHtml(p.codcet || "-")}</span>
             </div>
-            <div style="font-size: 12px; opacity:.85; margin-bottom: 4px;">
-              ${escapeHtml(p.logradouro || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8;">
-              Bairro: ${escapeHtml(p.bairro || "-")} • Sentido: ${escapeHtml(p.sentido || "-")}
-            </div>
-            <div style="font-size: 12px; opacity:.8; margin-top:6px;">
-              Empresa: ${escapeHtml(p.empresa || "-")}
-              • Vel: ${p.velofisc ?? "-"}
-              • Equip: ${escapeHtml(p.numero_equipamento || "-")}
+
+            <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Bairro</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.bairro || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Sentido</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.sentido || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Empresa</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.empresa || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Vel</span>
+                <span class="cameraPopupInfoValue">${p.velofisc ?? "-"}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Equip</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.numero_equipamento || "-")}</span>
+              </div>
             </div>
           </div>
         `)
         .addTo(map);
+      bindPopupCloseButton();
     });
 
     map.on("click", (e) => {
+      hideHoverPreview();
+      if (areaDrawModeRef.current) {
+        const lng = Number(e.lngLat?.lng);
+        const lat = Number(e.lngLat?.lat);
+        if (Number.isFinite(lng) && Number.isFinite(lat)) {
+          setAreaDrawPoints((prev) => [...prev, [lng, lat]]);
+        }
+        return;
+      }
+      if (consumeSuppressedMapClick()) return;
       const features = map.queryRenderedFeatures(e.point, {
         layers: [
           LAYERS.cameras_points,
@@ -1200,7 +2102,9 @@ export default function MapPage() {
           LAYERS.clusters,
         ],
       });
-      if (!features || features.length === 0) popup?.remove();
+      if (!features || features.length === 0) {
+        if (!keepMobileStreamingPopupOpen()) popup?.remove();
+      }
 
       if (panelRef.current !== null) {
         setPanel(null);
@@ -1211,6 +2115,8 @@ export default function MapPage() {
     });
 
     const closeDockOnMove = () => {
+      hideHoverPreview();
+      markMobileMapGesture();
       if (isMobileRef.current) setDockOpen(false);
     };
     map.on("dragstart", closeDockOnMove);
@@ -1250,7 +2156,7 @@ export default function MapPage() {
     }
 
     try {
-      const data = await fetchJson<Me>(`${API_BASE}/api/v1/auth/me`, {
+      const data = await fetchJson<Me>(`${API_BASE}/users/me`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
@@ -1314,7 +2220,8 @@ export default function MapPage() {
         try {
           const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
           if (!active) return;
-          setRispGeo(data);
+          const normalized = normalizeCodeGeoByName(data, ["name", "risp", "RISP"]);
+          setRispGeo(keepOnlyCodes(normalized, [1, 2]));
           return;
         } catch (e) {
           console.warn("Falha ao carregar RISP de", url, e);
@@ -1338,7 +2245,7 @@ export default function MapPage() {
         try {
           const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
           if (!active) return;
-          setAispGeo(data);
+          setAispGeo(normalizeCodeGeoByName(data, ["name", "aisp", "AISP"]));
           return;
         } catch (e) {
           console.warn("Falha ao carregar AISP de", url, e);
@@ -1362,7 +2269,7 @@ export default function MapPage() {
         try {
           const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
           if (!active) return;
-          setCispGeo(data);
+          setCispGeo(normalizeCodeGeoByName(data, ["name", "cisp", "CISP"]));
           return;
         } catch (e) {
           console.warn("Falha ao carregar CISP de", url, e);
@@ -1443,6 +2350,7 @@ export default function MapPage() {
       applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
       updateGpsData(map, gps, gpsOnRef.current);
       updateSearchPin(map, searchPin);
+      updateAreaDrawData(map, areaDrawPoints);
     });
 
     return () => {
@@ -1451,6 +2359,10 @@ export default function MapPage() {
       searchMarkerRef.current?.remove();
       searchMarkerRef.current = null;
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
+      if (suppressMapClickTimerRef.current) {
+        window.clearTimeout(suppressMapClickTimerRef.current);
+        suppressMapClickTimerRef.current = null;
+      }
       handlersBoundRef.current = false;
       map.remove();
       mapRef.current = null;
@@ -1461,7 +2373,7 @@ export default function MapPage() {
   async function loadCameras() {
     setLoadingCameras(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/cameras`, {
+      const data = await fetchJson<any>(`${API_BASE}/cameras`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -1471,11 +2383,11 @@ export default function MapPage() {
       const list: Camera[] = Array.isArray(data) ? data : [];
 
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
       setCameras(normalized);
@@ -1490,7 +2402,7 @@ export default function MapPage() {
   async function loadCamerasIntel() {
     setLoadingCamerasIntel(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/cameras-inteligentes`, {
+      const data = await fetchJson<any>(`${API_BASE}/cameras-inteligentes`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -1500,15 +2412,20 @@ export default function MapPage() {
       const list: CameraIntel[] = Array.isArray(data) ? data : [];
 
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
       setCamerasIntel(normalized);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (!hasStreamingAccess && (msg.startsWith("401") || msg.startsWith("403"))) {
+        setCamerasIntel([]);
+        return;
+      }
       console.error(e);
       alert(e?.message || "Falha ao carregar câmeras inteligentes");
     } finally {
@@ -1519,7 +2436,7 @@ export default function MapPage() {
   async function loadCamerasLpr() {
     setLoadingCamerasLpr(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/cameras-lpr`, {
+      const data = await fetchJson<any>(`${API_BASE}/cameras-lpr`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -1529,15 +2446,21 @@ export default function MapPage() {
       const list: CameraLpr[] = Array.isArray(data) ? data : [];
 
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          const neighborhood = getLprNeighborhood(c);
+          return { ...c, neighborhood, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
       setCamerasLpr(normalized);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (!hasStreamingAccess && (msg.startsWith("401") || msg.startsWith("403"))) {
+        setCamerasLpr([]);
+        return;
+      }
       console.error(e);
       alert(e?.message || "Falha ao carregar câmeras LPR");
     } finally {
@@ -1548,7 +2471,7 @@ export default function MapPage() {
   async function loadRadares() {
     setLoadingRadares(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/api/v1/radares`, {
+      const data = await fetchJson<any>(`${API_BASE}/radares`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -1574,13 +2497,205 @@ export default function MapPage() {
     }
   }
 
+  function resolveApiUrl(pathOrUrl: string) {
+    if (!pathOrUrl) return "";
+    if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+    const normalizedPath = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+    return `${API_BASE}${normalizedPath}`;
+  }
+
+  async function downloadReportFile(pathOrUrl: string, fallbackName: string) {
+    const url = resolveApiUrl(pathOrUrl);
+    if (!url) throw new Error("URL de download inválida.");
+
+    const liveAccessToken =
+      sessionStorage.getItem("access_token") || localStorage.getItem("access_token") || accessToken;
+    const res = await fetch(url, {
+      headers: {
+        ...(liveAccessToken ? { Authorization: `Bearer ${liveAccessToken}` } : {}),
+      },
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Falha no download (${res.status}) ${txt || res.statusText}`);
+    }
+
+    const disposition = res.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^\";]+)/i);
+    const filename = match ? decodeURIComponent(match[1].replace(/"/g, "").trim()) : fallbackName;
+
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename || fallbackName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  }
+
+  async function waitForReportCompletion(reportId: string, maxAttempts = 20, intervalMs = 1500) {
+    for (let i = 0; i < maxAttempts; i++) {
+      const detail = await fetchJson<any>(`${API_BASE}/reports/${reportId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      const status = String(detail?.status || "").toLowerCase();
+      if (status === "completed" && detail?.download_url) return detail;
+      if (status === "failed" || status === "error") {
+        throw new Error(detail?.message || "Falha ao gerar relatório.");
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+    }
+    throw new Error("Relatório ainda em processamento. Tente novamente em instantes.");
+  }
+
+  async function downloadBairroReport() {
+    if (!selectedBairro) return;
+    if (!selectedBairroFeature?.geometry) {
+      setBairroReportMsg("Geometria do bairro não disponível para gerar relatório.");
+      return;
+    }
+    setBairroReportLoading(true);
+    setBairroReportMsg("Solicitando geração do relatório...");
+    try {
+      const payload = {
+        bairro: selectedBairro,
+        geometry: selectedBairroFeature.geometry,
+        selected_ids: selectedBairroSelectionIds,
+        layers: ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"],
+        include_inactive: false,
+        format: "pdf",
+      };
+
+      const created = await fetchJson<any>(`${API_BASE}/reports/bairros`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let downloadUrl = created?.download_url as string | undefined;
+
+      if (!downloadUrl && created?.id) {
+        setBairroReportMsg("Gerando PDF no servidor...");
+        const detail = await waitForReportCompletion(String(created.id));
+        downloadUrl = detail?.download_url;
+      }
+
+      if (!downloadUrl) {
+        throw new Error("Relatório criado, mas sem URL de download.");
+      }
+
+      const safeBairro = selectedBairro.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").toLowerCase();
+      await downloadReportFile(downloadUrl, `relatorio_bairro_${safeBairro}.pdf`);
+      setBairroReportMsg("PDF baixado com sucesso.");
+    } catch (e: any) {
+      setBairroReportMsg(e?.message || "Falha ao gerar relatório.");
+    } finally {
+      setBairroReportLoading(false);
+    }
+  }
+
+  function areaGeometryFromPoints(points: Array<[number, number]>) {
+    if (points.length < 3) return null;
+    const ring = [...points, points[0]];
+    return {
+      type: "Polygon",
+      coordinates: [ring],
+    };
+  }
+
+  function clearAreaDrawing() {
+    setAreaDrawPoints([]);
+    setAreaReportMsg(null);
+  }
+
+  function toggleAreaDrawing() {
+    setAreaToolsOpen(true);
+    setAreaDrawMode((prev) => !prev);
+    setAreaReportMsg(null);
+  }
+
+  function removeLastAreaPoint() {
+    setAreaDrawPoints((prev) => prev.slice(0, -1));
+    setAreaReportMsg(null);
+  }
+
+  async function downloadAreaReport() {
+    const geometry = areaGeometryFromPoints(areaDrawPoints);
+    if (!geometry) {
+      setAreaReportMsg("Desenhe uma área com pelo menos 3 pontos.");
+      return;
+    }
+
+    setAreaReportLoading(true);
+    setAreaReportMsg("Solicitando geração do relatório...");
+    try {
+      const payload = {
+        name: `Relatório de Área - ${new Date().toISOString()}`,
+        geometry,
+        layers: ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"],
+        include_inactive: false,
+        format: "pdf",
+      };
+
+      const created = await fetchJson<any>(`${API_BASE}/reports/areas`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let downloadUrl = created?.download_url as string | undefined;
+      if (!downloadUrl && created?.id) {
+        setAreaReportMsg("Gerando PDF no servidor...");
+        const detail = await waitForReportCompletion(String(created.id));
+        downloadUrl = detail?.download_url;
+      }
+      if (!downloadUrl) {
+        throw new Error("Relatório criado, mas sem URL de download.");
+      }
+
+      await downloadReportFile(downloadUrl, "relatorio_area_desenhada.pdf");
+      setAreaReportMsg("PDF baixado com sucesso.");
+    } catch (e: any) {
+      setAreaReportMsg(e?.message || "Falha ao gerar relatório da área.");
+    } finally {
+      setAreaReportLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadCameras();
-    loadCamerasIntel();
-    loadCamerasLpr();
     loadRadares();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    loadCamerasIntel();
+    loadCamerasLpr();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (authLoading || !accessToken) return;
+    if (listMode === "inteligentes" && !loadingCamerasIntel && camerasIntel.length === 0) {
+      loadCamerasIntel();
+    }
+    if (listMode === "lpr" && !loadingCamerasLpr && camerasLpr.length === 0) {
+      loadCamerasLpr();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listMode, authLoading, accessToken, loadingCamerasIntel, loadingCamerasLpr, camerasIntel.length, camerasLpr.length]);
 
   useEffect(() => {
     if (!gpsOn) return;
@@ -1633,6 +2748,21 @@ export default function MapPage() {
     [cameras, camerasIntel, camerasLpr, radares, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
   );
 
+  useEffect(() => {
+    const index = new Map<string, Feature<Point, any>[]>();
+    for (const feature of poisGeo.features) {
+      const key = featureCoordKey(feature);
+      if (!key) continue;
+      const atCoord = index.get(key);
+      if (atCoord) {
+        atCoord.push(feature);
+      } else {
+        index.set(key, [feature]);
+      }
+    }
+    poiCoordIndexRef.current = index;
+  }, [poisGeo]);
+
   const bairrosList = useMemo(() => {
     if (!bairrosGeo?.features?.length) return [];
     const names = new Set<string>();
@@ -1648,7 +2778,7 @@ export default function MapPage() {
     const feats = rispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.RISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.RISP ?? (f.properties as any)?.risp);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
@@ -1659,7 +2789,7 @@ export default function MapPage() {
     const feats = aispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.AISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.AISP ?? (f.properties as any)?.aisp);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
@@ -1670,7 +2800,7 @@ export default function MapPage() {
     const feats = cispGeo?.features as Feature<Polygon | MultiPolygon, any>[] | undefined;
     if (!feats) return [];
     for (const f of feats) {
-      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.CISP);
+      const v = Number((f.properties as any)?.name ?? (f.properties as any)?.CISP ?? (f.properties as any)?.cisp);
       if (Number.isFinite(v)) set.add(v);
     }
     return Array.from(set).sort((a, b) => a - b);
@@ -1732,13 +2862,100 @@ export default function MapPage() {
     };
   }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
 
+  const selectedBairroSelectionIds = useMemo(() => {
+    if (!selectedBairroFeature?.geometry) {
+      return {
+        cameras: [] as string[],
+        super_cameras: [] as string[],
+        lpr: [] as string[],
+        radar: [] as string[],
+      };
+    }
+
+    const geom = selectedBairroFeature.geometry;
+    const bbox = getGeometryBbox(geom);
+    if (!bbox) {
+      return {
+        cameras: [] as string[],
+        super_cameras: [] as string[],
+        lpr: [] as string[],
+        radar: [] as string[],
+      };
+    }
+
+    const inBbox = (lng: number, lat: number) =>
+      lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
+
+    const camerasIds: string[] = [];
+    const superCameraIds: string[] = [];
+    const lprIds: string[] = [];
+    const radarIds: string[] = [];
+
+    for (const c of cameras) {
+      const lng = Number(c.lng);
+      const lat = Number(c.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCode = String((c as any).id || c.code || "").trim();
+      if (idOrCode) camerasIds.push(idOrCode);
+    }
+
+    for (const c of camerasIntel) {
+      const lng = Number(c.lng);
+      const lat = Number(c.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCode = String((c as any).id || c.code || "").trim();
+      if (idOrCode) superCameraIds.push(idOrCode);
+    }
+
+    for (const c of camerasLpr) {
+      const lng = Number(c.lng);
+      const lat = Number(c.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCode = String((c as any).id || c.code || "").trim();
+      if (idOrCode) lprIds.push(idOrCode);
+    }
+
+    for (const r of radares) {
+      const lng = Number(r.lng);
+      const lat = Number(r.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (!pointInGeometry([lng, lat], geom)) continue;
+      const idOrCodcet = String((r as any).id || r.codcet || "").trim();
+      if (idOrCodcet) radarIds.push(idOrCodcet);
+    }
+
+    return {
+      cameras: camerasIds,
+      super_cameras: superCameraIds,
+      lpr: lprIds,
+      radar: radarIds,
+    };
+  }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!map.isStyleLoaded()) return;
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updatePoisData(map, poisGeo);
+      return;
+    }
 
-    ensureSourcesAndLayers(map);
-    updatePoisData(map, poisGeo);
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updatePoisData(map, poisGeo);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poisGeo]);
 
@@ -1916,16 +3133,44 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchPin]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (map.isStyleLoaded()) {
+      ensureSourcesAndLayers(map);
+      updateAreaDrawData(map, areaDrawPoints);
+      return;
+    }
+    const handleLoad = () => {
+      ensureSourcesAndLayers(map);
+      updateAreaDrawData(map, areaDrawPoints);
+    };
+    map.once("load", handleLoad);
+    return () => {
+      map.off("load", handleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [areaDrawPoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = areaDrawMode ? "crosshair" : "";
+    return () => {
+      if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
+    };
+  }, [areaDrawMode]);
+
   async function changePassword() {
     setPwMsg(null);
 
     if (!pwOld || !pwNew || !pwNew2) return setPwMsg("Preencha todos os campos.");
     if (pwNew !== pwNew2) return setPwMsg("As senhas novas não batem.");
-    if (pwNew.length < 6) return setPwMsg("Senha muito curta (mínimo 6).");
+    if (pwNew.length < 8) return setPwMsg("Senha muito curta (mínimo 8).");
 
     setPwLoading(true);
     try {
-      await fetchJson(`${API_BASE}/api/v1/auth/change-password`, {
+      await fetchJson(`${API_BASE}/users/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2015,16 +3260,59 @@ export default function MapPage() {
     }
 
     try {
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-        q
-      )}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=pt&country=BR&bbox=${rioBbox.west},${rioBbox.south},${rioBbox.east},${rioBbox.north}`;
-      const data = await fetchJson<any>(url);
-      const f = data?.features?.[0];
-      if (!f || !Array.isArray(f.center)) {
+      const baseUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`;
+      const proximity = "-43.2096,-22.9035";
+      const commonParams = {
+        access_token: MAPBOX_TOKEN,
+        language: "pt",
+        country: "BR",
+        bbox: `${rioBbox.west},${rioBbox.south},${rioBbox.east},${rioBbox.north}`,
+        proximity,
+      } as const;
+
+      const buildUrl = (params: Record<string, string | number | boolean>) => {
+        const search = new URLSearchParams();
+        for (const [k, v] of Object.entries({ ...commonParams, ...params })) {
+          if (typeof v === "boolean") search.set(k, v ? "true" : "false");
+          else search.set(k, String(v));
+        }
+        return `${baseUrl}?${search.toString()}`;
+      };
+
+      const looksLikeAddressWithNumber = /\d/.test(q) && /[A-Za-zÀ-ÿ]/.test(q);
+
+      const fetchFeatures = async (params: Record<string, string | number | boolean>) => {
+        const data = await fetchJson<any>(buildUrl(params));
+        return Array.isArray(data?.features) ? data.features : [];
+      };
+
+      const pickFeature = (features: any[]) => {
+        if (!features.length) return null;
+        const byType = (t: string) => features.find((f) => Array.isArray(f.place_type) && f.place_type.includes(t));
+        return byType("address") || byType("poi") || byType("street") || features[0];
+      };
+
+      let features: any[] = [];
+      if (looksLikeAddressWithNumber) {
+        features = await fetchFeatures({ types: "address", autocomplete: false, limit: 5 });
+        if (!features.length) features = await fetchFeatures({ types: "address", autocomplete: true, limit: 5 });
+        if (!features.length) features = await fetchFeatures({ limit: 5 });
+      } else {
+        features = await fetchFeatures({ limit: 3 });
+      }
+
+      const f = pickFeature(features);
+      const center = Array.isArray(f?.center)
+        ? f.center
+        : Array.isArray(f?.geometry?.coordinates)
+        ? f.geometry.coordinates
+        : null;
+
+      if (!f || !Array.isArray(center)) {
         setSearchErr("Nenhum resultado.");
         return;
       }
-      const [lng, lat] = f.center;
+      const [lng, lat] = center;
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         setSearchErr("Resultado inválido.");
         return;
@@ -2034,7 +3322,9 @@ export default function MapPage() {
         return;
       }
       setSearchPin({ lng, lat });
-      flyToPoint(lng, lat, 16);
+      const isAddress =
+        Array.isArray(f.place_type) && (f.place_type.includes("address") || f.place_type.includes("poi"));
+      flyToPoint(lng, lat, isAddress ? 17.5 : 16);
       searchTimerRef.current = window.setTimeout(() => setSearchPin(null), 4000);
     } catch (e: any) {
       setSearchErr(e?.message || "Falha ao buscar endereço.");
@@ -2055,7 +3345,7 @@ export default function MapPage() {
     if (listMode === "inteligentes") {
       if (!q) return camerasIntel;
       return camerasIntel.filter((c) => {
-        const hay = `${c.name} ${c.code} ${c.ip ?? ""} ${c.direction ?? ""}`.toLowerCase();
+        const hay = `${c.name} ${c.code} ${c.responsavel ?? ""} ${(c as any).responsavel ?? ""} ${c.direction ?? ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -2063,7 +3353,7 @@ export default function MapPage() {
     if (listMode === "lpr") {
       if (!q) return camerasLpr;
       return camerasLpr.filter((c) => {
-        const hay = `${c.name} ${c.code} ${c.ip ?? ""} ${c.direction ?? ""}`.toLowerCase();
+        const hay = `${c.name} ${c.code} ${getLprNeighborhood(c)} ${c.direction ?? ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -2108,6 +3398,17 @@ export default function MapPage() {
     };
   }, [filtered, listMode, pageCameras, pageIntel, pageLpr, pageRadares]);
 
+  function triggerPagePulse() {
+    if (pagePulseTimerRef.current) {
+      window.clearTimeout(pagePulseTimerRef.current);
+    }
+    setPagePulse(true);
+    pagePulseTimerRef.current = window.setTimeout(() => {
+      setPagePulse(false);
+      pagePulseTimerRef.current = null;
+    }, 700);
+  }
+
   const mobileCount =
     listMode === "cameras"
       ? mobileCountCameras
@@ -2120,7 +3421,7 @@ export default function MapPage() {
   const listItems = isMobile ? filtered.slice(0, mobileCount) : pagedItems;
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 860px)");
+    const mq = window.matchMedia("(max-width: 860px), (max-height: 500px) and (pointer: coarse)");
     const update = () => setIsMobile(mq.matches);
     update();
     if (mq.addEventListener) mq.addEventListener("change", update);
@@ -2154,6 +3455,54 @@ export default function MapPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages, setPage]);
 
+  function animateListScrollToTop(el: HTMLDivElement) {
+    if (listScrollAnimFrameRef.current) {
+      window.cancelAnimationFrame(listScrollAnimFrameRef.current);
+      listScrollAnimFrameRef.current = null;
+    }
+
+    const startTop = el.scrollTop;
+    if (startTop <= 0) return;
+
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduceMotion) {
+      el.scrollTop = 0;
+      return;
+    }
+
+    const durationMs = 180;
+    const startedAt = performance.now();
+
+    const step = (now: number) => {
+      const t = Math.min(1, (now - startedAt) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.scrollTop = Math.round(startTop * (1 - eased));
+
+      if (t < 1) {
+        listScrollAnimFrameRef.current = window.requestAnimationFrame(step);
+      } else {
+        el.scrollTop = 0;
+        listScrollAnimFrameRef.current = null;
+      }
+    };
+
+    listScrollAnimFrameRef.current = window.requestAnimationFrame(step);
+  }
+
+  useEffect(() => {
+    const el = isMobile ? listScrollMobileRef.current : listScrollRef.current;
+    if (!el) return;
+    animateListScrollToTop(el);
+  }, [page, listMode, isMobile]);
+
+  useEffect(() => {
+    return () => {
+      if (listScrollAnimFrameRef.current) {
+        window.cancelAnimationFrame(listScrollAnimFrameRef.current);
+      }
+    };
+  }, []);
+
   useMemo(() => {
     if (!selectedCode) return null;
     return cameras.find((c) => c.code === selectedCode) || null;
@@ -2164,14 +3513,304 @@ export default function MapPage() {
     return radares.find((r) => r.codcet === selectedRadar) || null;
   }, [selectedRadar, radares]);
 
-  const panelWidth = panel === "admin" ? 820 : 520;
-  const panelMaxHeight = panel === "admin" || panel === "civitas" ? "74vh" : "56vh";
+  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1080 : 560;
+  const panelSideInset = panel === "civitas" ? 8 : 16;
+  const panelMaxHeight = panel === "admin" ? "74vh" : "56vh";
+  const listTitle =
+    listMode === "cameras"
+      ? "Câmeras"
+      : listMode === "inteligentes"
+      ? "Super Câmeras Inteligentes"
+      : listMode === "lpr"
+      ? "Câmeras LPR"
+      : "Radares";
+  const listCountLabel =
+    listMode === "cameras"
+      ? loadingCameras
+        ? "Carregando..."
+        : `${cameras.length}`
+      : listMode === "inteligentes"
+      ? loadingCamerasIntel
+        ? "Carregando..."
+        : `${camerasIntel.length}`
+      : listMode === "lpr"
+      ? loadingCamerasLpr
+        ? "Carregando..."
+        : `${camerasLpr.length}`
+      : loadingRadares
+      ? "Carregando..."
+      : `${radares.length}`;
+  const listHeaderLabel = `${listTitle} - ${listCountLabel}`;
+
+  const renderCivitasPanel = () => {
+    const toolsTable = (
+      <div
+        style={{
+          padding: 12,
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.96)",
+          border: "1px solid rgba(0,0,0,0.10)",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: !isMobile ? "100%" : undefined,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>Quadro Resumo das Ferramentas da CIVITAS</div>
+        {!isMobile ? (
+          <div style={{ width: "100%", overflowX: "auto", flex: 1, display: "flex" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "separate",
+                borderSpacing: 0,
+                tableLayout: "fixed",
+                fontSize: 12,
+                lineHeight: 1.35,
+              }}
+            >
+              <colgroup>
+                <col style={{ width: "27%" }} />
+                <col style={{ width: "73%" }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "rgba(241,245,249,0.96)",
+                      borderTop: "1px solid rgba(15,23,42,0.12)",
+                      borderLeft: "1px solid rgba(15,23,42,0.12)",
+                      borderBottom: "1px solid rgba(15,23,42,0.12)",
+                    }}
+                  >
+                    Ferramenta
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "rgba(241,245,249,0.96)",
+                      borderTop: "1px solid rgba(15,23,42,0.12)",
+                      borderRight: "1px solid rgba(15,23,42,0.12)",
+                      borderBottom: "1px solid rgba(15,23,42,0.12)",
+                    }}
+                  >
+                    Resumo de uso
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {civitasToolsSummary.map((row, idx) => {
+                  const rowBg = idx % 2 === 0 ? "rgba(248,250,252,0.9)" : "rgba(255,255,255,0.96)";
+                  return (
+                    <tr key={row.tool}>
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          fontWeight: 900,
+                          color: "#0f172a",
+                          verticalAlign: "top",
+                          background: rowBg,
+                          borderLeft: "1px solid rgba(15,23,42,0.12)",
+                          borderBottom: "1px solid rgba(15,23,42,0.12)",
+                        }}
+                      >
+                        {row.tool}
+                      </td>
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          verticalAlign: "top",
+                          color: "#1f2937",
+                          background: rowBg,
+                          borderRight: "1px solid rgba(15,23,42,0.12)",
+                          borderBottom: "1px solid rgba(15,23,42,0.12)",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <div>
+                            <strong style={{ fontWeight: 900 }}>O que é:</strong> {row.what}
+                          </div>
+                          <div>
+                            <strong style={{ fontWeight: 900 }}>Quando usar:</strong> {row.when}
+                          </div>
+                          <div>
+                            <strong style={{ fontWeight: 900 }}>Resultado:</strong> {row.result}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {civitasToolsSummary.map((row) => (
+              <div
+                key={row.tool}
+                style={{
+                  border: "1px solid rgba(0,0,0,0.14)",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "rgba(255,255,255,0.98)",
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{row.tool}</div>
+                <div style={{ fontSize: 12, lineHeight: 1.4, wordBreak: "break-word" }}>
+                  <strong>O que é:</strong> {row.what}
+                </div>
+                <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                  <strong>Quando utilizar:</strong> {row.when}
+                </div>
+                <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
+                  <strong>Resultado:</strong> {row.result}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+
+    const actionButtons = (
+      <div
+        style={{
+          padding: 12,
+          borderRadius: 16,
+          background: "linear-gradient(155deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))",
+          border: "1px solid rgba(30,41,59,0.14)",
+          boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>Ações rápidas</div>
+        <div style={{ fontSize: 12, lineHeight: 1.45, color: "rgba(15,23,42,0.86)", marginBottom: 10 }}>
+          Use os botões abaixo para abrir o contato oficial da CIVITAS e baixar o modelo de ofício.
+        </div>
+        <div style={{ display: "grid", gap: 20 }}>
+          <a
+            href={civitasContactHref}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "10px 12px",
+              borderRadius: 12,
+              textDecoration: "none",
+              fontWeight: 900,
+              color: "#fff",
+              border: "none",
+              background: "linear-gradient(135deg, #00c0f3, #0a284b)",
+              boxShadow: "0 10px 18px rgba(10,40,75,0.30)",
+            }}
+          >
+            <Mail size={15} />
+            Entrar em contato
+          </a>
+          <a
+            href={civitasModelPdfHref}
+            download
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "10px 12px",
+              borderRadius: 12,
+              textDecoration: "none",
+              fontWeight: 900,
+              whiteSpace: "nowrap",
+              color: "#0f172a",
+              border: "none",
+              background: "linear-gradient(135deg, rgba(254,243,199,0.96), rgba(255,251,235,0.98))",
+              boxShadow: "0 8px 16px rgba(245,158,11,0.22)",
+            }}
+          >
+            <FileDown size={15} />
+            Modelo de ofício
+          </a>
+        </div>
+      </div>
+    );
+
+    const requestGuide = (
+      <div
+        style={{
+          padding: 12,
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.95)",
+          border: "1px solid rgba(0,0,0,0.10)",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>Como solicitar o uso das funcionalidades da CIVITAS</div>
+        <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", textAlign: "justify", textJustify: "inter-word" }}>
+          Para usufruir das funcionalidades disponíveis no App Civitas e dos relatórios analíticos associados ao cerco
+          eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em lei,{" "}
+          <a
+            href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "#1d4ed8", textDecoration: "underline", fontWeight: 800 }}
+          >
+            DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
+          </a>
+          .
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "#111827",
+            marginTop: 8,
+            textAlign: "justify",
+            textJustify: "inter-word",
+          }}
+        >
+          As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade competente do
+          órgão e enviado ao endereço <strong style={{ fontWeight: 900 }}>{civitasContactEmail}</strong>. O documento deve
+          conter o número e a data do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável
+          (e-mail e telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
+          demais elementos relevantes para a análise da demanda.
+        </div>
+      </div>
+    );
+
+    return (
+      <>
+        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>{civitasPanelTitle}</div>
+
+        {!isMobile ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "minmax(0, 1.68fr) minmax(320px, 1fr)",
+              alignItems: "stretch",
+            }}
+          >
+            {toolsTable}
+            <div style={{ display: "grid", gap: 12 }}>
+              {actionButtons}
+              {requestGuide}
+            </div>
+          </div>
+        ) : (
+          <div className="scrollbarHidden" style={{ display: "grid", gap: 10, maxHeight: "62vh", overflow: "auto" }}>
+            {actionButtons}
+            {toolsTable}
+            {requestGuide}
+          </div>
+        )}
+      </>
+    );
+  };
 
   return (
-    <div
-      className={panelOpen || mobileMenuOpen ? "menuOpen" : undefined}
-      style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden" }}
-    >
+    <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""}`}>
       <div
         ref={mapContainerRef}
         onClick={() => {
@@ -2261,6 +3900,54 @@ export default function MapPage() {
               <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
               <div>LPR: {selectedBairroStats.lpr}</div>
               <div>Radares: {selectedBairroStats.radares}</div>
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="btnGhost"
+                  onClick={downloadBairroReport}
+                  disabled={bairroReportLoading}
+                  style={{
+                    width: "100%",
+                    borderRadius: 10,
+                    opacity: bairroReportLoading ? 0.7 : 1,
+                  }}
+                >
+                  {bairroReportLoading ? "Gerando PDF..." : "Baixar PDF"}
+                </button>
+                {bairroReportMsg && (
+                  <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.8)" }}>
+                    {bairroReportMsg}
+                  </div>
+                )}
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 4,
+                  fontSize: 9,
+                  lineHeight: 1.35,
+                  color: "rgba(15,23,42,0.75)",
+                }}
+              >
+                <span
+                  title="Alguns equipamentos podem compartilhar a mesma coordenada."
+                  style={{
+                    display: "inline-block",
+                    marginTop: 1,
+                    fontWeight: 900,
+                    fontSize: 10,
+                    lineHeight: 1,
+                  }}
+                >
+                  *
+                </span>
+                <div>
+                  Podem existir câmeras, radares, LPR e Super Câmeras Inteligentes na mesma coordenada.
+                  <br />
+                  Por isso, o total pode não refletir pontos únicos no mapa.
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -2268,13 +3955,13 @@ export default function MapPage() {
         {!dockOpen && (
           <div
             className="dockHandle"
-            title="Abrir controles"
+            title="Abrir camadas"
             onClick={() => {
               setDockOpen(true);
               bumpDockAutoHide();
             }}
           >
-            Controles
+            CAMADAS
           </div>
         )}
 
@@ -2294,13 +3981,13 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={cameraIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={cameraIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>Câmeras</span>
                   <span className="chipLegend">Gravação de imagens</span>
                 </span>
-                <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#ef4444" }} />
+                <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCameras ? "ON" : "OFF"}</span>
             </button>
@@ -2316,13 +4003,13 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={cameraIntelIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={cameraIntelIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>Super Câmeras Inteligentes</span>
                   <span className="chipLegend">Gravações e analíticos de IA</span>
                 </span>
-                <span className="chipDot" style={{ background: showCamerasIntel ? "#f59e0b" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showCamerasIntel ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCamerasIntel ? "ON" : "OFF"}</span>
             </button>
@@ -2338,13 +4025,13 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={cameraLprIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={cameraLprIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>LPR</span>
                   <span className="chipLegend">Leitura de radar</span>
                 </span>
-                <span className="chipDot" style={{ background: showCamerasLpr ? "#22d3ee" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showCamerasLpr ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCamerasLpr ? "ON" : "OFF"}</span>
             </button>
@@ -2360,13 +4047,13 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={radarIcon} alt="" style={{ width: 16, height: 16 }} />
+                  <img src={radarIcon} alt="" />
                 </span>
                 <span className="chipText">
                   <span>Radares</span>
                   <span className="chipLegend">Leitura de radar</span>
                 </span>
-                <span className="chipDot" style={{ background: showRadares ? "#3b82f6" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showRadares ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showRadares ? "ON" : "OFF"}</span>
             </button>
@@ -2380,7 +4067,9 @@ export default function MapPage() {
               title={showBairros ? "Bairros ON" : "Bairros OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 12 }}>BA</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <Building2 size={15} strokeWidth={2.1} />
+                </span>
                 <span>Bairros</span>
                 <span className="chipDot" style={{ background: showBairros ? "#22c55e" : "#9ca3af" }} />
               </span>
@@ -2399,6 +4088,7 @@ export default function MapPage() {
                   style={{ ...inputStyle(), padding: "8px 10px", borderRadius: 12 }}
                 />
                 <div
+                  className="scrollbarHidden"
                   style={{
                     border: "1px solid rgba(0,0,0,0.08)",
                     borderRadius: 12,
@@ -2457,7 +4147,104 @@ export default function MapPage() {
                 ) : null}
                 {loadingBairros && <div className="dockNote">Carregando bairros...</div>}
                 {bairrosErr && <div className="dockNote">{bairrosErr}</div>}
-                
+              </div>
+            )}
+
+            <button
+              className="dockChip"
+              onClick={() => {
+                if (areaDrawMode) {
+                  setAreaDrawMode(false);
+                  setAreaDrawPoints([]);
+                  setAreaToolsOpen(false);
+                  setAreaReportMsg(null);
+                  return;
+                }
+                setAreaToolsOpen(true);
+                setAreaDrawMode(true);
+                setAreaReportMsg(null);
+              }}
+              title="Desenhar área"
+            >
+              <span className="chipLeft">
+                <span className="chipIcon" aria-hidden="true">
+                  <PenTool size={15} strokeWidth={2.1} />
+                </span>
+                <span className="chipText">
+                  <span>Desenhar área</span>
+                  <span className="chipLegend">Abrir relatório por área</span>
+                </span>
+                <span className="chipDot" style={{ background: areaDrawMode ? "#22c55e" : "#9ca3af" }} />
+              </span>
+              <span className="chipState">{areaDrawMode ? "ON" : "OFF"}</span>
+            </button>
+
+            {areaToolsOpen && (
+              <div
+                style={{
+                  marginTop: 6,
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.85)",
+                  padding: 8,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.8)" }}>
+                    Relatório por Área Desenhada
+                  </div>
+                  <button
+                    className="btnGhost"
+                    onClick={() => setAreaToolsOpen(false)}
+                    style={{ width: 28, height: 28, padding: 0, borderRadius: 999, lineHeight: 1 }}
+                    title="Fechar"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="dockNote" style={{ margin: 0 }}>
+                  Pontos da área: {areaDrawPoints.length}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  <button
+                    className="btnGhost"
+                    onClick={toggleAreaDrawing}
+                    style={{ borderRadius: 10, fontWeight: 800 }}
+                  >
+                    {areaDrawMode ? "Parar desenho" : "Desenhar área"}
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={removeLastAreaPoint}
+                    disabled={areaDrawPoints.length === 0 || areaReportLoading}
+                    style={{ borderRadius: 10, opacity: areaDrawPoints.length === 0 || areaReportLoading ? 0.5 : 1 }}
+                  >
+                    Desfazer ponto
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={clearAreaDrawing}
+                    disabled={areaDrawPoints.length === 0 || areaReportLoading}
+                    style={{ borderRadius: 10, opacity: areaDrawPoints.length === 0 || areaReportLoading ? 0.5 : 1 }}
+                  >
+                    Limpar área
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={downloadAreaReport}
+                    disabled={areaDrawPoints.length < 3 || areaReportLoading}
+                    style={{ borderRadius: 10, opacity: areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1 }}
+                  >
+                    {areaReportLoading ? "Gerando..." : "Baixar PDF"}
+                  </button>
+                </div>
+                {areaReportMsg && (
+                  <div className="dockNote" style={{ margin: 0, fontSize: 10 }}>
+                    {areaReportMsg}
+                  </div>
+                )}
               </div>
             )}
 
@@ -2478,7 +4265,9 @@ export default function MapPage() {
               title={showRisp ? "RISP ON" : "RISP OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>R</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <Shield size={15} strokeWidth={2.1} />
+                </span>
                 <span className="chipText">
                   <span>RISP</span>
                   <span className="chipLegend">Regiões Integradas de Segurança Pública</span>
@@ -2511,12 +4300,14 @@ export default function MapPage() {
               title={showAisp ? "AISP ON" : "AISP OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>A</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <ShieldAlert size={15} strokeWidth={2.1} />
+                </span>
                 <span className="chipText">
                   <span>AISP</span>
                   <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
                 </span>
-                <span className="chipDot" style={{ background: showAisp ? "#3b82f6" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showAisp ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
             </button>
@@ -2544,12 +4335,14 @@ export default function MapPage() {
               title={showCisp ? "CISP ON" : "CISP OFF"}
             >
               <span className="chipLeft">
-                <span className="chipIcon" style={{ fontSize: 11 }}>C</span>
+                <span className="chipIcon" aria-hidden="true">
+                  <ShieldCheck size={15} strokeWidth={2.1} />
+                </span>
                 <span className="chipText">
                   <span>CISP</span>
                   <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>
                 </span>
-                <span className="chipDot" style={{ background: showCisp ? "#f59e0b" : "#9ca3af" }} />
+                <span className="chipDot" style={{ background: showCisp ? "#22c55e" : "#9ca3af" }} />
               </span>
               <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
             </button>
@@ -2571,24 +4364,27 @@ export default function MapPage() {
             >
               <span className="chipLeft">
                 <span className="chipIcon">
-                  <img src={mapPinRed} alt="" style={{ width: 14, height: 14 }} />
+                  <img src={mapPinRed} alt="" />
                 </span>
                 <span>GPS</span>
-                <span className="chipDot" style={{ background: gpsOn ? "#22c55e" : "#9ca3af" }} />
+                <span
+                  className={`chipDot ${gpsOn ? "gpsPulse" : ""}`}
+                  style={{ background: gpsOn ? "#22c55e" : "#9ca3af" }}
+                />
               </span>
               <span className="chipState">{gpsOn ? "ON" : "OFF"}</span>
             </button>
 
             {gpsOn && gps && !gpsErr && (
               <button
-                className="dockFab"
+                className="dockCenterBtn"
                 onClick={() => {
                   flyToPoint(gps.lng, gps.lat, 16);
                   bumpDockAutoHide();
                 }}
                 title="Centralizar no GPS"
               >
-                ⦿
+                Centralizar GPS
               </button>
             )}
 
@@ -2656,7 +4452,7 @@ export default function MapPage() {
             onClick={() => togglePanel("map")}
             title="Clique de novo pra fechar"
           >
-            Central
+            CENTRAL
           </button>
 
           <button
@@ -2664,7 +4460,7 @@ export default function MapPage() {
             onClick={() => togglePanel("profile")}
             title="Clique de novo pra fechar"
           >
-            Perfil
+            PERFIL
           </button>
 
           <button
@@ -2672,7 +4468,7 @@ export default function MapPage() {
             onClick={() => togglePanel("civitas")}
             title="Clique de novo pra fechar"
           >
-            Recursos
+            {civitasTabLabel}
           </button>
 
           {isAdmin && (
@@ -2681,7 +4477,7 @@ export default function MapPage() {
               onClick={() => togglePanel("admin")}
               title="Clique de novo pra fechar"
             >
-              Administrador
+              ADMINISTRADOR
             </button>
           )}
 
@@ -2698,7 +4494,7 @@ export default function MapPage() {
               style={{ ...inputStyle(), maxWidth: 320, padding: "8px 10px" }}
             />
             <button className="btnGhost" onClick={handleSearch} title="Buscar">
-              Buscar
+              BUSCAR
             </button>
           </div>
           {searchErr && <div style={{ fontSize: 11, color: "#991b1b" }}>{searchErr}</div>}
@@ -2717,8 +4513,18 @@ export default function MapPage() {
           <div style={{ width: 72, height: 48, display: "grid", placeItems: "center" }}>
             <img src={prefeituraLogo} alt="Prefeitura" style={{ height: 28, width: "auto" }} />
           </div>
-          <button className="btnGhost" onClick={() => auth?.logout?.()}>
-            Sair
+          <button
+            className="btnGhost"
+            onClick={() => {
+              auth?.logout?.();
+              try {
+                nav("/login", { replace: true });
+              } catch {
+                window.location.href = "/login";
+              }
+            }}
+          >
+            SAIR
           </button>
         </div>
       </div>
@@ -2730,9 +4536,9 @@ export default function MapPage() {
           style={{
             position: "absolute",
             top: 90,
-            left: 16,
+            left: panelSideInset,
             width: panelWidth,
-            maxWidth: "calc(100vw - 32px)",
+            maxWidth: `calc(100vw - ${panelSideInset * 2}px)`,
             zIndex: 20,
             padding: 14,
             color: "#0b0b0f",
@@ -2741,39 +4547,8 @@ export default function MapPage() {
         >
           {panel === "map" && (
             <>
-              <div className="panelHeader" style={{ marginBottom: 10, alignItems: "center" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <div className="panelTitle">
-                    {listMode === "cameras"
-                      ? "Câmeras"
-                      : listMode === "inteligentes"
-                      ? "Super Câmeras Inteligentes"
-                      : listMode === "lpr"
-                      ? "Câmeras LPR"
-                      : "Radares"}
-                  </div>
-                  <div className="panelCount">
-                    {listMode === "cameras"
-                      ? loadingCameras
-                        ? "Carregando..."
-                        : `${cameras.length} câmeras`
-                      : listMode === "inteligentes"
-                      ? loadingCamerasIntel
-                        ? "Carregando..."
-                        : `${camerasIntel.length} super câmeras inteligentes`
-                      : listMode === "lpr"
-                      ? loadingCamerasLpr
-                        ? "Carregando..."
-                        : `${camerasLpr.length} LPR`
-                      : loadingRadares
-                      ? "Carregando..."
-                      : `${radares.length} radares`}
-                  </div>
-                </div>
-
-                <div style={{ flex: 1 }} />
-
-                <div className="panelTabs">
+              <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
+                <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
                   <button
                     className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
                     onClick={() => setListMode("cameras")}
@@ -2799,6 +4574,7 @@ export default function MapPage() {
                     Radares
                   </button>
                 </div>
+                <div className="panelTitle">{listHeaderLabel}</div>
               </div>
 
               <div className="panelSearch">
@@ -2833,46 +4609,111 @@ export default function MapPage() {
                 </button>
               </div>
 
-              <div style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
+              <div
+                key={listMode}
+                ref={listScrollRef}
+                className="scrollbarHidden"
+                style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
+                onScroll={(e) => {
+                  if (isMobile) return;
+                  const el = e.currentTarget;
+                  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) {
+                    if (page < totalPages) triggerPagePulse();
+                  }
+                }}
+              >
                 {listMode === "cameras" &&
-                  (listItems as Camera[]).map((c) => (
-                    <div
-                      key={c.code}
-                      className="listItem"
-                      onClick={() => {
-                        setSelectedCode(c.code);
-                        setSelectedRadar(null);
-                        flyToPoint(c.lng, c.lat);
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                  (listItems as Camera[]).map((c) => {
+                    const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
+                    return (
+                      <div
+                        key={c.code}
+                        className="listItem"
+                        onClick={() => {
+                          setSelectedCode(c.code);
+                          setSelectedRadar(null);
+                          focusOnDetection(c.lng, c.lat);
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <div
                             style={{
-                              fontWeight: 900,
-                              fontSize: 13,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(59,130,246,0.30)",
+                              background: "rgba(219,234,254,0.90)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
                             }}
                           >
-                            {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                            <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.75,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {c.city} - {c.uf} • {c.address}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(59,130,246,0.32)",
+                                  background: "rgba(219,234,254,0.92)",
+                                  color: "#1d4ed8",
+                                }}
+                              >
+                                {c.code}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                                  [c.city, c.uf].filter(Boolean).join(" - ") ||
+                                  "-"}
+                              </span>
+                              {hasStreamingAccess && streamUrl && (
+                                <a
+                                  href={streamUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(15,23,42,0.18)",
+                                    background: "rgba(241,245,249,0.95)",
+                                    color: "#0f172a",
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  Abrir streaming
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                 {listMode === "inteligentes" &&
                   (listItems as CameraIntel[]).map((c) => (
@@ -2882,32 +4723,66 @@ export default function MapPage() {
                       onClick={() => {
                         setSelectedCode(null);
                         setSelectedRadar(null);
-                        flyToPoint(c.lng, c.lat);
+                        focusOnDetection(c.lng, c.lat);
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 999,
+                            border: "1px solid rgba(234,88,12,0.30)",
+                            background: "rgba(255,237,213,0.92)",
+                            display: "grid",
+                            placeItems: "center",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 900,
-                              fontSize: 13,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                            <div
+                              style={{
+                                fontWeight: 900,
+                                fontSize: 13,
+                                whiteSpace: "normal",
+                                overflow: "visible",
+                                textOverflow: "clip",
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {c.name}
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                                border: "1px solid rgba(234,88,12,0.30)",
+                                background: "rgba(255,237,213,0.92)",
+                                color: "#c2410c",
+                              }}
+                            >
+                              {c.code}
+                            </span>
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.75,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                opacity: 0.8,
+                                border: "1px solid rgba(15,23,42,0.14)",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                              }}
+                            >
+                              Responsável: {c.responsavel || (c as any).responsavel || "-"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -2922,32 +4797,61 @@ export default function MapPage() {
                       onClick={() => {
                         setSelectedCode(null);
                         setSelectedRadar(null);
-                        flyToPoint(c.lng, c.lat);
+                        focusOnDetection(c.lng, c.lat);
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 999,
+                            border: "1px solid rgba(22,163,74,0.30)",
+                            background: "rgba(220,252,231,0.92)",
+                            display: "grid",
+                            placeItems: "center",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 900,
-                              fontSize: 13,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                            <div
+                              style={{
+                                fontWeight: 900,
+                                fontSize: 13,
+                                whiteSpace: "normal",
+                                overflow: "visible",
+                                textOverflow: "clip",
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {c.name}
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                                border: "1px solid rgba(22,163,74,0.30)",
+                                background: "rgba(220,252,231,0.92)",
+                                color: "#166534",
+                              }}
+                            >
+                              {c.code}
+                            </span>
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.75,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              Bairro: {getLprNeighborhood(c) || "-"}
+                            </span>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              Direção: {c.direction || "-"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -2967,35 +4871,64 @@ export default function MapPage() {
                           if (!ok) return;
                           setSelectedRadar(r.codcet);
                           setSelectedCode(null);
-                          flyToPoint(lng, lat);
+                          focusOnDetection(lng, lat);
                         }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div
                               style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(234,88,12,0.30)",
+                                background: "rgba(255,237,213,0.92)",
+                                display: "grid",
+                                placeItems: "center",
+                                flex: "0 0 auto",
                               }}
                             >
-                              Radar <span style={{ opacity: 0.6 }}>({r.codcet})</span>
+                              <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {r.bairro || "-"} • {r.logradouro || r.localidade || "-"} • {r.sentido || "-"}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 13,
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                    textOverflow: "clip",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {r.logradouro || r.localidade || "Radar"}
+                                </div>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(234,88,12,0.30)",
+                                    background: "rgba(255,237,213,0.92)",
+                                    color: "#c2410c",
+                                  }}
+                                >
+                                  {r.codcet}
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Bairro: {r.bairro || "-"}
+                                </span>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Sentido: {r.sentido || "-"}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
                       </div>
                     );
                   })}
@@ -3014,7 +4947,10 @@ export default function MapPage() {
               </div>
 
               {!isMobile && filtered.length > PAGE_SIZE && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <div
+                  className={`pageControls ${pagePulse ? "pagePulse" : ""}`}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}
+                >
                   <button
                     className="btnGhost"
                     onClick={() => setPage(page - 1)}
@@ -3061,29 +4997,107 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
+                <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
                 <div style={{ fontSize: 13, fontWeight: 900 }}>Trocar senha</div>
-                <input
-                  value={pwOld}
-                  onChange={(e) => setPwOld(e.target.value)}
-                  type="password"
-                  placeholder="Senha atual"
-                  style={inputStyle()}
-                />
-                <input
-                  value={pwNew}
-                  onChange={(e) => setPwNew(e.target.value)}
-                  type="password"
-                  placeholder="Nova senha"
-                  style={inputStyle()}
-                />
-                <input
-                  value={pwNew2}
-                  onChange={(e) => setPwNew2(e.target.value)}
-                  type="password"
-                  placeholder="Confirmar nova senha"
-                  style={inputStyle()}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={pwOld}
+                    onChange={(e) => setPwOld(e.target.value)}
+                    type={showPwOld ? "text" : "password"}
+                    placeholder="Senha atual"
+                    style={{ ...inputStyle(), paddingRight: 44 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwOld((v) => !v)}
+                    aria-label={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                    title={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      border: "none",
+                      background: "transparent",
+                      color: "rgba(0,0,0,0.72)",
+                      padding: 0,
+                      width: 20,
+                      height: 20,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showPwOld ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={pwNew}
+                    onChange={(e) => setPwNew(e.target.value)}
+                    type={showPwNew ? "text" : "password"}
+                    placeholder="Nova senha"
+                    style={{ ...inputStyle(), paddingRight: 44 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwNew((v) => !v)}
+                    aria-label={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                    title={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      border: "none",
+                      background: "transparent",
+                      color: "rgba(0,0,0,0.72)",
+                      padding: 0,
+                      width: 20,
+                      height: 20,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showPwNew ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={pwNew2}
+                    onChange={(e) => setPwNew2(e.target.value)}
+                    type={showPwNew2 ? "text" : "password"}
+                    placeholder="Confirmar nova senha"
+                    style={{ ...inputStyle(), paddingRight: 44 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwNew2((v) => !v)}
+                    aria-label={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                    title={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      border: "none",
+                      background: "transparent",
+                      color: "rgba(0,0,0,0.72)",
+                      padding: 0,
+                      width: 20,
+                      height: 20,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showPwNew2 ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
+                </div>
 
                 <button
                   onClick={changePassword}
@@ -3119,137 +5133,7 @@ export default function MapPage() {
             </>
           )}
 
-          {panel === "civitas" && (
-            <>
-              <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>
-                Ferramentas da CIVITAS e Como Solicitar as Informações
-              </div>
-
-              <div style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}>
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Quadro-resumo das ferramentas da CIVITAS
-                  </div>
-                  <div style={{ width: "100%", overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Pontos de Detecção</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais
-                            específicos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios
-                            de clonagem.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Busca por Radar</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que passaram em determinado local e período.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando não há placa definida, mas há local e horário da ocorrência.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista cronológica de placas detectadas em radar ou conjunto de radares.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Conjuntas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que trafegam junto com uma placa monitorada.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Correlatas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar vínculos e padrões entre diferentes veículos monitorados.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Investigações com múltiplos veículos ou análise de conexões entre ocorrências.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Grafo de conexões entre veículos e tabela ordenada por nível de correlação.
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Como solicitar o uso das funcionalidades da CIVITAS
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
-                    Para usufruir das funcionalidades disponíveis no App CIVITAS e dos relatórios analíticos associados ao
-                    cerco eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em
-                    lei,{" "}
-                    <a
-                      href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "#1d4ed8", textDecoration: "underline" }}
-                    >
-                      DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
-                    </a>
-                    .
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
-                    As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade
-                    competente do órgão e enviado ao endereço{" "}
-                    <strong style={{ fontWeight: 900 }}>civitas@dados.rio</strong>. O documento deve conter o número e a data
-                    do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável (e-mail e
-                    telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
-                    demais elementos relevantes para a análise da demanda.
-                  </div>
-                  <div style={{ marginTop: 10 }}>
-                    <a
-                      href="/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf"
-                      download
-                      className="btnGhost"
-                      style={{ display: "inline-block", padding: "8px 12px", borderRadius: 10 }}
-                    >
-                    Modelo de ofício para solicitar informações (baixar PDF)
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+          {panel === "civitas" && renderCivitasPanel()}
 
           {panel === "admin" && isAdmin && (
             <>
@@ -3261,33 +5145,35 @@ export default function MapPage() {
 
                 <div style={{ flex: 1 }} />
 
-                <button
-                  className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("users")}
-                >
-                  Usuários
-                </button>
-                <button
-                  className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("cameras")}
-                >
-                  Câmeras
-                </button>
-                <button
-                  className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("radares")}
-                >
-                  Radares
-                </button>
-                <button
-                  className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
-                  onClick={() => setAdminTab("logs")}
-                >
-                  Logs
-                </button>
+                <div className="tabsRail tabsRailAdmin">
+                  <button
+                    className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("users")}
+                  >
+                    Usuários
+                  </button>
+                  <button
+                    className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("cameras")}
+                  >
+                    Câmeras
+                  </button>
+                  <button
+                    className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("radares")}
+                  >
+                    Radares
+                  </button>
+                  <button
+                    className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("logs")}
+                  >
+                    Logs
+                  </button>
+                </div>
               </div>
 
-              <div style={{ maxHeight: panelMaxHeight, overflow: "auto" }}>
+              <div className="scrollbarHidden" style={{ maxHeight: panelMaxHeight, overflow: "auto" }}>
                 {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
                 {adminTab === "cameras" && (
                   <AdminCamerasPanel
@@ -3321,9 +5207,9 @@ export default function MapPage() {
         className="mobileBar"
         style={{
           position: "fixed",
-          top: 12,
-          left: 12,
-          right: 12,
+          top: "calc(12px + env(safe-area-inset-top))",
+          left: "calc(12px + env(safe-area-inset-left))",
+          right: "calc(12px + env(safe-area-inset-right))",
           zIndex: 25,
           gap: 10,
           alignItems: "center",
@@ -3400,7 +5286,7 @@ export default function MapPage() {
                   }}
                   style={{ width: "100%", borderRadius: 10 }}
                 >
-                  Buscar local
+                  BUSCAR LOCAL
                 </button>
                 <button
                   className="btnGhost"
@@ -3417,10 +5303,15 @@ export default function MapPage() {
                   onClick={() => {
                     setMobileMenuOpen(false);
                     auth?.logout?.();
+                    try {
+                      nav("/login", { replace: true });
+                    } catch {
+                      window.location.href = "/login";
+                    }
                   }}
                   style={{ width: "100%", borderRadius: 10 }}
                 >
-                  Sair
+                  SAIR
                 </button>
               </div>
             )}
@@ -3430,7 +5321,7 @@ export default function MapPage() {
         {panelOpen && (
           <div
             ref={mobileDrawerRef}
-            className="mobileDrawer glassStrong"
+            className="mobileDrawer glassStrong scrollbarHidden"
             style={{ padding: 12, color: "#0b0b0f" }}
             onTouchStart={(e) => {
               touchStartYRef.current = e.touches[0]?.clientY ?? null;
@@ -3461,7 +5352,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                Mapa
+                CENTRAL
               </button>
 
               <button
@@ -3474,7 +5365,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                Perfil
+                PERFIL
               </button>
 
               <button
@@ -3487,7 +5378,7 @@ export default function MapPage() {
                   });
                 }}
               >
-                Recursos
+                {civitasTabLabel}
               </button>
 
               {isAdmin && (
@@ -3501,7 +5392,7 @@ export default function MapPage() {
                     });
                   }}
                 >
-                  Administrador
+                  ADMINISTRADOR
                 </button>
               )}
 
@@ -3510,31 +5401,34 @@ export default function MapPage() {
 
             {panel === "map" && (
               <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                  <button
-                    className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("cameras")}
-                  >
-                    Câmeras
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("inteligentes")}
-                  >
-                    Super Câmeras Inteligentes
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("lpr")}
-                  >
-                    LPR
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "radares" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("radares")}
-                  >
-                    Radares
-                  </button>
+                <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
+                  <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
+                    <button
+                      className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("cameras")}
+                    >
+                      Câmeras
+                    </button>
+                    <button
+                      className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("inteligentes")}
+                    >
+                      Super Câmeras Inteligentes
+                    </button>
+                    <button
+                      className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("lpr")}
+                    >
+                      LPR
+                    </button>
+                    <button
+                      className={`subTab ${listMode === "radares" ? "subTabActive" : ""}`}
+                      onClick={() => setListMode("radares")}
+                    >
+                      Radares
+                    </button>
+                  </div>
+                  <div className="panelTitle">{listHeaderLabel}</div>
                 </div>
 
                 <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
@@ -3570,6 +5464,9 @@ export default function MapPage() {
                 </div>
 
                 <div
+                  key={listMode}
+                  ref={listScrollMobileRef}
+                  className="scrollbarHidden"
                   style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
                   onScroll={(e) => {
                     if (!isMobile) return;
@@ -3583,45 +5480,99 @@ export default function MapPage() {
                   }}
                 >
                   {listMode === "cameras" &&
-                    (listItems as Camera[]).map((c) => (
-                      <div
-                        key={c.code}
-                        className="listItem"
-                        onClick={() => {
-                          setSelectedCode(c.code);
-                          setSelectedRadar(null);
-                          flyToPoint(c.lng, c.lat);
-                          setPanelOpen(false);
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                    (listItems as Camera[]).map((c) => {
+                      const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
+                      return (
+                        <div
+                          key={c.code}
+                          className="listItem"
+                          onClick={() => {
+                            setSelectedCode(c.code);
+                            setSelectedRadar(null);
+                            focusOnDetection(c.lng, c.lat);
+                            setPanelOpen(false);
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                             <div
                               style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(59,130,246,0.30)",
+                                background: "rgba(219,234,254,0.90)",
+                                display: "grid",
+                                placeItems: "center",
+                                flex: "0 0 auto",
                               }}
                             >
-                              {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                              <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {c.city} - {c.uf}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 12,
+                                    lineHeight: 1.2,
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                    textOverflow: "clip",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {c.name}
+                                </div>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "1px 7px",
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(59,130,246,0.32)",
+                                    background: "rgba(219,234,254,0.92)",
+                                    color: "#1d4ed8",
+                                  }}
+                                >
+                                  {c.code}
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                  {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                                    [c.city, c.uf].filter(Boolean).join(" - ") ||
+                                    "-"}
+                                </span>
+                                {hasStreamingAccess && streamUrl && (
+                                  <a
+                                    href={streamUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      borderRadius: 999,
+                                      padding: "1px 7px",
+                                      fontSize: 10,
+                                      fontWeight: 800,
+                                      border: "1px solid rgba(15,23,42,0.18)",
+                                      background: "rgba(241,245,249,0.95)",
+                                      color: "#0f172a",
+                                      textDecoration: "none",
+                                    }}
+                                  >
+                                    Abrir streaming
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                   {listMode === "inteligentes" &&
                     (listItems as CameraIntel[]).map((c) => (
@@ -3631,33 +5582,68 @@ export default function MapPage() {
                         onClick={() => {
                           setSelectedCode(null);
                           setSelectedRadar(null);
-                          flyToPoint(c.lng, c.lat);
+                          focusOnDetection(c.lng, c.lat);
                           setPanelOpen(false);
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(234,88,12,0.30)",
+                              background: "rgba(255,237,213,0.92)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 12,
+                                  lineHeight: 1.2,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "1px 7px",
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(234,88,12,0.30)",
+                                  background: "rgba(255,237,213,0.92)",
+                                  color: "#c2410c",
+                                }}
+                              >
+                                {c.code}
+                              </span>
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  opacity: 0.8,
+                                  border: "1px solid rgba(15,23,42,0.14)",
+                                  borderRadius: 999,
+                                  padding: "1px 7px",
+                                }}
+                              >
+                                Responsável: {c.responsavel || (c as any).responsavel || "-"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -3672,33 +5658,63 @@ export default function MapPage() {
                         onClick={() => {
                           setSelectedCode(null);
                           setSelectedRadar(null);
-                          flyToPoint(c.lng, c.lat);
+                          focusOnDetection(c.lng, c.lat);
                           setPanelOpen(false);
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(22,163,74,0.30)",
+                              background: "rgba(220,252,231,0.92)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {c.name} <span style={{ opacity: 0.55 }}>({c.code})</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 12,
+                                  lineHeight: 1.2,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "1px 7px",
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(22,163,74,0.30)",
+                                  background: "rgba(220,252,231,0.92)",
+                                  color: "#166534",
+                                }}
+                              >
+                                {c.code}
+                              </span>
                             </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.75,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              IP: {c.ip || "-"} • Direção: {c.direction || "-"}
+                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                Bairro: {getLprNeighborhood(c) || "-"}
+                              </span>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                Direção: {c.direction || "-"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -3719,33 +5735,70 @@ export default function MapPage() {
                             if (!ok) return;
                             setSelectedRadar(r.codcet);
                             setSelectedCode(null);
-                            flyToPoint(lng, lat);
+                            focusOnDetection(lng, lat);
                             setPanelOpen(false);
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(234,88,12,0.30)",
+                                background: "rgba(255,237,213,0.92)",
+                                display: "grid",
+                                placeItems: "center",
+                                flex: "0 0 auto",
+                              }}
+                            >
+                              <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                            </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div
                                 style={{
-                                  fontWeight: 900,
-                                  fontSize: 13,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  minWidth: 0,
+                                  flexWrap: isMobile ? "wrap" : "nowrap",
                                 }}
                               >
-                                Radar <span style={{ opacity: 0.55 }}>({r.codcet})</span>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 13,
+                                    whiteSpace: isMobile ? "normal" : "nowrap",
+                                    overflow: isMobile ? "visible" : "hidden",
+                                    textOverflow: isMobile ? "clip" : "ellipsis",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {r.logradouro || r.localidade || "Radar"}
+                                </div>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(234,88,12,0.30)",
+                                    background: "rgba(255,237,213,0.92)",
+                                    color: "#c2410c",
+                                  }}
+                                >
+                                  {r.codcet}
+                                </span>
                               </div>
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  opacity: 0.75,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
-                                {r.bairro || "-"} • {r.sentido || "-"}
+                              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Bairro: {r.bairro || "-"}
+                                </span>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Sentido: {r.sentido || "-"}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -3767,7 +5820,7 @@ export default function MapPage() {
                 </div>
 
                 {!isMobile && filtered.length > PAGE_SIZE && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
                     <button
                       className="btnGhost"
                       onClick={() => setPage(page - 1)}
@@ -3809,32 +5862,114 @@ export default function MapPage() {
                     <div style={{ fontSize: 13 }}>{me?.full_name || "-"}</div>
                     <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
                     <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Perfil de acesso</div>
+                    <div style={{ fontSize: 13, opacity: 0.85 }}>
+                      {roleLabel(role)}
+                    </div>
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
                   <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2 }}>Trocar senha</div>
-                  <input
-                    value={pwOld}
-                    onChange={(e) => setPwOld(e.target.value)}
-                    type="password"
-                    placeholder="Senha atual"
-                    style={inputStyle()}
-                  />
-                  <input
-                    value={pwNew}
-                    onChange={(e) => setPwNew(e.target.value)}
-                    type="password"
-                    placeholder="Nova senha"
-                    style={inputStyle()}
-                  />
-                  <input
-                    value={pwNew2}
-                    onChange={(e) => setPwNew2(e.target.value)}
-                    type="password"
-                    placeholder="Confirmar nova senha"
-                    style={inputStyle()}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      value={pwOld}
+                      onChange={(e) => setPwOld(e.target.value)}
+                      type={showPwOld ? "text" : "password"}
+                      placeholder="Senha atual"
+                      style={{ ...inputStyle(), paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwOld((v) => !v)}
+                      aria-label={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                      title={showPwOld ? "Ocultar senha atual" : "Mostrar senha atual"}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        border: "none",
+                        background: "transparent",
+                        color: "rgba(0,0,0,0.72)",
+                        padding: 0,
+                        width: 20,
+                        height: 20,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showPwOld ? <Eye size={16} /> : <EyeOff size={16} />}
+                    </button>
+                  </div>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      value={pwNew}
+                      onChange={(e) => setPwNew(e.target.value)}
+                      type={showPwNew ? "text" : "password"}
+                      placeholder="Nova senha"
+                      style={{ ...inputStyle(), paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwNew((v) => !v)}
+                      aria-label={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                      title={showPwNew ? "Ocultar nova senha" : "Mostrar nova senha"}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        border: "none",
+                        background: "transparent",
+                        color: "rgba(0,0,0,0.72)",
+                        padding: 0,
+                        width: 20,
+                        height: 20,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showPwNew ? <Eye size={16} /> : <EyeOff size={16} />}
+                    </button>
+                  </div>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      value={pwNew2}
+                      onChange={(e) => setPwNew2(e.target.value)}
+                      type={showPwNew2 ? "text" : "password"}
+                      placeholder="Confirmar nova senha"
+                      style={{ ...inputStyle(), paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwNew2((v) => !v)}
+                      aria-label={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                      title={showPwNew2 ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha"}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        border: "none",
+                        background: "transparent",
+                        color: "rgba(0,0,0,0.72)",
+                        padding: 0,
+                        width: 20,
+                        height: 20,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showPwNew2 ? <Eye size={16} /> : <EyeOff size={16} />}
+                    </button>
+                  </div>
                   <button
                     onClick={changePassword}
                     disabled={pwLoading}
@@ -3868,140 +6003,11 @@ export default function MapPage() {
               </>
             )}
 
-            {panel === "civitas" && (
-              <>
-                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>
-                  Ferramentas da CIVITAS e Como Solicitar as Informações
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                    marginBottom: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Quadro-resumo das ferramentas da CIVITAS
-                  </div>
-                  <div style={{ width: "100%", overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Ferramenta</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>O que é</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Quando utilizar</th>
-                          <th style={{ textAlign: "left", border: "1px solid #000", padding: 8 }}>Resultado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Pontos de Detecção</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais
-                            específicos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios
-                            de clonagem.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Busca por Radar</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que passaram em determinado local e período.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando não há placa definida, mas há local e horário da ocorrência.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista cronológica de placas detectadas em radar ou conjunto de radares.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Conjuntas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar veículos que trafegam junto com uma placa monitorada.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "1px solid #000", padding: 8, fontWeight: 700 }}>Placas Correlatas</td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Identificar vínculos e padrões entre diferentes veículos monitorados.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Investigações com múltiplos veículos ou análise de conexões entre ocorrências.
-                          </td>
-                          <td style={{ border: "1px solid #000", padding: 8 }}>
-                            Grafo de conexões entre veículos e tabela ordenada por nível de correlação.
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
-                    Como solicitar o uso das funcionalidades da CIVITAS
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827" }}>
-                    Para usufruir das funcionalidades disponíveis no App CIVITAS e dos relatórios analíticos associados ao
-                    cerco eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em
-                    lei,{" "}
-                    <a
-                      href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "#1d4ed8", textDecoration: "underline" }}
-                    >
-                      DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
-                    </a>
-                    .
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", marginTop: 8 }}>
-                    As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade
-                    competente do órgão e enviado ao endereço{" "}
-                    <strong style={{ fontWeight: 900 }}>civitas@dados.rio</strong>. O documento deve conter o número e a data
-                    do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável (e-mail e
-                    telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
-                    demais elementos relevantes para a análise da demanda.
-                  </div>
-                  <div style={{ marginTop: 10 }}>
-                    <a
-                      href="/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf"
-                      download
-                      className="btnGhost"
-                      style={{ display: "inline-block", padding: "8px 12px", borderRadius: 10 }}
-                    >
-                      Modelo de ofício para solicitar informações (baixar PDF)
-                    </a>
-                  </div>
-                </div>
-              </>
-            )}
+            {panel === "civitas" && renderCivitasPanel()}
 
             {panel === "admin" && isAdmin && (
               <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <div className="tabsRail tabsRailAdmin tabsRailAdminMobile">
                   <button
                     className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
                     onClick={() => setAdminTab("users")}
@@ -4088,7 +6094,7 @@ export default function MapPage() {
             }}
             title="Buscar"
           >
-            Buscar
+            BUSCAR
           </button>
           <button
             className="btnGhost"

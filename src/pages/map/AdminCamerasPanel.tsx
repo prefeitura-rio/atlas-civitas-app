@@ -1,9 +1,31 @@
 import { useEffect, useState } from "react";
 import type { Camera, CameraIntel, CameraLpr } from "./types";
 import { fetchJson } from "./shared";
+import cameraIcon from "@/assets/camera-icon.png";
+import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
+import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
 const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
+const syncDisabled = true;
+
+function coerceCoord(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
+}
+
+function getLat(value: any) {
+  return coerceCoord(value?.lat ?? value?.latitude ?? value?.latitud ?? value?.y);
+}
+
+function getLng(value: any) {
+  return coerceCoord(value?.lng ?? value?.lon ?? value?.long ?? value?.longitude ?? value?.longitud ?? value?.x);
+}
 
 export function AdminCamerasPanel({
   apiBase,
@@ -16,11 +38,12 @@ export function AdminCamerasPanel({
   onSynced?: () => void;
   isMobile: boolean;
 }) {
-  const CAMS_URL = `${apiBase}/api/v1/cameras`;
-  const SYNC_CAMERAS_URL = `${apiBase}/api/v1/sync/cameras`;
-  const SYNC_CIVITAS_URL = `${apiBase}/api/v1/sync/civitas`;
-  const CAMS_INTEL_URL = `${apiBase}/api/v1/cameras-inteligentes`;
-  const CAMS_LPR_URL = `${apiBase}/api/v1/cameras-lpr`;
+  const CAMS_URL = `${apiBase}/cameras`;
+  const SYNC_CAMERAS_URL = `${apiBase}/sync/cameras`;
+  const SYNC_CAMS_INTEL_URL = `${apiBase}/sync/cameras-inteligentes`;
+  const SYNC_CAMS_LPR_URL = `${apiBase}/sync/cameras-lpr`;
+  const CAMS_INTEL_URL = `${apiBase}/cameras-inteligentes`;
+  const CAMS_LPR_URL = `${apiBase}/cameras-lpr`;
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -41,8 +64,38 @@ export function AdminCamerasPanel({
   const [mobileCountCams, setMobileCountCams] = useState(ADMIN_PAGE_SIZE);
   const [mobileCountIntel, setMobileCountIntel] = useState(ADMIN_PAGE_SIZE);
   const [mobileCountLpr, setMobileCountLpr] = useState(ADMIN_PAGE_SIZE);
-  const syncDisabled = true;
+  const cardRowStyle = {
+    border: "1px solid rgba(15,23,42,0.10)",
+    borderRadius: 14,
+    padding: 12,
+    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+    boxShadow: "0 6px 20px rgba(15,23,42,0.06)",
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "nowrap",
+  } as const;
 
+  const chipStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    padding: "3px 9px",
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.2,
+    border: "1px solid rgba(15,23,42,0.14)",
+    background: "rgba(248,250,252,0.95)",
+    color: "rgba(15,23,42,0.85)",
+  } as const;
+
+  function formatSyncMsg(result: any) {
+    const base = `Sincronização concluída. (criados=${result?.created ?? "-"}, atualizados=${result?.updated ?? "-"}`;
+    const withReactivated =
+      result?.reactivated === undefined ? base : `${base}, reativados=${result?.reactivated ?? "-"}`;
+    const withDeactivated = `${withReactivated}, desativados=${result?.deactivated ?? "-"}`;
+    return result?.total_seen === undefined ? `${withDeactivated})` : `${withDeactivated}, total_lido=${result?.total_seen ?? "-"})`;
+  }
 
   async function load() {
     setErr(null);
@@ -52,7 +105,14 @@ export function AdminCamerasPanel({
         headers: { Authorization: `Bearer ${token}` },
       });
       const list: Camera[] = Array.isArray(data) ? data : [];
-      setItems(list);
+      const normalized = list
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+      setItems(normalized);
     } catch (e: any) {
       setErr(e?.message || "Erro ao carregar câmeras");
     } finally {
@@ -68,11 +128,11 @@ export function AdminCamerasPanel({
       });
       const list: CameraIntel[] = Array.isArray(data) ? data : [];
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
       setIntelItems(normalized);
     } catch (e: any) {
@@ -90,11 +150,11 @@ export function AdminCamerasPanel({
       });
       const list: CameraLpr[] = Array.isArray(data) ? data : [];
       const normalized = list
-        .map((c) => ({
-          ...c,
-          lat: Number((c as any).lat),
-          lng: Number((c as any).lng),
-        }))
+        .map((c) => {
+          const lat = getLat(c);
+          const lng = getLng(c);
+          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+        })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
       setLprItems(normalized);
     } catch (e: any) {
@@ -143,16 +203,14 @@ export function AdminCamerasPanel({
       });
 
       setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
-          resp?.result?.deactivated ?? "-"
-        })`
+        formatSyncMsg(resp?.result)
       );
 
       await load();
       onSynced?.();
     } catch (e: any) {
       setSyncMsg(null);
-      setErr(e?.message || "Erro no sync CÂMERAS");
+      setErr(e?.message || "Erro na sincronização de câmeras");
     } finally {
       setSyncLoading(false);
     }
@@ -164,7 +222,8 @@ export function AdminCamerasPanel({
 
     setSyncLoading(true);
     try {
-      const resp = await fetchJson<any>(SYNC_CIVITAS_URL, {
+      const syncUrl = civitasTab === "inteligentes" ? SYNC_CAMS_INTEL_URL : SYNC_CAMS_LPR_URL;
+      const resp = await fetchJson<any>(syncUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -175,17 +234,13 @@ export function AdminCamerasPanel({
         }),
       });
 
-      setSyncMsg(
-        `SYNC OK. (created=${resp?.result?.created ?? "-"}, updated=${resp?.result?.updated ?? "-"}, deactivated=${
-          resp?.result?.deactivated ?? "-"
-        })`
-      );
+      setSyncMsg(formatSyncMsg(resp?.result));
 
       if (civitasTab === "inteligentes") await loadIntel();
       if (civitasTab === "lpr") await loadLpr();
     } catch (e: any) {
       setSyncMsg(null);
-      setErr(e?.message || "Erro no sync CÂMERAS CIVITAS");
+      setErr(e?.message || `Erro na sincronização de ${civitasTab === "inteligentes" ? "câmeras inteligentes" : "câmeras LPR"}`);
     } finally {
       setSyncLoading(false);
     }
@@ -193,7 +248,7 @@ export function AdminCamerasPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="tabsRail tabsRailSection">
         <button className={`subTab ${camTab === "cameras" ? "subTabActive" : ""}`} onClick={() => setCamTab("cameras")}>
           Câmeras
         </button>
@@ -203,7 +258,7 @@ export function AdminCamerasPanel({
       </div>
 
       {camTab === "civitas" && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="tabsRail tabsRailSection tabsRailCompact">
           <button
             className={`subTab ${civitasTab === "inteligentes" ? "subTabActive" : ""}`}
             onClick={() => setCivitasTab("inteligentes")}
@@ -227,7 +282,7 @@ export function AdminCamerasPanel({
               border: "1px solid rgba(0,0,0,0.10)",
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Câmeras (SYNC)</div>
+            <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Câmeras</div>
 
             <div style={{ display: "grid", gap: 10 }}>
               <button
@@ -244,7 +299,7 @@ export function AdminCamerasPanel({
                   opacity: syncDisabled || syncLoading ? 0.7 : 1,
                 }}
               >
-                {syncLoading ? "Sincronizando..." : "SYNC CÂMERAS"}
+                {syncLoading ? "Sincronizando..." : "Sincronizar Câmeras"}
               </button>
 
               <label
@@ -267,7 +322,7 @@ export function AdminCamerasPanel({
                   onChange={(e) => setDeactivateMissing(e.target.checked)}
                   style={{ transform: "scale(1.1)" }}
                 />
-                Desativar no banco as que sumirem da fonte (deactivate_missing)
+                Desativar registros ausentes na fonte de dados
               </label>
             </div>
 
@@ -292,6 +347,7 @@ export function AdminCamerasPanel({
             </div>
 
             <div
+              className="scrollbarHidden"
               style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
               onScroll={(e) => {
                 if (!isMobile) return;
@@ -309,29 +365,56 @@ export function AdminCamerasPanel({
                   key={c.id || c.code}
                   className="adminRow"
                   style={{
-                    border: "1px solid rgba(0,0,0,0.10)",
-                    borderRadius: 14,
-                    padding: 10,
-                    background: "rgba(255,255,255,0.75)",
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "center",
+                    ...cardRowStyle,
+                    alignItems: "flex-start",
                   }}
                 >
+                  <div
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 999,
+                      border: "1px solid rgba(59,130,246,0.30)",
+                      background: "rgba(219,234,254,0.90)",
+                      display: "grid",
+                      placeItems: "center",
+                      flex: "0 0 auto",
+                    }}
+                  >
+                    <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        fontSize: 13,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 13,
+                          whiteSpace: "normal",
+                          overflow: "visible",
+                          textOverflow: "clip",
+                          wordBreak: "break-word",
+                          color: "#0f172a",
+                        }}
+                      >
+                        {c.name}
+                      </div>
+                      <span
+                        style={{
+                          ...chipStyle,
+                          borderColor: "rgba(59,130,246,0.32)",
+                          background: "rgba(219,234,254,0.92)",
+                          color: "#1d4ed8",
+                        }}
+                      >
+                        {c.code}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.75 }}>
-                      {c.city} - {c.uf} • {c.is_active ? "ATIVA" : "INATIVA"}
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      <span style={chipStyle}>
+                        {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                          [c.city, c.uf].filter(Boolean).join(" - ") ||
+                          "-"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -343,7 +426,7 @@ export function AdminCamerasPanel({
             </div>
 
             {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
                 <button
                   className="btnGhost"
                   onClick={() => setPageCams((v) => Math.max(1, v - 1))}
@@ -378,7 +461,7 @@ export function AdminCamerasPanel({
             border: "1px solid rgba(0,0,0,0.10)",
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Atualizar Câmeras Civitas (SYNC)</div>
+          <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Câmeras Civitas</div>
 
           <div style={{ display: "grid", gap: 10 }}>
             <button
@@ -395,7 +478,11 @@ export function AdminCamerasPanel({
                 opacity: syncDisabled || syncLoading ? 0.7 : 1,
               }}
             >
-              {syncLoading ? "Sincronizando..." : "SYNC CÂMERAS CIVITAS"}
+              {syncLoading
+                ? "Sincronizando..."
+                : civitasTab === "inteligentes"
+                ? "Sincronizar Câmeras Inteligentes"
+                : "Sincronizar Câmeras LPR"}
             </button>
 
             <label
@@ -418,7 +505,7 @@ export function AdminCamerasPanel({
                 onChange={(e) => setDeactivateMissing(e.target.checked)}
                 style={{ transform: "scale(1.1)" }}
               />
-              Desativar no banco as que sumirem da fonte (deactivate_missing)
+              Desativar registros ausentes na fonte de dados
             </label>
           </div>
 
@@ -439,12 +526,13 @@ export function AdminCamerasPanel({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras Inteligentes</div>
+            <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
             <div style={{ fontSize: 12, opacity: 0.75 }}>
               {intelLoading ? "Carregando..." : `${intelItems.length} itens`}
             </div>
           </div>
           <div
+            className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
             onScroll={(e) => {
               if (!isMobile) return;
@@ -461,29 +549,51 @@ export function AdminCamerasPanel({
               <div
                 key={c.id || c.code}
                 className="adminRow"
-                style={{
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  borderRadius: 14,
-                  padding: 10,
-                  background: "rgba(255,255,255,0.75)",
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                }}
+                style={cardRowStyle}
               >
+                <div
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    border: "1px solid rgba(234,88,12,0.30)",
+                    background: "rgba(255,237,213,0.92)",
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 auto",
+                  }}
+                >
+                  <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 13,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 13,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        color: "#0f172a",
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                    <span
+                      style={{
+                        ...chipStyle,
+                        borderColor: "rgba(234,88,12,0.30)",
+                        background: "rgba(255,237,213,0.92)",
+                        color: "#c2410c",
+                      }}
+                    >
+                      {c.code}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>IP: {c.ip || "-"} • Direção: {c.direction || "-"}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={chipStyle}>Responsável: {c.responsavel || (c as any).responsavel || "-"}</span>
+                    <span style={chipStyle}>Direção: {c.direction || "-"}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -493,7 +603,7 @@ export function AdminCamerasPanel({
           </div>
 
           {!isMobile && intelItems.length > ADMIN_PAGE_SIZE && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
               <button
                 className="btnGhost"
                 onClick={() => setPageIntel((v) => Math.max(1, v - 1))}
@@ -535,6 +645,7 @@ export function AdminCamerasPanel({
             </div>
           </div>
           <div
+            className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
             onScroll={(e) => {
               if (!isMobile) return;
@@ -551,29 +662,51 @@ export function AdminCamerasPanel({
               <div
                 key={c.id || c.code}
                 className="adminRow"
-                style={{
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  borderRadius: 14,
-                  padding: 10,
-                  background: "rgba(255,255,255,0.75)",
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                }}
+                style={cardRowStyle}
               >
+                <div
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    border: "1px solid rgba(22,163,74,0.30)",
+                    background: "rgba(220,252,231,0.92)",
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 auto",
+                  }}
+                >
+                  <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 13,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {c.name} <span style={{ opacity: 0.6 }}>({c.code})</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 13,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        color: "#0f172a",
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                    <span
+                      style={{
+                        ...chipStyle,
+                        borderColor: "rgba(22,163,74,0.30)",
+                        background: "rgba(220,252,231,0.92)",
+                        color: "#166534",
+                      }}
+                    >
+                      {c.code}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>IP: {c.ip || "-"} • Direção: {c.direction || "-"}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={chipStyle}>Bairro: {c.neighborhood || (c as any).bairro || "-"}</span>
+                    <span style={chipStyle}>Direção: {c.direction || "-"}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -583,7 +716,7 @@ export function AdminCamerasPanel({
           </div>
 
           {!isMobile && lprItems.length > ADMIN_PAGE_SIZE && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
               <button
                 className="btnGhost"
                 onClick={() => setPageLpr((v) => Math.max(1, v - 1))}
