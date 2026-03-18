@@ -6,6 +6,8 @@ import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
+const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
+const syncDisabled = true;
 
 function coerceCoord(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -285,16 +287,16 @@ export function AdminCamerasPanel({
             <div style={{ display: "grid", gap: 10 }}>
               <button
                 onClick={runSyncCameras}
-                disabled={syncLoading}
+                disabled={syncDisabled || syncLoading}
                 style={{
                   padding: "10px 12px",
                   borderRadius: 14,
                   border: "1px solid rgba(0,0,0,0.12)",
                   background: "rgba(0,0,0,0.86)",
                   color: "#fff",
-                  cursor: syncLoading ? "not-allowed" : "pointer",
+                  cursor: syncDisabled || syncLoading ? "not-allowed" : "pointer",
                   fontWeight: 900,
-                  opacity: syncLoading ? 0.7 : 1,
+                  opacity: syncDisabled || syncLoading ? 0.7 : 1,
                 }}
               >
                 {syncLoading ? "Sincronizando..." : "Sincronizar Câmeras"}
@@ -325,6 +327,7 @@ export function AdminCamerasPanel({
             </div>
 
             {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{SYNC_DISABLED_NOTICE}</div>
             {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
 
           </div>
@@ -463,16 +466,16 @@ export function AdminCamerasPanel({
           <div style={{ display: "grid", gap: 10 }}>
             <button
               onClick={runSyncCivitas}
-              disabled={syncLoading}
+              disabled={syncDisabled || syncLoading}
               style={{
                 padding: "10px 12px",
                 borderRadius: 14,
                 border: "1px solid rgba(0,0,0,0.12)",
                 background: "rgba(0,0,0,0.86)",
                 color: "#fff",
-                cursor: syncLoading ? "not-allowed" : "pointer",
+                cursor: syncDisabled || syncLoading ? "not-allowed" : "pointer",
                 fontWeight: 900,
-                opacity: syncLoading ? 0.7 : 1,
+                opacity: syncDisabled || syncLoading ? 0.7 : 1,
               }}
             >
               {syncLoading
@@ -507,6 +510,7 @@ export function AdminCamerasPanel({
           </div>
 
           {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{SYNC_DISABLED_NOTICE}</div>
           {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
         </div>
       )}

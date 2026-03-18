@@ -4,6 +4,8 @@ import { fetchJson } from "./shared";
 import radarIcon from "@/assets/radar-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
+const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
+const syncDisabled = true;
 
 export function AdminRadaresPanel({
   apiBase,
@@ -135,16 +137,16 @@ export function AdminRadaresPanel({
         <div style={{ display: "grid", gap: 10 }}>
           <button
             onClick={runSyncRadares}
-            disabled={syncLoading}
+            disabled={syncDisabled || syncLoading}
             style={{
               padding: "10px 12px",
               borderRadius: 14,
               border: "1px solid rgba(0,0,0,0.12)",
               background: "rgba(0,0,0,0.86)",
               color: "#fff",
-              cursor: syncLoading ? "not-allowed" : "pointer",
+              cursor: syncDisabled || syncLoading ? "not-allowed" : "pointer",
               fontWeight: 900,
-              opacity: syncLoading ? 0.7 : 1,
+              opacity: syncDisabled || syncLoading ? 0.7 : 1,
             }}
           >
             {syncLoading ? "Sincronizando..." : "Sincronizar Radares"}
@@ -190,6 +192,7 @@ export function AdminRadaresPanel({
         </div>
 
         {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{SYNC_DISABLED_NOTICE}</div>
         {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
       </div>
 
