@@ -6,6 +6,8 @@ import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
+const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
+const syncDisabled = true;
 
 function coerceCoord(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;

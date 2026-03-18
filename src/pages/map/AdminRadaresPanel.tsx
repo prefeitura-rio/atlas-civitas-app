@@ -5,6 +5,7 @@ import radarIcon from "@/assets/radar-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
 const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
+const syncDisabled = true;
 
 export function AdminRadaresPanel({
   apiBase,
