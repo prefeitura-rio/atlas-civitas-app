@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
+import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { fetchJson } from "./map/shared";
 
 type Props = {
@@ -14,9 +14,38 @@ type Props = {
 const TERMS_PDF_URL = "/termos.pdf";
 
 GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
+  "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
   import.meta.url,
 ).toString();
+
+function describePdfError(error: unknown): string {
+  const message =
+    typeof error === "object" && error !== null && "message" in error
+      ? String((error as any).message || "")
+      : "";
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("promise.withresolvers") || normalized.includes("url.parse")) {
+    return "Seu navegador está desatualizado para abrir este PDF. Atualize e tente novamente.";
+  }
+  if (
+    normalized.includes("setting up fake worker failed") ||
+    normalized.includes("worker") ||
+    normalized.includes("module script")
+  ) {
+    return "Falha ao inicializar o leitor de PDF no navegador.";
+  }
+  if (
+    normalized.includes("missing pdf") ||
+    normalized.includes("unexpected server response")
+  ) {
+    return "Documento de termos não encontrado em /termos.pdf.";
+  }
+  if (normalized.includes("fetch")) {
+    return "Não foi possível baixar o documento.";
+  }
+  return "Não foi possível carregar o documento.";
+}
 
 export default function Terms({
   apiBase,
@@ -29,6 +58,7 @@ export default function Terms({
   const termsBodyRef = useRef<HTMLDivElement | null>(null);
   const [agree, setAgree] = useState(false);
   const [scrolledToEnd, setScrolledToEnd] = useState(false);
+  const [pdfReloadKey, setPdfReloadKey] = useState(0);
   const [pdfPages, setPdfPages] = useState<string[]>([]);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfLoadErr, setPdfLoadErr] = useState<string | null>(null);
@@ -54,32 +84,44 @@ export default function Terms({
       try {
         const pdf = await loadingTask.promise;
         const pages: string[] = [];
-        // Higher scale improves text sharpness, especially on Retina/high-DPI displays.
+        const firstPage = await pdf.getPage(1);
+        const baseViewport = firstPage.getViewport({ scale: 1 });
+        const containerWidth = Math.max(
+          320,
+          (termsBodyRef.current?.clientWidth ?? window.innerWidth * 0.92) - 20,
+        );
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        const targetPixelWidth = containerWidth * dpr * 1.35;
         const renderScale = Math.min(
-          3,
-          Math.max(2, (window.devicePixelRatio || 1) * 1.5),
+          2.8,
+          Math.max(1.8, targetPixelWidth / baseViewport.width),
         );
 
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
           if (cancelled) return;
 
-          const page = await pdf.getPage(pageNumber);
+          const page = pageNumber === 1 ? firstPage : await pdf.getPage(pageNumber);
           const viewport = page.getViewport({ scale: renderScale });
           const canvas = document.createElement("canvas");
+          const canvasContext = canvas.getContext("2d", { alpha: false });
+          if (!canvasContext) {
+            throw new Error("Canvas 2D indisponível");
+          }
 
           canvas.width = Math.ceil(viewport.width);
           canvas.height = Math.ceil(viewport.height);
 
-          await page.render({ canvas, viewport }).promise;
+          await page.render({ canvasContext, canvas, viewport }).promise;
           pages.push(canvas.toDataURL("image/png"));
           page.cleanup();
         }
 
         if (cancelled) return;
         setPdfPages(pages);
-      } catch (_e) {
+      } catch (e) {
         if (cancelled) return;
-        setPdfLoadErr("Nao foi possivel carregar o documento.");
+        console.error("[Terms] Falha ao carregar PDF de termos", e);
+        setPdfLoadErr(describePdfError(e));
       } finally {
         if (!cancelled) {
           setPdfLoading(false);
@@ -93,7 +135,7 @@ export default function Terms({
       cancelled = true;
       void loadingTask.destroy();
     };
-  }, []);
+  }, [pdfReloadKey]);
 
   useEffect(() => {
     const el = termsBodyRef.current;
@@ -138,6 +180,10 @@ export default function Terms({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleRetryPdfLoad() {
+    setPdfReloadKey((current) => current + 1);
   }
 
   return (
@@ -308,14 +354,23 @@ export default function Terms({
 
         <div className="termsBody" ref={termsBodyRef}>
           {pdfLoading && <div className="termsLoading">Carregando documento...</div>}
-          {!pdfLoading && pdfLoadErr && <div className="termsError">{pdfLoadErr}</div>}
+          {!pdfLoading && pdfLoadErr && (
+            <div className="termsError">
+              {pdfLoadErr}
+              <div className="termsActions">
+                <button className="termsRetry" onClick={handleRetryPdfLoad} type="button">
+                  Recarregar documento
+                </button>
+              </div>
+            </div>
+          )}
           {!pdfLoading && !pdfLoadErr && (
             <div className="termsPages">
               {pdfPages.map((src, idx) => (
                 <img
                   key={`terms-page-${idx + 1}`}
                   src={src}
-                  alt={`Pagina ${idx + 1} do termo`}
+                  alt={`Página ${idx + 1} do termo`}
                   className="termsPage"
                   loading={idx <= 1 ? "eager" : "lazy"}
                   draggable={false}
