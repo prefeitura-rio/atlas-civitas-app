@@ -40,6 +40,12 @@ helmCharts:
             - "atlas.staging.civitas.rio"
           timeout: 120s
 
+      podDisruptionBudget:
+        enabled: false
+
+      autoscaling:
+        enabled: false
+
       argoImageUpdater:
         enabled: true
         updateStrategy: "digest"
