@@ -1,0 +1,43 @@
+name: Deploy Frontend to Staging
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - staging
+    paths:
+      - src/**
+      - public/**
+      - index.html
+      - vite.config.ts
+      - tsconfig*.json
+      - tailwind.config.js
+      - nginx.conf
+      - Dockerfile
+      - package.json
+      - package-lock.json
+      - k8s/**
+
+jobs:
+  build:
+    name: Build Frontend for Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Build and push Frontend Docker image
+        uses: ./.github/actions/docker-build
+        with:
+          working-directory: .
+          image-tag: staging
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-args: |
+            --build-arg VITE_API_URL=${{ vars.VITE_API_URL }}
+            --build-arg VITE_MAPBOX_TOKEN=${{ secrets.VITE_MAPBOX_TOKEN }}
