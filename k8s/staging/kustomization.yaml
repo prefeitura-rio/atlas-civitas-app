@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: base-chart
+    repo: oci://us-west1-docker.pkg.dev/rj-iplanrio-dia/charts
+    version: 2.2.3
+    releaseName: atlas-app
+    namespace: atlas
+    valuesInline:
+      fullnameOverride: "app"
+
+      image:
+        repository: ghcr.io/prefeitura-rio/atlas-civitas-app
+        tag: staging
+        pullPolicy: Always
+
+      healthCheck:
+        path: /
+
+      service:
+        port: 80
+        containerPort: 80
+
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+      istio:
+        enabled: true
+        sidecar:
+          proxyMemory: "256Mi"
+          proxyMemoryLimit: "512Mi"
+        virtualService:
+          hosts:
+            - "atlas.staging.civitas.rio"
+          timeout: 120s
+
+      argoImageUpdater:
+        enabled: true
+        updateStrategy: "digest"
