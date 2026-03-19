@@ -1207,3 +1207,101 @@
     opacity: 0.6;
   }
 }
+
+/* SweetAlert2 - clean white style with app typography */
+.swal2-popup.atlasSwalPopup {
+  font-family: "Rajdhani", "Sora", "Manrope", "Segoe UI", sans-serif !important;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 22px 56px rgba(15, 23, 42, 0.2);
+}
+
+.swal2-title.atlasSwalTitle {
+  color: #0f172a;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.swal2-html-container.atlasSwalHtml {
+  color: rgba(15, 23, 42, 0.78);
+  font-size: 15px;
+}
+
+.swal2-footer.atlasSwalFooter {
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  color: rgba(51, 65, 85, 0.9);
+}
+
+.swal2-actions .atlasSwalBtn {
+  font-family: "Rajdhani", "Sora", "Manrope", "Segoe UI", sans-serif !important;
+  border-radius: 12px;
+  min-width: 132px;
+  height: 40px;
+  border: 1px solid transparent;
+  letter-spacing: 0.04em;
+  font-weight: 800;
+  transition: transform 0.16s ease, filter 0.16s ease, border-color 0.16s ease;
+}
+
+.swal2-popup.atlasSwalPopup .swal2-actions {
+  margin-top: 16px;
+  gap: 12px;
+}
+
+.swal2-popup.atlasSwalPopup .swal2-actions .atlasSwalBtn {
+  margin: 0 !important;
+}
+
+.swal2-actions .atlasSwalBtn:hover {
+  transform: translateY(-1px);
+}
+
+.swal2-actions .atlasSwalBtn:active {
+  transform: translateY(0);
+}
+
+.swal2-actions .atlasSwalBtn:focus-visible {
+  outline: 2px solid rgba(129, 198, 241, 0.5);
+  outline-offset: 2px;
+}
+
+.swal2-actions .atlasSwalBtnPrimary {
+  color: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.2);
+  background: #0f172a;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.24);
+}
+
+.swal2-actions .atlasSwalBtnPrimary:hover {
+  background: #1e293b;
+}
+
+.swal2-actions .atlasSwalBtnGhost {
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.18);
+  background: rgba(248, 250, 252, 1);
+}
+
+.swal2-actions .atlasSwalBtnGhost:hover {
+  background: rgba(241, 245, 249, 1);
+}
+
+.swal2-popup.atlasSwalPopup .swal2-icon.swal2-warning {
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #d97706;
+}
+
+.swal2-popup.atlasSwalPopup .swal2-icon.swal2-success [class^="swal2-success-line"] {
+  background-color: #34d399;
+}
+
+.swal2-popup.atlasSwalPopup .swal2-icon.swal2-success .swal2-success-ring {
+  border-color: rgba(52, 211, 153, 0.36);
+}
+
+.swal2-popup.atlasSwalPopup .swal2-icon.swal2-error {
+  border-color: rgba(239, 68, 68, 0.58);
+  color: #dc2626;
+}
