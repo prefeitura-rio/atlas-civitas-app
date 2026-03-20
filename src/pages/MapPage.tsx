@@ -729,6 +729,9 @@ export default function MapPage() {
     }
 
     const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+    if (heroEl) {
+      heroEl.classList.toggle("civitasHero--scrolled", scrollTop > 1);
+    }
     const canScroll = scrollHeight > clientHeight + 1;
     if (!canScroll) {
       thumbEl.style.opacity = "0";

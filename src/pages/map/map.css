@@ -292,7 +292,7 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  background: rgba(255, 255, 255, 0.92);
+  background: #fff;
   border-radius: 18px;
   border: 0.8px solid #e5e7eb;
   box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -308,6 +308,7 @@
   flex-direction: column;
   gap: 20px;
   padding: 0 34px 20px 24px;
+  background: #fff;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
@@ -348,10 +349,15 @@
   position: sticky;
   top: 0;
   z-index: 8;
-  background: rgba(255, 255, 255, 0.92);
+  background: #fff;
   margin: 0 -34px 0 -24px;
   padding: 14px 34px 12px 24px;
-  border-bottom: 0.8px solid #e5e7eb;
+  border-bottom: 0;
+  box-shadow: none;
+  transition: box-shadow 0.16s ease;
+}
+
+.civitasHero.civitasHero--scrolled {
   box-shadow: 0 8px 12px -14px rgba(0, 0, 0, 0.45);
 }
 
