@@ -3591,7 +3591,7 @@ export default function MapPage() {
     return radares.find((r) => r.codcet === selectedRadar) || null;
   }, [selectedRadar, radares]);
 
-  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1165 : 560;
+  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1120 : 560;
   const panelSideInset = 16;
   const panelMaxHeight = panel === "admin" ? "74vh" : "56vh";
   const listTitle =
