@@ -853,9 +853,7 @@ export default function MapPage() {
     }, DOCK_AUTOHIDE_MS);
   }
 
-  function closeDockUnlessBairros() {
-    if (!showBairros) setDockOpen(false);
-  }
+ 
 
   useEffect(() => {
     if (dockOpen) bumpDockAutoHide();
@@ -3941,7 +3939,7 @@ export default function MapPage() {
               onClick={() => {
                 setShowCameras((v) => !v);
                 bumpDockAutoHide();
-                closeDockUnlessBairros();
+                
               }}
               title={showCameras ? "Câmeras ON" : "Câmeras OFF"}
             >
@@ -3963,7 +3961,7 @@ export default function MapPage() {
               onClick={() => {
                 setShowCamerasIntel((v) => !v);
                 bumpDockAutoHide();
-                closeDockUnlessBairros();
+                
               }}
               title={showCamerasIntel ? "Inteligentes ON" : "Inteligentes OFF"}
             >
@@ -3985,7 +3983,7 @@ export default function MapPage() {
               onClick={() => {
                 setShowCamerasLpr((v) => !v);
                 bumpDockAutoHide();
-                closeDockUnlessBairros();
+                
               }}
               title={showCamerasLpr ? "LPR ON" : "LPR OFF"}
             >
@@ -4007,7 +4005,7 @@ export default function MapPage() {
               onClick={() => {
                 setShowRadares((v) => !v);
                 bumpDockAutoHide();
-                closeDockUnlessBairros();
+                
               }}
               title={showRadares ? "Radares ON" : "Radares OFF"}
             >
@@ -4094,7 +4092,6 @@ export default function MapPage() {
                       onClick={() => {
                         setSelectedBairro(nome);
                         setBairroQuery("");
-                        setDockOpen(false);
                       }}
                       style={{
                         textAlign: "left",
@@ -4226,7 +4223,7 @@ export default function MapPage() {
                   return next;
                 });
                 bumpDockAutoHide();
-                closeDockUnlessBairros();
+                
               }}
               title={showRisp ? "RISP ON" : "RISP OFF"}
             >
@@ -4261,7 +4258,7 @@ export default function MapPage() {
                   return next;
                 });
                 bumpDockAutoHide();
-                closeDockUnlessBairros();
+                
               }}
               title={showAisp ? "AISP ON" : "AISP OFF"}
             >
@@ -4296,7 +4293,7 @@ export default function MapPage() {
                   return next;
                 });
                 bumpDockAutoHide();
-                closeDockUnlessBairros();
+                
               }}
               title={showCisp ? "CISP ON" : "CISP OFF"}
             >
@@ -4324,7 +4321,7 @@ export default function MapPage() {
               onClick={() => {
                 if (gpsErr) return;
                 toggleGps();
-                closeDockUnlessBairros();
+                
               }}
               title={gpsOn ? "GPS ON" : "GPS OFF"}
             >
