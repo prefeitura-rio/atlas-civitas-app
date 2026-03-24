@@ -1,34 +1,32 @@
 import { useEffect, useState } from "react";
 import type { Radar } from "./types";
 import { fetchJson } from "./shared";
+import Swal from "sweetalert2";
 import radarIcon from "@/assets/radar-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
-const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
-const syncDisabled = true;
+type StatusFilter = "all" | "active" | "inactive";
 
 export function AdminRadaresPanel({
   apiBase,
   token,
-  onSynced,
+  onStatusChanged,
   isMobile,
 }: {
   apiBase: string;
   token: string;
-  onSynced?: () => void;
+  onStatusChanged?: () => void;
   isMobile: boolean;
 }) {
   const RADARES_URL = `${apiBase}/radares`;
-  const SYNC_RADARES_URL = `${apiBase}/sync/radares`;
 
   const [loading, setLoading] = useState(false);
-  const [syncLoading, setSyncLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [items, setItems] = useState<Radar[]>([]);
-  const [deactivateMissing, setDeactivateMissing] = useState(true);
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusLoadingKey, setStatusLoadingKey] = useState<string | null>(null);
   const cardRowStyle = {
     border: "1px solid rgba(15,23,42,0.10)",
     borderRadius: 14,
@@ -52,6 +50,168 @@ export function AdminRadaresPanel({
     background: "rgba(248,250,252,0.95)",
     color: "rgba(15,23,42,0.85)",
   } as const;
+  const statusSwitchStyle = (active: boolean, disabled: boolean) =>
+    ({
+      width: 46,
+      height: 28,
+      borderRadius: 999,
+      border: active ? "1px solid rgba(22,163,74,0.65)" : "1px solid rgba(100,116,139,0.42)",
+      background: active ? "linear-gradient(135deg, #34d399, #22c55e)" : "linear-gradient(135deg, #d4d4d8, #cbd5e1)",
+      position: "relative",
+      padding: 0,
+      cursor: disabled ? "not-allowed" : "pointer",
+      transition: "all .2s ease",
+      boxShadow: active ? "0 6px 16px rgba(34,197,94,0.28)" : "0 4px 12px rgba(15,23,42,0.12)",
+      opacity: disabled ? 0.7 : 1,
+    }) as const;
+  const statusKnobStyle = (active: boolean) =>
+    ({
+      position: "absolute",
+      top: 2,
+      left: active ? 20 : 2,
+      width: 22,
+      height: 22,
+      borderRadius: "50%",
+      background: "#fff",
+      boxShadow: "0 3px 8px rgba(15,23,42,0.22)",
+      transition: "left .2s ease",
+    }) as const;
+  const filterBtnStyle = (active: boolean) =>
+    ({
+      padding: "4px 10px",
+      borderRadius: 999,
+      border: active ? "1px solid rgba(15,23,42,0.3)" : "1px solid rgba(15,23,42,0.14)",
+      background: active ? "rgba(15,23,42,0.10)" : "rgba(255,255,255,0.92)",
+      color: active ? "#0f172a" : "rgba(15,23,42,0.72)",
+      fontSize: 11,
+      fontWeight: 800,
+      cursor: "pointer",
+    }) as const;
+  const swalBase = {
+    customClass: {
+      popup: "atlasSwalPopup",
+      title: "atlasSwalTitle",
+      htmlContainer: "atlasSwalHtml",
+      footer: "atlasSwalFooter",
+      confirmButton: "atlasSwalBtn atlasSwalBtnPrimary",
+      cancelButton: "atlasSwalBtn atlasSwalBtnGhost",
+    },
+    buttonsStyling: false,
+    backdrop: "rgba(2, 6, 23, 0.74)",
+  } as const;
+
+  function getRadarActive(radar: Radar) {
+    return radar.is_active !== false;
+  }
+
+  function applyStatusFilter(list: Radar[], filter: StatusFilter) {
+    if (filter === "all") return list;
+    if (filter === "active") return list.filter((r) => getRadarActive(r));
+    return list.filter((r) => !getRadarActive(r));
+  }
+
+  function getRadarKey(radar: Radar) {
+    return String(radar.id ?? radar.codcet ?? "");
+  }
+
+  async function saveRadarStatus(radar: Radar, nextActive: boolean) {
+    const action = nextActive ? "reactivate" : "deactivate";
+    const candidates = [radar.id, radar.codcet]
+      .map((v) => (v ?? "").toString().trim())
+      .filter(Boolean)
+      .filter((v, i, arr) => arr.indexOf(v) === i);
+    if (!candidates.length) {
+      throw new Error("Não foi possível identificar este radar para atualizar o status.");
+    }
+
+    let lastErr: any = null;
+    for (const key of candidates) {
+      try {
+        await fetchJson(`${RADARES_URL}/${encodeURIComponent(key)}/${action}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return;
+      } catch (err: any) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("Falha ao atualizar status do radar.");
+  }
+
+  function patchLocalStatus(radar: Radar, nextActive: boolean) {
+    const target = getRadarKey(radar);
+    setItems((prev) =>
+      prev.map((row) =>
+        getRadarKey(row) === target
+          ? {
+              ...row,
+              is_active: nextActive,
+              status: nextActive ? "ATIVO" : "INATIVO",
+            }
+          : row
+      )
+    );
+  }
+
+  const filteredItems = applyStatusFilter(items, statusFilter);
+
+  async function toggleRadarStatus(radar: Radar) {
+    const key = getRadarKey(radar);
+    if (!key) {
+      setErr("Não foi possível identificar este radar para atualizar o status.");
+      return;
+    }
+    const active = getRadarActive(radar);
+    const nextActive = !active;
+    const radarName = radar.logradouro || radar.localidade || radar.codcet || "Radar";
+
+    const confirm = await Swal.fire({
+      ...swalBase,
+      icon: "warning",
+      title: nextActive ? "Ativar radar?" : "Desativar radar?",
+      text: nextActive
+        ? "Ele voltará a aparecer no mapa assim que a atualização automática for aplicada."
+        : "Ao desativar, esse radar deixará de aparecer no mapa.",
+      showCancelButton: true,
+      confirmButtonText: nextActive ? "Sim, ativar" : "Sim, desativar",
+      cancelButtonText: "Cancelar",
+      reverseButtons: true,
+      focusCancel: true,
+      footer: `Radar: <strong>${radarName}</strong>`,
+    });
+    if (!confirm.isConfirmed) return;
+
+    setErr(null);
+    setStatusLoadingKey(key);
+    try {
+      await saveRadarStatus(radar, nextActive);
+      patchLocalStatus(radar, nextActive);
+      onStatusChanged?.();
+      await Swal.fire({
+        ...swalBase,
+        icon: "success",
+        title: nextActive ? "Radar ativado" : "Radar desativado",
+        text: nextActive
+          ? "Tudo certo. Ele ficará disponível no mapa novamente."
+          : "Pronto. Ele sairá do mapa após a atualização.",
+        timer: 1700,
+        showConfirmButton: false,
+      });
+    } catch (e: any) {
+      const msg = e?.message || "Não foi possível atualizar o status deste radar.";
+      setErr(msg);
+      await Swal.fire({
+        ...swalBase,
+        icon: "error",
+        title: "Não foi possível concluir",
+        text: msg,
+        confirmButtonText: "Fechar",
+      });
+    } finally {
+      setStatusLoadingKey(null);
+    }
+  }
 
   async function load() {
     setErr(null);
@@ -79,38 +239,6 @@ export function AdminRadaresPanel({
     }
   }
 
-  async function runSyncRadares() {
-    setErr(null);
-    setSyncMsg(null);
-
-    setSyncLoading(true);
-    try {
-      const resp = await fetchJson<any>(SYNC_RADARES_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          deactivate_missing: !!deactivateMissing,
-        }),
-      });
-
-      setSyncMsg(
-        `Sincronização concluída. (criados=${resp?.result?.created ?? "-"}, atualizados=${resp?.result?.updated ?? "-"}, desativados=${
-          resp?.result?.deactivated ?? "-"
-        })`
-      );
-
-      await load();
-      onSynced?.();
-    } catch (e: any) {
-      setErr(e?.message || "Erro na sincronização de radares");
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,7 +247,7 @@ export function AdminRadaresPanel({
   useEffect(() => {
     setPage(1);
     setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length]);
+  }, [items.length, statusFilter]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -132,82 +260,29 @@ export function AdminRadaresPanel({
           border: "1px solid rgba(0,0,0,0.10)",
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Radares</div>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          <button
-            onClick={runSyncRadares}
-            disabled={syncDisabled || syncLoading}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(0,0,0,0.86)",
-              color: "#fff",
-              cursor: syncDisabled || syncLoading ? "not-allowed" : "pointer",
-              fontWeight: 900,
-              opacity: syncDisabled || syncLoading ? 0.7 : 1,
-            }}
-          >
-            {syncLoading ? "Sincronizando..." : "Sincronizar Radares"}
-          </button>
-
-          <label
-            className="adminLabelWrap"
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.10)",
-              background: "rgba(255,255,255,0.95)",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.82)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={deactivateMissing}
-              onChange={(e) => setDeactivateMissing(e.target.checked)}
-              style={{ transform: "scale(1.1)" }}
-            />
-            Desativar registros ausentes na fonte de dados
-          </label>
-
-          <button
-            onClick={load}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
-              cursor: "pointer",
-              fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
-            }}
-          >
-            Recarregar lista
-          </button>
-        </div>
-
-        {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
-        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{SYNC_DISABLED_NOTICE}</div>
-        {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
-      </div>
-
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 13 }}>Radares</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${filteredItems.length} itens`}</div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <button type="button" style={filterBtnStyle(statusFilter === "all")} onClick={() => setStatusFilter("all")}>
+              Todos
+            </button>
+            <button
+              type="button"
+              style={filterBtnStyle(statusFilter === "active")}
+              onClick={() => setStatusFilter("active")}
+            >
+              Ativos
+            </button>
+            <button
+              type="button"
+              style={filterBtnStyle(statusFilter === "inactive")}
+              onClick={() => setStatusFilter("inactive")}
+            >
+              Desativados
+            </button>
+          </div>
         </div>
 
         <div
@@ -222,70 +297,102 @@ export function AdminRadaresPanel({
           }}
         >
           {(isMobile
-            ? items.slice(0, mobileCount)
-            : items.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
-          ).map((r) => (
-            <div
-              key={r.id || r.codcet}
-              style={cardRowStyle}
-            >
+            ? filteredItems.slice(0, mobileCount)
+            : filteredItems.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
+          ).map((r) => {
+            const active = getRadarActive(r);
+            const loadingStatus = statusLoadingKey === getRadarKey(r);
+            return (
               <div
+                key={r.id || r.codcet}
                 style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 999,
-                  border: "1px solid rgba(234,88,12,0.30)",
-                  background: "rgba(255,237,213,0.92)",
-                  display: "grid",
-                  placeItems: "center",
-                  flex: "0 0 auto",
+                  ...cardRowStyle,
+                  alignItems: "flex-start",
                 }}
               >
-                <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 13,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      color: "#0f172a",
-                    }}
-                  >
-                    {r.logradouro || r.localidade || "Radar"}
+                <div
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    border: "1px solid rgba(234,88,12,0.30)",
+                    background: "rgba(255,237,213,0.92)",
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 auto",
+                  }}
+                >
+                  <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 13,
+                        whiteSpace: "normal",
+                        overflow: "visible",
+                        textOverflow: "clip",
+                        wordBreak: "break-word",
+                        color: "#0f172a",
+                      }}
+                    >
+                      {r.logradouro || r.localidade || "Radar"}
+                    </div>
+                    <span
+                      style={{
+                        ...chipStyle,
+                        borderColor: "rgba(234,88,12,0.30)",
+                        background: "rgba(255,237,213,0.92)",
+                        color: "#c2410c",
+                      }}
+                    >
+                      {r.codcet}
+                    </span>
                   </div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={chipStyle}>Bairro: {r.bairro || "-"}</span>
+                    <span style={chipStyle}>Sentido: {r.sentido || "-"}</span>
+                    <span style={chipStyle}>Empresa: {r.empresa || "-"}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={chipStyle}>Vel: {r.velofisc ?? "-"}</span>
+                    <span style={chipStyle}>Equip: {r.numero_equipamento || "-"}</span>
+                    <span style={chipStyle}>Status: {r.status || (active ? "ATIVO" : "INATIVO")}</span>
+                  </div>
+                </div>
+                <div style={{ display: "grid", justifyItems: "end", gap: 6, flex: "0 0 auto" }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleRadarStatus(r)}
+                    disabled={loadingStatus}
+                    style={statusSwitchStyle(active, loadingStatus)}
+                    title={active ? "Desativar radar" : "Ativar radar"}
+                    aria-label={active ? "Desativar radar" : "Ativar radar"}
+                  >
+                    <span style={statusKnobStyle(active)} />
+                  </button>
                   <span
                     style={{
                       ...chipStyle,
-                      borderColor: "rgba(234,88,12,0.30)",
-                      background: "rgba(255,237,213,0.92)",
-                      color: "#c2410c",
+                      minWidth: 72,
+                      justifyContent: "center",
+                      borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
+                      background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
+                      color: active ? "#166534" : "#475569",
                     }}
                   >
-                    {r.codcet}
+                    {active ? "ATIVO" : "INATIVO"}
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                  <span style={chipStyle}>Bairro: {r.bairro || "-"}</span>
-                  <span style={chipStyle}>Sentido: {r.sentido || "-"}</span>
-                  <span style={chipStyle}>Empresa: {r.empresa || "-"}</span>
-                </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                  <span style={chipStyle}>Vel: {r.velofisc ?? "-"}</span>
-                  <span style={chipStyle}>Equip: {r.numero_equipamento || "-"}</span>
-                  <span style={chipStyle}>Status: {r.status || (r.is_active !== false ? "ATIVO" : "INATIVO")}</span>
-                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
-          {!items.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum radar encontrado.</div>}
+          {!filteredItems.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum radar encontrado.</div>}
         </div>
 
-        {!isMobile && items.length > ADMIN_PAGE_SIZE && (
+        {!isMobile && filteredItems.length > ADMIN_PAGE_SIZE && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
             <button
               className="btnGhost"
@@ -296,19 +403,24 @@ export function AdminRadaresPanel({
               Anterior
             </button>
             <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Página {page} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
+              Página {page} de {Math.max(1, Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE))}
             </div>
             <button
               className="btnGhost"
-              onClick={() => setPage((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
-              disabled={page >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
-              style={{ opacity: page >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+              onClick={() => setPage((v) => Math.min(Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE), v + 1))}
+              disabled={page >= Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE)}
+              style={{ opacity: page >= Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
             >
               Próxima
             </button>
           </div>
         )}
       </div>
+      {err && (
+        <div style={{ fontSize: 12, opacity: 0.9, color: "#991b1b" }}>
+          {err}
+        </div>
+      )}
     </div>
   );
 }

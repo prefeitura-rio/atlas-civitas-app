@@ -34,6 +34,7 @@ import civitasJointPlatesIcon from "@/assets/icons/civitas/traffic_jam.svg";
 import civitasCorrelatesIcon from "@/assets/icons/civitas/car_crash.svg";
 import civitasMediaIcon from "@/assets/icons/civitas/videocam.svg";
 import { AdminUsersPanel } from "./map/AdminUsersPanel";
+import { AdminOrganizationsPanel } from "./map/AdminOrganizationsPanel";
 import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
 import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
@@ -42,7 +43,7 @@ import { AdminLogsPanel } from "./map/AdminLogsPanel";
 type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
-type AdminTab = "users" | "logs" | "cameras" | "radares";
+type AdminTab = "users" | "organizations" | "logs" | "cameras" | "radares";
 
 
 const API_BASE =
@@ -147,6 +148,23 @@ function getLprNeighborhood(value: any) {
     if (trimmed) return trimmed;
   }
   return "";
+}
+
+function isEntityActive(value: any) {
+  const raw = value?.is_active;
+
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw !== 0;
+  if (typeof raw === "string") {
+    const normalized = raw.trim().toLowerCase();
+    if (["0", "false", "f", "off", "inativo", "inactive", "desligado"].includes(normalized)) return false;
+    if (["1", "true", "t", "on", "ativo", "active", "ligado"].includes(normalized)) return true;
+  }
+
+  const status = String(value?.status || "").trim().toLowerCase();
+  if (status.includes("inativo") || status.includes("deslig")) return false;
+
+  return true;
 }
 
 function escapeHtml(s: string) {
@@ -597,6 +615,7 @@ export default function MapPage() {
   const [pwMsg, setPwMsg] = useState<string | null>(null);
 
   const [adminTab, setAdminTab] = useState<AdminTab>("users");
+  const [adminUsersOrgOpen, setAdminUsersOrgOpen] = useState(false);
 
   const [gpsErr, setGpsErr] = useState<string | null>(null);
   const [gpsOn, setGpsOn] = useState(false);
@@ -2467,7 +2486,8 @@ export default function MapPage() {
           const lng = getLng(c);
           return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
         })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
+        .filter((c) => isEntityActive(c));
 
       setCameras(normalized);
     } catch (e: any) {
@@ -2496,7 +2516,8 @@ export default function MapPage() {
           const lng = getLng(c);
           return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
         })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
+        .filter((c) => isEntityActive(c));
 
       setCamerasIntel(normalized);
     } catch (e: any) {
@@ -2531,7 +2552,8 @@ export default function MapPage() {
           const neighborhood = getLprNeighborhood(c);
           return { ...c, neighborhood, lat: lat ?? NaN, lng: lng ?? NaN };
         })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
+        .filter((c) => isEntityActive(c));
 
       setCamerasLpr(normalized);
     } catch (e: any) {
@@ -2565,7 +2587,8 @@ export default function MapPage() {
           lat: r.lat === undefined || r.lat === null ? null : Number(r.lat),
           lng: r.lng === undefined || r.lng === null ? null : Number(r.lng),
         }))
-        .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any));
+        .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any))
+        .filter((r) => isEntityActive(r));
 
       setRadares(normalized);
     } catch (e: any) {
@@ -3592,9 +3615,20 @@ export default function MapPage() {
     return radares.find((r) => r.codcet === selectedRadar) || null;
   }, [selectedRadar, radares]);
 
+  useEffect(() => {
+    if (panel !== "admin" || adminTab !== "users") {
+      setAdminUsersOrgOpen(false);
+    }
+  }, [panel, adminTab]);
+
   const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1120 : 560;
   const panelSideInset = 16;
-  const panelMaxHeight = panel === "admin" ? "74vh" : "56vh";
+  const panelMaxHeight =
+    panel === "admin"
+      ? adminTab === "users" && adminUsersOrgOpen
+        ? "84vh"
+        : "74vh"
+      : "56vh";
   const listTitle =
     listMode === "cameras"
       ? "Câmeras"
@@ -5116,6 +5150,12 @@ export default function MapPage() {
                     Usuários
                   </button>
                   <button
+                    className={`subTab ${adminTab === "organizations" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("organizations")}
+                  >
+                    Organizações
+                  </button>
+                  <button
                     className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
                     onClick={() => setAdminTab("cameras")}
                   >
@@ -5136,14 +5176,32 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div className="scrollbarHidden" style={{ maxHeight: panelMaxHeight, overflow: "auto" }}>
-                {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
+              <div
+                className="scrollbarHidden"
+                style={{
+                  maxHeight: panelMaxHeight,
+                  overflow: adminTab === "users" && adminUsersOrgOpen ? "visible" : "auto",
+                }}
+              >
+                {adminTab === "users" && (
+                  <AdminUsersPanel
+                    apiBase={API_BASE}
+                    token={accessToken}
+                    isMobile={isMobile}
+                    onOrgDropdownOpenChange={setAdminUsersOrgOpen}
+                  />
+                )}
+                {adminTab === "organizations" && (
+                  <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+                )}
                 {adminTab === "cameras" && (
                   <AdminCamerasPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => {
+                    onStatusChanged={() => {
                       loadCameras();
+                      loadCamerasIntel();
+                      loadCamerasLpr();
                     }}
                     isMobile={isMobile}
                   />
@@ -5152,7 +5210,7 @@ export default function MapPage() {
                   <AdminRadaresPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => {
+                    onStatusChanged={() => {
                       loadRadares();
                     }}
                     isMobile={isMobile}
@@ -5978,6 +6036,12 @@ export default function MapPage() {
                     Usuários
                   </button>
                   <button
+                    className={`subTab ${adminTab === "organizations" ? "subTabActive" : ""}`}
+                    onClick={() => setAdminTab("organizations")}
+                  >
+                    Organizações
+                  </button>
+                  <button
                     className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
                     onClick={() => setAdminTab("cameras")}
                   >
@@ -5997,12 +6061,26 @@ export default function MapPage() {
                   </button>
                 </div>
 
-                {adminTab === "users" && <AdminUsersPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
+                {adminTab === "users" && (
+                  <AdminUsersPanel
+                    apiBase={API_BASE}
+                    token={accessToken}
+                    isMobile={isMobile}
+                    onOrgDropdownOpenChange={setAdminUsersOrgOpen}
+                  />
+                )}
+                {adminTab === "organizations" && (
+                  <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+                )}
                 {adminTab === "cameras" && (
                   <AdminCamerasPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => loadCameras()}
+                    onStatusChanged={() => {
+                      loadCameras();
+                      loadCamerasIntel();
+                      loadCamerasLpr();
+                    }}
                     isMobile={isMobile}
                   />
                 )}
@@ -6010,7 +6088,9 @@ export default function MapPage() {
                   <AdminRadaresPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => loadRadares()}
+                    onStatusChanged={() => {
+                      loadRadares();
+                    }}
                     isMobile={isMobile}
                   />
                 )}

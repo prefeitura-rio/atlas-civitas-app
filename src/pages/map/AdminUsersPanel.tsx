@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
 import type { AdminUser } from "./types";
 import { isUserRole, roleLabel, type UserRole } from "./roles";
@@ -9,6 +9,7 @@ const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWER = "abcdefghijklmnopqrstuvwxyz";
 const PASSWORD_CHARS = `${UPPER}${LOWER}`;
 const SUGGESTED_PASSWORD_SIZE = 10;
+type OrganizationOption = { name: string; organization_type: string };
 
 function randomIndex(max: number) {
   if (max <= 0) return 0;
@@ -100,17 +101,22 @@ export function AdminUsersPanel({
   apiBase,
   token,
   isMobile,
+  onOrgDropdownOpenChange,
 }: {
   apiBase: string;
   token: string;
   isMobile: boolean;
+  onOrgDropdownOpenChange?: (open: boolean) => void;
 }) {
   const USERS_URL = `${apiBase}/users`;
+  const ORGS_URL = `${apiBase}/organizations`;
 
   const [loading, setLoading] = useState(false);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [items, setItems] = useState<AdminUser[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
 
   const [id, setId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -126,7 +132,10 @@ export function AdminUsersPanel({
   const [role, setRole] = useState<UserRole>("user");
   const [isActive, setIsActive] = useState(true);
   const [roleOpen, setRoleOpen] = useState(false);
+  const [orgOpen, setOrgOpen] = useState(false);
+  const [orgSearch, setOrgSearch] = useState("");
   const roleWrapRef = useRef<HTMLDivElement | null>(null);
+  const orgWrapRef = useRef<HTMLDivElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
   const passwordCopiedTimerRef = useRef<number | null>(null);
   const [userTab, setUserTab] = useState<"create" | "manage">("create");
@@ -147,6 +156,7 @@ export function AdminUsersPanel({
     setPasswordCopied(false);
     setRole("user");
     setIsActive(true);
+    setOrgOpen(false);
     setErr(null);
     setSuccess(null);
   }
@@ -169,8 +179,42 @@ export function AdminUsersPanel({
     }
   }
 
+  async function loadOrganizations() {
+    setLoadingOrgs(true);
+    try {
+      const data = await fetchJson<any>(ORGS_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.results)
+        ? data.results
+        : [];
+
+      const normalized: OrganizationOption[] = list
+        .map((raw: any) => ({
+          name: (raw?.name ?? "").toString().trim(),
+          organization_type: (raw?.organization_type ?? "").toString().trim(),
+        }))
+        .filter((org: OrganizationOption) => org.name);
+      const dedup = Array.from(
+        new Map<string, OrganizationOption>(normalized.map((org) => [org.name, org])).values()
+      ).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+      setOrganizations(dedup);
+    } catch {
+      // Não bloqueia tela de usuários se organizações falhar.
+      setOrganizations([]);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }
+
   useEffect(() => {
     load();
+    loadOrganizations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -181,9 +225,12 @@ export function AdminUsersPanel({
 
   useEffect(() => {
     function handleDocClick(e: MouseEvent) {
-      const el = roleWrapRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) setRoleOpen(false);
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+      const roleEl = roleWrapRef.current;
+      const orgEl = orgWrapRef.current;
+      if (roleEl && !roleEl.contains(target)) setRoleOpen(false);
+      if (orgEl && !orgEl.contains(target)) setOrgOpen(false);
     }
 
     document.addEventListener("mousedown", handleDocClick);
@@ -198,6 +245,16 @@ export function AdminUsersPanel({
     };
   }, []);
 
+  useEffect(() => {
+    onOrgDropdownOpenChange?.(orgOpen);
+  }, [orgOpen, onOrgDropdownOpenChange]);
+
+  useEffect(() => {
+    return () => {
+      onOrgDropdownOpenChange?.(false);
+    };
+  }, [onOrgDropdownOpenChange]);
+
   function pick(u: AdminUser) {
     setUserTab("create");
     setId(u.id);
@@ -205,8 +262,10 @@ export function AdminUsersPanel({
     setFullName(u.full_name || "");
     setCpf(formatCpf(u.cpf || ""));
     setMatricula(u.matricula || "");
-    setUnidade(u.unidade || "");
-    setOrgao(u.orgao || "");
+    const nextOrgao = (u.orgao || "").toString();
+    const matchedOrg = organizations.find((org) => org.name === nextOrgao);
+    setOrgao(nextOrgao);
+    setUnidade((u.unidade || matchedOrg?.organization_type || "").toString());
     setPassword("");
     setSuggestedPassword("");
     setPasswordCopied(false);
@@ -285,8 +344,9 @@ export function AdminUsersPanel({
     const roleV = role.trim().toLowerCase();
     const cpfV = normalizeCpf(cpf.trim());
     const matriculaV = matricula.trim();
-    const unidadeV = unidade.trim();
     const orgaoV = orgao.trim();
+    const selectedOrg = organizations.find((org) => org.name === orgaoV);
+    const unidadeV = (selectedOrg?.organization_type || unidade).trim();
 
     if (!emailV) return setErr("Email é obrigatório.");
     if (!fullNameV || fullNameV.length < 3) return setErr("Nome completo inválido.");
@@ -294,6 +354,8 @@ export function AdminUsersPanel({
     if (!isUserRole(roleV)) return setErr("Role deve ser admin ou user.");
     if (!matriculaV) return setErr("Matrícula é obrigatória.");
     if (!orgaoV) return setErr("Órgão é obrigatório.");
+    if (!selectedOrg) return setErr("Selecione um órgão válido da lista.");
+    if (!unidadeV) return setErr("Tipo da organização é obrigatório.");
 
     if (!id) {
       if (cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
@@ -382,6 +444,18 @@ export function AdminUsersPanel({
 
   const normalizedManageFilter = manageFilter.trim().toLowerCase();
   const normalizedManageFilterCpf = normalizedManageFilter.replace(/\D/g, "");
+  const filteredOrganizations = useMemo(() => {
+    const q = orgSearch.trim().toLowerCase();
+    if (!q) return organizations;
+    return organizations.filter((org) => {
+      const name = org.name.toLowerCase();
+      const type = (org.organization_type || "").toLowerCase();
+      return name.includes(q) || type.includes(q);
+    });
+  }, [organizations, orgSearch]);
+  const shouldShowFiveOrgRows = filteredOrganizations.length >= 5;
+  const selectedOrganization = organizations.find((org) => org.name === orgao);
+  const selectedOrganizationType = selectedOrganization?.organization_type || "";
   const filteredItems = items.filter((u) => {
     if (!normalizedManageFilter) return true;
     const name = (u.full_name || "").toLowerCase();
@@ -438,18 +512,125 @@ export function AdminUsersPanel({
             placeholder="matrícula"
             style={inputStyle()}
           />
-          <input
-            value={orgao}
-            onChange={(e) => setOrgao(e.target.value)}
-            placeholder="órgão"
-            style={inputStyle()}
-          />
-          <input
-            value={unidade}
-            onChange={(e) => setUnidade(e.target.value)}
-            placeholder="unidade (opcional)"
-            style={inputStyle()}
-          />
+          <div className="customSelect" ref={orgWrapRef}>
+            <button
+              type="button"
+              className="customSelectBtn"
+              onClick={() => {
+                if (loadingOrgs) return;
+                setOrgOpen((v) => {
+                  const next = !v;
+                  if (next) setOrgSearch("");
+                  return next;
+                });
+              }}
+              disabled={loadingOrgs}
+              style={
+                loadingOrgs
+                  ? { cursor: "not-allowed", opacity: 0.75, fontWeight: 500 }
+                  : { fontWeight: 500 }
+              }
+            >
+              <span>{orgao || (loadingOrgs ? "Carregando organizações..." : "órgão (nome da organização)")}</span>
+              <span className="customSelectChevron" />
+            </button>
+            {orgOpen && !loadingOrgs && (
+              <div className="customSelectMenu" style={{ gap: 6 }}>
+                <div
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 2,
+                    background: "rgba(255,255,255,0.98)",
+                    borderRadius: 10,
+                    paddingBottom: 4,
+                  }}
+                >
+                  <input
+                    value={orgSearch}
+                    onChange={(e) => setOrgSearch(e.target.value)}
+                    placeholder="Filtrar organização..."
+                    style={{
+                      ...inputStyle(),
+                      height: 36,
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      fontSize: 13,
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                <div
+                  className="scrollbarHidden"
+                  style={{
+                    maxHeight: 300,
+                    minHeight: shouldShowFiveOrgRows ? 250 : undefined,
+                    overflow: "auto",
+                    display: "grid",
+                    gap: 4,
+                  }}
+                >
+                {filteredOrganizations.map((org) => (
+                  <button
+                    key={`${org.name}-${org.organization_type}`}
+                    type="button"
+                    className={`customSelectItem ${orgao === org.name ? "customSelectItemActive" : ""}`}
+                    onClick={() => {
+                      setOrgao(org.name);
+                      setUnidade(org.organization_type || "");
+                      setOrgOpen(false);
+                    }}
+                    style={{
+                      display: "grid",
+                      gap: 2,
+                      alignItems: "start",
+                      textAlign: "left",
+                      borderRadius: 12,
+                      padding: "9px 10px",
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(0,0,0,0.86)" }}>{org.name}</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(15,23,42,0.62)" }}>
+                      {org.organization_type || "Tipo não informado"}
+                    </span>
+                  </button>
+                ))}
+                {!filteredOrganizations.length && (
+                  <div
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      fontSize: 12,
+                      color: "rgba(0,0,0,0.62)",
+                    }}
+                  >
+                    Nenhuma organização encontrada para esse filtro.
+                  </div>
+                )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="customSelect">
+            <button
+              type="button"
+              className="customSelectBtn"
+              disabled
+              style={{
+                cursor: "not-allowed",
+                opacity: orgao ? 1 : 0.75,
+                fontWeight: 500,
+              }}
+              title={orgao ? "Tipo vinculado à organização selecionada" : "Selecione primeiro uma organização"}
+            >
+              <span>
+                {selectedOrganizationType || unidade || (loadingOrgs ? "Carregando tipos..." : "tipo da organização")}
+              </span>
+            </button>
+          </div>
 
           <div style={{ display: "grid", gap: 6 }}>
             <div style={{ position: "relative" }}>

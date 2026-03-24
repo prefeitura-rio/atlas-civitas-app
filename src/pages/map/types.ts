@@ -95,6 +95,16 @@ export type AdminUser = {
   terms_accepted_at?: string | null;
 };
 
+export type AdminOrganization = {
+  id: string;
+  name: string;
+  organization_type: string;
+  acronym: string;
+  jurisdiction_level: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type AdminLog = {
   id: string;
   created_at: string;
