@@ -88,7 +88,7 @@
   border-radius: 14px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
   padding: 6px;
-  z-index: 20;
+  z-index: 40;
   display: grid;
   gap: 4px;
 }
