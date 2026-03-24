@@ -150,6 +150,23 @@ function getLprNeighborhood(value: any) {
   return "";
 }
 
+function isEntityActive(value: any) {
+  const raw = value?.is_active;
+
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw !== 0;
+  if (typeof raw === "string") {
+    const normalized = raw.trim().toLowerCase();
+    if (["0", "false", "f", "off", "inativo", "inactive", "desligado"].includes(normalized)) return false;
+    if (["1", "true", "t", "on", "ativo", "active", "ligado"].includes(normalized)) return true;
+  }
+
+  const status = String(value?.status || "").trim().toLowerCase();
+  if (status.includes("inativo") || status.includes("deslig")) return false;
+
+  return true;
+}
+
 function escapeHtml(s: string) {
   return (s || "")
     .replaceAll("&", "&amp;")
@@ -2469,7 +2486,8 @@ export default function MapPage() {
           const lng = getLng(c);
           return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
         })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
+        .filter((c) => isEntityActive(c));
 
       setCameras(normalized);
     } catch (e: any) {
@@ -2498,7 +2516,8 @@ export default function MapPage() {
           const lng = getLng(c);
           return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
         })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
+        .filter((c) => isEntityActive(c));
 
       setCamerasIntel(normalized);
     } catch (e: any) {
@@ -2533,7 +2552,8 @@ export default function MapPage() {
           const neighborhood = getLprNeighborhood(c);
           return { ...c, neighborhood, lat: lat ?? NaN, lng: lng ?? NaN };
         })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
+        .filter((c) => isEntityActive(c));
 
       setCamerasLpr(normalized);
     } catch (e: any) {
@@ -2567,7 +2587,8 @@ export default function MapPage() {
           lat: r.lat === undefined || r.lat === null ? null : Number(r.lat),
           lng: r.lng === undefined || r.lng === null ? null : Number(r.lng),
         }))
-        .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any));
+        .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any))
+        .filter((r) => isEntityActive(r));
 
       setRadares(normalized);
     } catch (e: any) {
@@ -5177,8 +5198,10 @@ export default function MapPage() {
                   <AdminCamerasPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => {
+                    onStatusChanged={() => {
                       loadCameras();
+                      loadCamerasIntel();
+                      loadCamerasLpr();
                     }}
                     isMobile={isMobile}
                   />
@@ -5187,7 +5210,7 @@ export default function MapPage() {
                   <AdminRadaresPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => {
+                    onStatusChanged={() => {
                       loadRadares();
                     }}
                     isMobile={isMobile}
@@ -6053,7 +6076,11 @@ export default function MapPage() {
                   <AdminCamerasPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => loadCameras()}
+                    onStatusChanged={() => {
+                      loadCameras();
+                      loadCamerasIntel();
+                      loadCamerasLpr();
+                    }}
                     isMobile={isMobile}
                   />
                 )}
@@ -6061,7 +6088,9 @@ export default function MapPage() {
                   <AdminRadaresPanel
                     apiBase={API_BASE}
                     token={accessToken}
-                    onSynced={() => loadRadares()}
+                    onStatusChanged={() => {
+                      loadRadares();
+                    }}
                     isMobile={isMobile}
                   />
                 )}
