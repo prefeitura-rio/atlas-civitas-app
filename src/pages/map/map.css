@@ -98,7 +98,7 @@
   background: transparent;
   text-align: left;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 18px;
   font-weight: 800;
   font-family: inherit;
   color: rgba(0, 0, 0, 0.82);
@@ -245,7 +245,7 @@
 }
 
 .panelCard {
-  background: rgba(255, 255, 255, 0.92);
+  background: #f0f0f0;
   border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
   border-radius: 18px;
@@ -285,6 +285,371 @@
 }
 .panelSearch > button {
   flex: 0 0 auto;
+}
+
+.civitasPanelLayout {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #fff;
+  border-radius: 18px;
+  border: 0.8px solid #e5e7eb;
+  box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
+  max-height: calc(var(--vvh, 100dvh) - 118px);
+  overflow: hidden;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.civitasPanelScroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 0 34px 20px 24px;
+  background: #fff;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.civitasPanelScroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.civitasScrollRail {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  right: 8px;
+  width: 6px;
+  border-radius: 999px;
+  background: rgba(106, 114, 130, 0.14);
+  pointer-events: none;
+}
+
+.civitasScrollThumb {
+  width: 100%;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(106, 114, 130, 0.7);
+  opacity: 0;
+  transform: translateY(0);
+  transition: opacity 0.15s ease;
+}
+
+.civitasHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  background: #fff;
+  margin: 0 -34px 0 -24px;
+  padding: 14px 34px 12px 24px;
+  border-bottom: 0;
+  box-shadow: none;
+  transition: box-shadow 0.16s ease;
+}
+
+.civitasHero.civitasHero--scrolled {
+  box-shadow: 0 8px 12px -14px rgba(0, 0, 0, 0.45);
+}
+
+.civitasHeroText {
+  flex: 1;
+  min-width: 0;
+  max-width: 680px;
+}
+
+.civitasHeroTitle {
+  color: #000;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.civitasHeroSubtitle {
+  margin-top: 6px;
+  color: #4e5866;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.civitasHeroActions {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  justify-content: flex-start;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.civitasActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 22px;
+  transition: filter 0.12s ease;
+  box-sizing: border-box;
+}
+
+.civitasActionBtnIcon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.civitasActionBtnIconImg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.civitasActionBtn:hover {
+  filter: brightness(0.98);
+}
+
+.civitasActionBtnGhost {
+  border-color: #13335a;
+  color: #13335a;
+  background: #fff;
+}
+
+.civitasActionBtnPrimary {
+  border-color: #13335a;
+  color: #fff;
+  background: #13335a;
+}
+
+.civitasSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.civitasSectionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #000;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
+}
+
+.civitasSectionBar {
+  width: 4px;
+  height: 22px;
+  border-radius: 999px;
+  background: #00c0f3;
+}
+
+.civitasSummaryList {
+  display: grid;
+  gap: 12px;
+}
+
+.civitasSummaryRow {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.9fr) minmax(210px, 1fr) minmax(210px, 1fr) minmax(240px, 1fr);
+  border-radius: 10px;
+  border: 0.8px solid #e5e7eb;
+  padding: 16px;
+  background: #fff;
+}
+
+.civitasSummaryCol {
+  padding: 0 16px;
+  min-width: 0;
+  border-right: 0.8px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.civitasSummaryCol:first-child {
+  padding-left: 0;
+}
+
+.civitasSummaryCol:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.civitasSummaryToolCol {
+  background: transparent;
+}
+
+.civitasSummaryToolLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.civitasSummaryToolIcon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.civitasSummaryToolIconImg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.civitasSummaryLabel {
+  color: #6a7282;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  line-height: 16px;
+  letter-spacing: 0.6px;
+  margin: 0;
+}
+
+.civitasSummaryToolCol .civitasSummaryLabel {
+  color: #009dc7;
+}
+
+.civitasSummaryToolName {
+  color: #000;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.civitasSummaryText {
+  color: #364153;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20.5px;
+}
+
+.civitasSummaryMobileList {
+  display: grid;
+  gap: 12px;
+}
+
+.civitasSummaryMobileCard {
+  border: 0.8px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  background: #fff;
+}
+
+.civitasSummaryMobileBlock {
+  border-top: 0.8px solid #e5e7eb;
+  padding-top: 8px;
+}
+
+.civitasGuide {
+  border-radius: 10px;
+  border: 0.8px solid #009dc7;
+  background: #e6f9fe;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.civitasGuideTitleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.civitasGuideBadge {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #1485ea;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.civitasGuideBadgeIcon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.civitasGuideTitle {
+  color: #000;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
+}
+
+.civitasGuideText {
+  margin: 0;
+  color: #364153;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+.civitasGuideText a,
+.civitasGuideList a {
+  color: #1485ea;
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.civitasGuideRequirements {
+  border-radius: 10px;
+  background: #fff;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.civitasGuideRequirementsTitle {
+  color: #000;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.civitasGuideList {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: #364153;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.civitasGuideList li::marker {
+  color: #1485ea;
 }
 
 .muted {
@@ -401,6 +766,83 @@
   .listItem {
     padding: 8px 10px;
     border-radius: 12px;
+  }
+  .civitasPanelLayout {
+    max-height: 62vh;
+  }
+  .civitasPanelScroll {
+    padding: 0 16px 16px;
+    gap: 16px;
+  }
+  .civitasScrollRail {
+    display: none;
+  }
+  .civitasHero {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    top: 0;
+    margin: 0 -16px 0 -16px;
+    padding: 16px 16px 12px;
+  }
+  .civitasHeroText {
+    width: 100%;
+    max-width: none;
+  }
+  .civitasHeroTitle {
+    font-size: 22px;
+    line-height: 30px;
+  }
+  .civitasHeroSubtitle {
+    font-size: 14px;
+    line-height: 22px;
+  }
+  .civitasHeroActions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    white-space: normal;
+    gap: 8px;
+  }
+  .civitasActionBtn {
+    width: 100%;
+    justify-content: center;
+    height: 40px;
+    font-size: 14px;
+    line-height: 20px;
+    padding: 0 14px;
+  }
+  .civitasSectionTitle {
+    font-size: 17px;
+    line-height: 24px;
+  }
+  .civitasSummaryToolName {
+    font-size: 15px;
+    line-height: 22px;
+  }
+  .civitasSummaryText {
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .civitasGuide {
+    padding: 16px;
+    gap: 12px;
+  }
+  .civitasGuideTitle {
+    font-size: 17px;
+    line-height: 24px;
+  }
+  .civitasGuideText,
+  .civitasGuideList {
+    font-size: 13px;
+    line-height: 21px;
+  }
+  .civitasGuideRequirements {
+    padding: 14px;
+  }
+  .civitasGuideRequirementsTitle {
+    font-size: 16px;
+    line-height: 24px;
   }
   .dockWrap {
     position: fixed;

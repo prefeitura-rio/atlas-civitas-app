@@ -4,7 +4,15 @@ import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { Building2, Eye, EyeOff, FileDown, Mail, PenTool, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
+import {
+  Building2,
+  Eye,
+  EyeOff,
+  PenTool,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
@@ -17,6 +25,14 @@ import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
 import civitasLogo from "@/assets/civitas_icon.png";
+import civitasMailIcon from "@/assets/icons/civitas/mail.svg";
+import civitasDownloadIcon from "@/assets/icons/civitas/Icon-1.svg";
+import civitasInfoIcon from "@/assets/icons/civitas/Icon.svg";
+import civitasDetectionIcon from "@/assets/icons/civitas/motion_sensor_active.svg";
+import civitasRadarIcon from "@/assets/icons/civitas/radar.svg";
+import civitasJointPlatesIcon from "@/assets/icons/civitas/traffic_jam.svg";
+import civitasCorrelatesIcon from "@/assets/icons/civitas/car_crash.svg";
+import civitasMediaIcon from "@/assets/icons/civitas/videocam.svg";
 import { AdminUsersPanel } from "./map/AdminUsersPanel";
 import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
 import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
@@ -609,40 +625,38 @@ export default function MapPage() {
   const civitasToolsSummary = [
     {
       tool: "Pontos de Detecção",
-      what: "Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas.",
-      when: "Quando já existe uma placa identificada e é necessário entender trajetos ou presença em locais específicos.",
-      result:
-        "Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios de clonagem.",
+      what: "Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas",
+      when: "Quando há placa identificada e é preciso analisar trajetos ou presença em locais específicos",
+      result: "Mapa com rotas, tabela cronológica de detecções, agrupamento em viagens e possíveis indícios de clonagem",
     },
     {
       tool: "Busca por Radar",
-      what: "Identificar veículos que passaram em determinado local e período.",
-      when: "Quando não há placa definida, mas há local e horário da ocorrência.",
-      result: "Lista cronológica de placas detectadas em radar ou conjunto de radares.",
+      what: "Identificar veículos que passaram em determinado local e período",
+      when: "Quando não há placa definida, mas há local e horário da ocorrência",
+      result: "Lista cronológica de placas detectadas em radar ou conjunto de radares",
     },
     {
       tool: "Placas Conjuntas",
-      what: "Identificar veículos que trafegam junto com uma placa monitorada.",
-      when: "Quando há suspeita de atuação em conjunto, batedores ou acompanhamento de veículos.",
-      result: "Lista de placas associadas, frequência de passagens conjuntas e ranking de recorrência.",
+      what: "Identificar veículos que trafegam junto com uma placa monitorada",
+      when: "Quando suspeita-se de atuação em conjunto, batedores ou acompanhamento de veículos",
+      result: "Lista de placas associadas, ranking de recorrência e frequência de passagens conjuntas",
     },
     {
       tool: "Placas Correlatas",
-      what: "Identificar vínculos e padrões entre diferentes veículos monitorados.",
-      when: "Investigações com múltiplos veículos ou análise de conexões entre ocorrências.",
-      result: "Grafo de conexões entre veículos e tabela ordenada por nível de correlação.",
+      what: "Identificar padrões entre diferentes veículos monitorados",
+      when: "Investigações com múltiplos veículos ou análise de conexões entre ocorrências",
+      result: "Grafo de conexões entre veículos e tabela ordenada por nível de correlação",
     },
     {
       tool: "Imagens e Gravações",
-      what:
-        "Solicitação de extração de imagens e/ou trechos de vídeo de câmeras específicas em determinado período e local.",
-      when: "Quando há necessidade de análise visual detalhada de um evento em ponto e intervalo de tempo.",
-      result:
-        "Pacote com imagens e/ou gravações correspondentes ao período solicitado, identificadas por câmera, data e horário.",
+      what: "Solicitação de extração de imagens e/ou trechos de vídeo de câmeras específicas em um período e local",
+      when: "Quando há necessidade de análise visual detalhada de um evento em ponto e intervalo de tempo",
+      result: "Pacote com registros (imagens/gravações) identificados por câmera, data e horário",
     },
   ] as const;
   const civitasTabLabel = "ACIONAR A CIVITAS";
-  const civitasPanelTitle = "Ferramentas da CIVITAS e Como Solicitar às Informações";
+  const civitasPanelTitle = "Ferramentas da CIVITAS e como solicitar informações";
+  const civitasPanelSubtitle = "Acesse os recursos disponíveis e saiba como fazer solicitações formais";
   const civitasContactEmail = "civitas@dados.rio";
   const civitasContactHref = `mailto:${civitasContactEmail}`;
   const civitasModelPdfHref = "/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf";
@@ -692,8 +706,54 @@ export default function MapPage() {
   const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const mapResizeFrameRef = useRef<number | null>(null);
+  const civitasScrollRef = useRef<HTMLDivElement | null>(null);
+  const civitasScrollThumbRef = useRef<HTMLDivElement | null>(null);
+  const civitasScrollRailRef = useRef<HTMLDivElement | null>(null);
+  const civitasHeroRef = useRef<HTMLElement | null>(null);
   const suppressNextMapClickRef = useRef(false);
   const suppressMapClickTimerRef = useRef<number | null>(null);
+
+  const syncCivitasScrollThumb = () => {
+    const scrollEl = civitasScrollRef.current;
+    const thumbEl = civitasScrollThumbRef.current;
+    const railEl = civitasScrollRailRef.current;
+    const heroEl = civitasHeroRef.current;
+    if (!scrollEl || !thumbEl || !railEl) return;
+
+    const panelEl = scrollEl.parentElement;
+    if (panelEl && heroEl) {
+      const panelRect = panelEl.getBoundingClientRect();
+      const heroRect = heroEl.getBoundingClientRect();
+      const railTop = Math.max(12, heroRect.bottom - panelRect.top + 6);
+      railEl.style.top = `${railTop}px`;
+    }
+
+    const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+    if (heroEl) {
+      heroEl.classList.toggle("civitasHero--scrolled", scrollTop > 1);
+    }
+    const canScroll = scrollHeight > clientHeight + 1;
+    if (!canScroll) {
+      thumbEl.style.opacity = "0";
+      return;
+    }
+
+    const railHeight = railEl.clientHeight;
+    if (railHeight <= 0) {
+      thumbEl.style.opacity = "0";
+      return;
+    }
+
+    const minThumbPx = 28;
+    const thumbHeight = Math.max(minThumbPx, (clientHeight / scrollHeight) * railHeight);
+    const maxTop = Math.max(0, railHeight - thumbHeight);
+    const progress = scrollTop / Math.max(1, scrollHeight - clientHeight);
+    const top = maxTop * progress;
+
+    thumbEl.style.height = `${thumbHeight}px`;
+    thumbEl.style.transform = `translateY(${top}px)`;
+    thumbEl.style.opacity = "1";
+  };
 
   useEffect(() => {
     panelRef.current = panel;
@@ -723,6 +783,27 @@ export default function MapPage() {
       window.visualViewport?.removeEventListener("scroll", setViewportHeightVar);
     };
   }, []);
+
+  useEffect(() => {
+    if (panel !== "civitas") return;
+    const scrollEl = civitasScrollRef.current;
+    if (!scrollEl) return;
+
+    const onScroll = () => syncCivitasScrollThumb();
+    scrollEl.addEventListener("scroll", onScroll, { passive: true });
+
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => syncCivitasScrollThumb()) : null;
+    ro?.observe(scrollEl);
+
+    window.addEventListener("resize", syncCivitasScrollThumb);
+    window.requestAnimationFrame(syncCivitasScrollThumb);
+
+    return () => {
+      scrollEl.removeEventListener("scroll", onScroll);
+      ro?.disconnect();
+      window.removeEventListener("resize", syncCivitasScrollThumb);
+    };
+  }, [panel]);
 
   useEffect(() => {
     const el = mapContainerRef.current;
@@ -3513,8 +3594,8 @@ export default function MapPage() {
     return radares.find((r) => r.codcet === selectedRadar) || null;
   }, [selectedRadar, radares]);
 
-  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1080 : 560;
-  const panelSideInset = panel === "civitas" ? 8 : 16;
+  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1120 : 560;
+  const panelSideInset = 16;
   const panelMaxHeight = panel === "admin" ? "74vh" : "56vh";
   const listTitle =
     listMode === "cameras"
@@ -3543,269 +3624,154 @@ export default function MapPage() {
   const listHeaderLabel = `${listTitle} - ${listCountLabel}`;
 
   const renderCivitasPanel = () => {
-    const toolsTable = (
-      <div
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.96)",
-          border: "1px solid rgba(0,0,0,0.10)",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: !isMobile ? "100%" : undefined,
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>Quadro Resumo das Ferramentas da CIVITAS</div>
-        {!isMobile ? (
-          <div style={{ width: "100%", overflowX: "auto", flex: 1, display: "flex" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "separate",
-                borderSpacing: 0,
-                tableLayout: "fixed",
-                fontSize: 12,
-                lineHeight: 1.35,
-              }}
-            >
-              <colgroup>
-                <col style={{ width: "27%" }} />
-                <col style={{ width: "73%" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      background: "rgba(241,245,249,0.96)",
-                      borderTop: "1px solid rgba(15,23,42,0.12)",
-                      borderLeft: "1px solid rgba(15,23,42,0.12)",
-                      borderBottom: "1px solid rgba(15,23,42,0.12)",
-                    }}
-                  >
-                    Ferramenta
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      background: "rgba(241,245,249,0.96)",
-                      borderTop: "1px solid rgba(15,23,42,0.12)",
-                      borderRight: "1px solid rgba(15,23,42,0.12)",
-                      borderBottom: "1px solid rgba(15,23,42,0.12)",
-                    }}
-                  >
-                    Resumo de uso
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {civitasToolsSummary.map((row, idx) => {
-                  const rowBg = idx % 2 === 0 ? "rgba(248,250,252,0.9)" : "rgba(255,255,255,0.96)";
-                  return (
-                    <tr key={row.tool}>
-                      <td
-                        style={{
-                          padding: "10px 12px",
-                          fontWeight: 900,
-                          color: "#0f172a",
-                          verticalAlign: "top",
-                          background: rowBg,
-                          borderLeft: "1px solid rgba(15,23,42,0.12)",
-                          borderBottom: "1px solid rgba(15,23,42,0.12)",
-                        }}
-                      >
-                        {row.tool}
-                      </td>
-                      <td
-                        style={{
-                          padding: "10px 12px",
-                          verticalAlign: "top",
-                          color: "#1f2937",
-                          background: rowBg,
-                          borderRight: "1px solid rgba(15,23,42,0.12)",
-                          borderBottom: "1px solid rgba(15,23,42,0.12)",
-                        }}
-                      >
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <div>
-                            <strong style={{ fontWeight: 900 }}>O que é:</strong> {row.what}
-                          </div>
-                          <div>
-                            <strong style={{ fontWeight: 900 }}>Quando usar:</strong> {row.when}
-                          </div>
-                          <div>
-                            <strong style={{ fontWeight: 900 }}>Resultado:</strong> {row.result}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: 8 }}>
-            {civitasToolsSummary.map((row) => (
-              <div
-                key={row.tool}
-                style={{
-                  border: "1px solid rgba(0,0,0,0.14)",
-                  borderRadius: 12,
-                  padding: 10,
-                  background: "rgba(255,255,255,0.98)",
-                  minWidth: 0,
-                }}
-              >
-                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>{row.tool}</div>
-                <div style={{ fontSize: 12, lineHeight: 1.4, wordBreak: "break-word" }}>
-                  <strong>O que é:</strong> {row.what}
-                </div>
-                <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
-                  <strong>Quando utilizar:</strong> {row.when}
-                </div>
-                <div style={{ fontSize: 12, lineHeight: 1.4, marginTop: 4, wordBreak: "break-word" }}>
-                  <strong>Resultado:</strong> {row.result}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-
-    const actionButtons = (
-      <div
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "linear-gradient(155deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))",
-          border: "1px solid rgba(30,41,59,0.14)",
-          boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>Ações rápidas</div>
-        <div style={{ fontSize: 12, lineHeight: 1.45, color: "rgba(15,23,42,0.86)", marginBottom: 10 }}>
-          Use os botões abaixo para abrir o contato oficial da CIVITAS e baixar o modelo de ofício.
-        </div>
-        <div style={{ display: "grid", gap: 20 }}>
-          <a
-            href={civitasContactHref}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              padding: "10px 12px",
-              borderRadius: 12,
-              textDecoration: "none",
-              fontWeight: 900,
-              color: "#fff",
-              border: "none",
-              background: "linear-gradient(135deg, #00c0f3, #0a284b)",
-              boxShadow: "0 10px 18px rgba(10,40,75,0.30)",
-            }}
-          >
-            <Mail size={15} />
-            Entrar em contato
-          </a>
-          <a
-            href={civitasModelPdfHref}
-            download
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              padding: "10px 12px",
-              borderRadius: 12,
-              textDecoration: "none",
-              fontWeight: 900,
-              whiteSpace: "nowrap",
-              color: "#0f172a",
-              border: "none",
-              background: "linear-gradient(135deg, rgba(254,243,199,0.96), rgba(255,251,235,0.98))",
-              boxShadow: "0 8px 16px rgba(245,158,11,0.22)",
-            }}
-          >
-            <FileDown size={15} />
-            Modelo de ofício
-          </a>
-        </div>
-      </div>
-    );
-
-    const requestGuide = (
-      <div
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.95)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>Como solicitar o uso das funcionalidades da CIVITAS</div>
-        <div style={{ fontSize: 12, lineHeight: 1.5, color: "#111827", textAlign: "justify", textJustify: "inter-word" }}>
-          Para usufruir das funcionalidades disponíveis no App Civitas e dos relatórios analíticos associados ao cerco
-          eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em lei,{" "}
-          <a
-            href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: "#1d4ed8", textDecoration: "underline", fontWeight: 800 }}
-          >
-            DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
-          </a>
-          .
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            lineHeight: 1.5,
-            color: "#111827",
-            marginTop: 8,
-            textAlign: "justify",
-            textJustify: "inter-word",
-          }}
-        >
-          As solicitações devem ser encaminhadas por ofício eletrônico, assinado digitalmente pela autoridade competente do
-          órgão e enviado ao endereço <strong style={{ fontWeight: 900 }}>{civitasContactEmail}</strong>. O documento deve
-          conter o número e a data do ofício, a identificação do órgão requerente, os contatos do ponto focal responsável
-          (e-mail e telefone) e a descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e
-          demais elementos relevantes para a análise da demanda.
-        </div>
-      </div>
-    );
+    const civitasToolIcons = [
+      civitasDetectionIcon,
+      civitasRadarIcon,
+      civitasJointPlatesIcon,
+      civitasCorrelatesIcon,
+      civitasMediaIcon,
+    ] as const;
 
     return (
-      <>
-        <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>{civitasPanelTitle}</div>
-
-        {!isMobile ? (
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "minmax(0, 1.68fr) minmax(320px, 1fr)",
-              alignItems: "stretch",
-            }}
-          >
-            {toolsTable}
-            <div style={{ display: "grid", gap: 12 }}>
-              {actionButtons}
-              {requestGuide}
+      <div className="civitasPanelLayout">
+        <div ref={civitasScrollRef} className="civitasPanelScroll">
+          <header ref={civitasHeroRef} className="civitasHero">
+            <div className="civitasHeroText">
+              <div className="civitasHeroTitle">{civitasPanelTitle}</div>
+              <div className="civitasHeroSubtitle">{civitasPanelSubtitle}</div>
             </div>
-          </div>
-        ) : (
-          <div className="scrollbarHidden" style={{ display: "grid", gap: 10, maxHeight: "62vh", overflow: "auto" }}>
-            {actionButtons}
-            {toolsTable}
-            {requestGuide}
-          </div>
-        )}
-      </>
+            <div className="civitasHeroActions">
+              <a href={civitasContactHref} className="civitasActionBtn civitasActionBtnGhost">
+                <span className="civitasActionBtnIcon">
+                  <img src={civitasMailIcon} alt="" className="civitasActionBtnIconImg" />
+                </span>
+                Entrar em contato
+              </a>
+              <a href={civitasModelPdfHref} download className="civitasActionBtn civitasActionBtnPrimary">
+                <span className="civitasActionBtnIcon">
+                  <img src={civitasDownloadIcon} alt="" className="civitasActionBtnIconImg" />
+                </span>
+                Modelo de ofício (PDF)
+              </a>
+            </div>
+          </header>
+
+          <section className="civitasSection">
+            <div className="civitasSectionTitle">
+              <span className="civitasSectionBar" />
+              Resumo das ferramentas da CIVITAS
+            </div>
+
+            {!isMobile ? (
+              <div className="civitasSummaryList">
+                {civitasToolsSummary.map((row, idx) => {
+                  const toolIcon = civitasToolIcons[idx] ?? civitasDetectionIcon;
+                  return (
+                    <article key={row.tool} className="civitasSummaryRow">
+                      <div className="civitasSummaryCol civitasSummaryToolCol">
+                        <div className="civitasSummaryLabel">Ferramenta</div>
+                        <div className="civitasSummaryToolLine">
+                          <span className="civitasSummaryToolIcon">
+                            <img src={toolIcon} alt="" className="civitasSummaryToolIconImg" />
+                          </span>
+                          <div className="civitasSummaryToolName">{row.tool}</div>
+                        </div>
+                      </div>
+                      <div className="civitasSummaryCol">
+                        <div className="civitasSummaryLabel">O que é</div>
+                        <div className="civitasSummaryText">{row.what}</div>
+                      </div>
+                      <div className="civitasSummaryCol">
+                        <div className="civitasSummaryLabel">Quando utilizar</div>
+                        <div className="civitasSummaryText">{row.when}</div>
+                      </div>
+                      <div className="civitasSummaryCol">
+                        <div className="civitasSummaryLabel">Resultado</div>
+                        <div className="civitasSummaryText">{row.result}</div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="civitasSummaryMobileList">
+                {civitasToolsSummary.map((row, idx) => {
+                  const toolIcon = civitasToolIcons[idx] ?? civitasDetectionIcon;
+                  return (
+                    <article key={row.tool} className="civitasSummaryMobileCard">
+                      <div className="civitasSummaryToolLine">
+                        <span className="civitasSummaryToolIcon">
+                          <img src={toolIcon} alt="" className="civitasSummaryToolIconImg" />
+                        </span>
+                        <div className="civitasSummaryToolName">{row.tool}</div>
+                      </div>
+                      <div className="civitasSummaryMobileBlock">
+                        <div className="civitasSummaryLabel">O que é</div>
+                        <div className="civitasSummaryText">{row.what}</div>
+                      </div>
+                      <div className="civitasSummaryMobileBlock">
+                        <div className="civitasSummaryLabel">Quando utilizar</div>
+                        <div className="civitasSummaryText">{row.when}</div>
+                      </div>
+                      <div className="civitasSummaryMobileBlock">
+                        <div className="civitasSummaryLabel">Resultado</div>
+                        <div className="civitasSummaryText">{row.result}</div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="civitasGuide">
+            <div className="civitasGuideTitleRow">
+              <span className="civitasGuideBadge">
+                <img src={civitasInfoIcon} alt="" className="civitasGuideBadgeIcon" />
+              </span>
+              <div className="civitasGuideTitle">Como solicitar o uso das funcionalidades da CIVITAS</div>
+            </div>
+            <p className="civitasGuideText">
+              Para usufruir das funcionalidades disponíveis no App CIVITAS e dos relatórios analíticos associados ao cerco
+              eletrônico, a solicitação deve ser iniciada formalmente por meio de ofício, conforme previsto em lei,{" "}
+              <a
+                href="https://leis.org/municipais/rj/rio-de-janeiro/lei/decreto/2026/57481/decreto-n-57481-2026-dispoe-sobre-o-compartilhamento-tratamento-e-protecao-de-dados-e-imagens-no-ambito-da-central-de-inteligencia-vigilancia-e-tecnologia-de-apoio-a-seguranca-publica-civitas-e-da-outras-providencias"
+                target="_blank"
+                rel="noreferrer"
+              >
+                DECRETO RIO Nº 57.481, DE 12 DE JANEIRO DE 2026
+              </a>
+              .
+            </p>
+
+            <div className="civitasGuideRequirements">
+              <div className="civitasGuideRequirementsTitle">Requisitos para a solicitação</div>
+              <ul className="civitasGuideList">
+                <li>
+                  As solicitações devem ser encaminhadas por <strong>ofício eletrônico</strong>, assinado digitalmente pela
+                  autoridade competente do órgão.
+                </li>
+                <li>
+                  Enviar ao endereço:{" "}
+                  <a href={civitasContactHref} style={{ fontWeight: 800 }}>
+                    {civitasContactEmail}
+                  </a>
+                  .
+                </li>
+                <li>O documento deve conter: número e data do ofício, identificação do órgão requerente.</li>
+                <li>Contatos do ponto focal responsável (e-mail e telefone).</li>
+                <li>
+                  Descrição objetiva da informação solicitada, incluindo local, data, horário, dinâmica e demais elementos
+                  relevantes para análise.
+                </li>
+              </ul>
+            </div>
+          </section>
+        </div>
+        <div ref={civitasScrollRailRef} className="civitasScrollRail" aria-hidden="true">
+          <div ref={civitasScrollThumbRef} className="civitasScrollThumb" />
+        </div>
+      </div>
     );
   };
 
@@ -4532,7 +4498,7 @@ export default function MapPage() {
       {/* LEFT PANEL (desktop) */}
       {panel !== null && (
         <div
-          className="desktopPanels panelCard"
+          className={`desktopPanels ${panel === "civitas" ? "" : "panelCard"}`.trim()}
           style={{
             position: "absolute",
             top: 90,
@@ -4540,7 +4506,7 @@ export default function MapPage() {
             width: panelWidth,
             maxWidth: `calc(100vw - ${panelSideInset * 2}px)`,
             zIndex: 20,
-            padding: 14,
+            padding: panel === "civitas" ? 0 : 14,
             color: "#0b0b0f",
             marginLeft: 0,
           }}
