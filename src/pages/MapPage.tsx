@@ -526,6 +526,8 @@ export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const areaDrawModeRef = useRef(false);
+  const showBairrosRef = useRef(false);
+  const bairrosGeoRef = useRef<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const hasStreamingAccessRef = useRef(false);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
@@ -587,6 +589,14 @@ export default function MapPage() {
   useEffect(() => {
     areaDrawModeRef.current = areaDrawMode;
   }, [areaDrawMode]);
+
+  useEffect(() => {
+    showBairrosRef.current = showBairros;
+  }, [showBairros]);
+
+  useEffect(() => {
+    bairrosGeoRef.current = bairrosGeo;
+  }, [bairrosGeo]);
 
   const [listMode, setListMode] = useState<"cameras" | "inteligentes" | "lpr" | "radares">("cameras");
   const [query, setQuery] = useState("");
@@ -1265,8 +1275,8 @@ export default function MapPage() {
         source: SOURCES.bairros,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
-          "fill-color": "#22c55e",
-          "fill-opacity": 0.35,
+          "fill-color": "#34d399",
+          "fill-opacity": 0.18,
         },
       });
     }
@@ -2201,6 +2211,57 @@ export default function MapPage() {
         ],
       });
       if (!features || features.length === 0) {
+        let clickedBairro = "";
+
+        if (showBairrosRef.current) {
+          const bairroLayers = [
+            LAYERS.bairros_selected_fill,
+            LAYERS.bairros_selected_line,
+            LAYERS.bairros_fill,
+            LAYERS.bairros_line,
+          ];
+          const renderedBairroFeatures = map.queryRenderedFeatures(e.point, { layers: bairroLayers });
+          const bairroFeature = renderedBairroFeatures.find((f: any) => {
+            const nome = f?.properties?.NOME;
+            return typeof nome === "string" && nome.trim().length > 0;
+          }) as any;
+          clickedBairro = (bairroFeature?.properties?.NOME || "").toString().trim();
+
+          if (!clickedBairro) {
+            const lng = Number(e.lngLat?.lng);
+            const lat = Number(e.lngLat?.lat);
+            const data = bairrosGeoRef.current;
+            if (Number.isFinite(lng) && Number.isFinite(lat) && data?.features?.length) {
+              const point: [number, number] = [lng, lat];
+              for (const feature of data.features as BairrosFeature[]) {
+                const nome = (feature.properties?.NOME || "").trim();
+                if (!nome || !feature.geometry) continue;
+                const bbox = getGeometryBbox(feature.geometry);
+                if (!bbox) continue;
+                if (
+                  point[0] < bbox.minX ||
+                  point[0] > bbox.maxX ||
+                  point[1] < bbox.minY ||
+                  point[1] > bbox.maxY
+                ) {
+                  continue;
+                }
+                if (pointInGeometry(point, feature.geometry)) {
+                  clickedBairro = nome;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (clickedBairro) {
+          setSelectedBairro(clickedBairro);
+          setBairroQuery("");
+          setBairroReportMsg(null);
+          return;
+        }
+
         if (!keepMobileStreamingPopupOpen()) popup?.remove();
       }
 
@@ -2963,6 +3024,13 @@ export default function MapPage() {
       radares: countPoints(radares),
     };
   }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
+
+  const selectedBairroTotal = selectedBairroStats
+    ? selectedBairroStats.cameras +
+      selectedBairroStats.inteligentes +
+      selectedBairroStats.lpr +
+      selectedBairroStats.radares
+    : 0;
 
   const selectedBairroSelectionIds = useMemo(() => {
     if (!selectedBairroFeature?.geometry) {
@@ -3871,34 +3939,61 @@ export default function MapPage() {
         {showBairros && selectedBairro && selectedBairroStats && (
           <div
             className="dock"
-            style={isMobile ? { width: "100%", maxWidth: 360 } : { minWidth: 220 }}
+            style={
+              isMobile
+                ? { width: "100%", maxWidth: 360, padding: 8, gap: 4 }
+                : { minWidth: 220 }
+            }
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div className="dockTitle" style={{ marginBottom: 0 }}>Resumo</div>
               <button
                 className="btnGhost"
                 onClick={() => setSelectedBairro("")}
-                style={{ width: 28, height: 28, padding: 0, borderRadius: 999, lineHeight: 1 }}
+                style={{
+                  width: isMobile ? 24 : 28,
+                  height: isMobile ? 24 : 28,
+                  padding: 0,
+                  borderRadius: 999,
+                  lineHeight: 1,
+                }}
                 title="Fechar resumo"
               >
                 ✕
               </button>
             </div>
-            <div className="dockNote" style={{ lineHeight: 1.4, marginTop: 6 }}>
-              <div style={{ fontSize: 13, marginBottom: 4 }}>
+            <div
+              className="dockNote"
+              style={{ lineHeight: isMobile ? 1.25 : 1.4, marginTop: isMobile ? 2 : 6, fontSize: isMobile ? 9 : undefined }}
+            >
+              <div style={{ fontSize: isMobile ? 11 : 13, marginBottom: isMobile ? 3 : 4 }}>
                 <strong>
-                  {selectedBairro} - Total:{" "}
-                  {selectedBairroStats.cameras +
-                    selectedBairroStats.inteligentes +
-                    selectedBairroStats.lpr +
-                    selectedBairroStats.radares}
+                  {selectedBairro} - Total: {selectedBairroTotal}
                 </strong>
               </div>
-              <div>Câmeras: {selectedBairroStats.cameras}</div>
-              <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
-              <div>LPR: {selectedBairroStats.lpr}</div>
-              <div>Radares: {selectedBairroStats.radares}</div>
-              <div style={{ marginTop: 10 }}>
+              {isMobile ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "2px 8px",
+                    fontSize: 9,
+                  }}
+                >
+                  <div>Câmeras: {selectedBairroStats.cameras}</div>
+                  <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
+                  <div>LPR: {selectedBairroStats.lpr}</div>
+                  <div>Radares: {selectedBairroStats.radares}</div>
+                </div>
+              ) : (
+                <>
+                  <div>Câmeras: {selectedBairroStats.cameras}</div>
+                  <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
+                  <div>LPR: {selectedBairroStats.lpr}</div>
+                  <div>Radares: {selectedBairroStats.radares}</div>
+                </>
+              )}
+              <div style={{ marginTop: isMobile ? 6 : 10 }}>
                 <button
                   className="btnGhost"
                   onClick={downloadBairroReport}
@@ -3906,6 +4001,9 @@ export default function MapPage() {
                   style={{
                     width: "100%",
                     borderRadius: 10,
+                    minHeight: isMobile ? 30 : undefined,
+                    padding: isMobile ? "6px 8px" : undefined,
+                    fontSize: isMobile ? 11 : undefined,
                     opacity: bairroReportLoading ? 0.7 : 1,
                   }}
                 >
@@ -3917,35 +4015,41 @@ export default function MapPage() {
                   </div>
                 )}
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 4,
-                  fontSize: 9,
-                  lineHeight: 1.35,
-                  color: "rgba(15,23,42,0.75)",
-                }}
-              >
-                <span
-                  title="Alguns equipamentos podem compartilhar a mesma coordenada."
+              {isMobile ? (
+                <div style={{ marginTop: 6, fontSize: 8.5, lineHeight: 1.2, color: "rgba(15,23,42,0.72)" }}>
+                  * O total pode não refletir pontos únicos no mapa.
+                </div>
+              ) : (
+                <div
                   style={{
-                    display: "inline-block",
-                    marginTop: 1,
-                    fontWeight: 900,
-                    fontSize: 10,
-                    lineHeight: 1,
+                    marginTop: 8,
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 4,
+                    fontSize: 9,
+                    lineHeight: 1.35,
+                    color: "rgba(15,23,42,0.75)",
                   }}
                 >
-                  *
-                </span>
-                <div>
-                  Podem existir câmeras, radares, LPR e Super Câmeras Inteligentes na mesma coordenada.
-                  <br />
-                  Por isso, o total pode não refletir pontos únicos no mapa.
+                  <span
+                    title="Alguns equipamentos podem compartilhar a mesma coordenada."
+                    style={{
+                      display: "inline-block",
+                      marginTop: 1,
+                      fontWeight: 900,
+                      fontSize: 10,
+                      lineHeight: 1,
+                    }}
+                  >
+                    *
+                  </span>
+                  <div>
+                    Podem existir câmeras, radares, LPR e Super Câmeras Inteligentes na mesma coordenada.
+                    <br />
+                    Por isso, o total pode não refletir pontos únicos no mapa.
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
