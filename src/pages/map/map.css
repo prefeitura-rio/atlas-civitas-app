@@ -687,7 +687,7 @@
   background: #0b0b0f;
 }
 
-@media (max-width: 860px), (max-height: 500px) and (pointer: coarse) {
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
   .mapRoot {
     top: calc(env(safe-area-inset-top) * -1);
     right: calc(env(safe-area-inset-right) * -1);
@@ -1407,6 +1407,11 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  pointer-events: none;
+}
+.dockWrap > .dock,
+.dockWrap > .dockHandle {
+  pointer-events: auto;
 }
 .dockHandle {
   height: 32px;

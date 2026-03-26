@@ -2262,6 +2262,11 @@ export default function MapPage() {
           return;
         }
 
+        if (showBairrosRef.current) {
+          setSelectedBairro("");
+          setBairroReportMsg(null);
+        }
+
         if (!keepMobileStreamingPopupOpen()) popup?.remove();
       }
 
@@ -3591,7 +3596,7 @@ export default function MapPage() {
   const listItems = isMobile ? filtered.slice(0, mobileCount) : pagedItems;
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 860px), (max-height: 500px) and (pointer: coarse)");
+    const mq = window.matchMedia("(max-width: 1210px), (max-height: 500px) and (pointer: coarse)");
     const update = () => setIsMobile(mq.matches);
     update();
     if (mq.addEventListener) mq.addEventListener("change", update);
