@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   PenTool,
@@ -60,6 +60,20 @@ const FALLBACK_FEATURE_CATALOG: FeatureCatalogItem[] = [
   { code: "gps", name: "GPS", category: "tool" },
   { code: "desenhar_area", name: "Desenhar Área", category: "tool" },
 ];
+
+const FALLBACK_ORGANIZATION_TYPES = [
+  "Órgão Público",
+  "Empresa",
+  "Concessionária",
+  "Fornecedora",
+  "Parceira Tecnológica",
+  "Instituição do Sistema de Justiça",
+  "Força de Segurança",
+  "Órgão de Emergência",
+  "Secretaria",
+];
+
+const FALLBACK_JURISDICTION_LEVELS = ["Federal", "Estadual", "Municipal", "Privada"];
 
 type OrganizationForm = {
   name: string;
@@ -139,6 +153,28 @@ function getFeatureDisplayName(code: string, fallback = "") {
     .join(" ");
 }
 
+function normalizeCatalogValues(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return [...fallback];
+
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  for (const item of value) {
+    const normalized = clean(item);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    next.push(normalized);
+  }
+
+  return next.length ? next : [...fallback];
+}
+
+function withCurrentValue(options: string[], currentValue: string) {
+  const current = clean(currentValue);
+  if (!current || options.includes(current)) return options;
+  return [current, ...options];
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
@@ -206,16 +242,21 @@ export function AdminOrganizationsPanel({
 }) {
   const ORGS_URL = `${apiBase}/organizations`;
   const FEATURE_CATALOG_URL = `${apiBase}/organizations/feature-catalog`;
+  const ORGANIZATION_CATALOGS_URL = `${apiBase}/organizations/catalogs`;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [organizationCatalogsLoading, setOrganizationCatalogsLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [catalogErr, setCatalogErr] = useState<string | null>(null);
+  const [organizationCatalogsErr, setOrganizationCatalogsErr] = useState<string | null>(null);
   const [items, setItems] = useState<AdminOrganization[]>([]);
   const [featureCatalog, setFeatureCatalog] = useState<FeatureCatalogItem[]>([]);
+  const [organizationTypes, setOrganizationTypes] = useState<string[]>(FALLBACK_ORGANIZATION_TYPES);
+  const [jurisdictionLevels, setJurisdictionLevels] = useState<string[]>(FALLBACK_JURISDICTION_LEVELS);
 
   const [orgTab, setOrgTab] = useState<"create" | "manage">("create");
   const [id, setId] = useState<string | null>(null);
@@ -224,6 +265,10 @@ export function AdminOrganizationsPanel({
   const [manageFilter, setManageFilter] = useState("");
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
+  const [organizationTypeOpen, setOrganizationTypeOpen] = useState(false);
+  const [jurisdictionLevelOpen, setJurisdictionLevelOpen] = useState(false);
+  const organizationTypeWrapRef = useRef<HTMLDivElement | null>(null);
+  const jurisdictionLevelWrapRef = useRef<HTMLDivElement | null>(null);
 
   const catalogItems = useMemo(() => {
     const source = featureCatalog.length ? featureCatalog : FALLBACK_FEATURE_CATALOG;
@@ -241,6 +286,16 @@ export function AdminOrganizationsPanel({
 
     return Array.from(grouped.entries());
   }, [catalogItems]);
+
+  const organizationTypeOptions = useMemo(
+    () => withCurrentValue(organizationTypes, form.organization_type),
+    [organizationTypes, form.organization_type]
+  );
+
+  const jurisdictionLevelOptions = useMemo(
+    () => withCurrentValue(jurisdictionLevels, form.jurisdiction_level),
+    [jurisdictionLevels, form.jurisdiction_level]
+  );
 
   function setField<K extends keyof OrganizationForm>(key: K, value: OrganizationForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -264,6 +319,8 @@ export function AdminOrganizationsPanel({
     setId(null);
     setForm(getInitialForm());
     setOriginalForm(null);
+    setOrganizationTypeOpen(false);
+    setJurisdictionLevelOpen(false);
     if (opts?.clearMessages !== false) {
       setErr(null);
       setSuccess(null);
@@ -281,6 +338,8 @@ export function AdminOrganizationsPanel({
     setId(clean(org.id) || null);
     setForm(normalized);
     setOriginalForm(normalized);
+    setOrganizationTypeOpen(false);
+    setJurisdictionLevelOpen(false);
   }
 
   async function load() {
@@ -332,6 +391,25 @@ export function AdminOrganizationsPanel({
     }
   }
 
+  async function loadOrganizationCatalogs() {
+    setOrganizationCatalogsErr(null);
+    setOrganizationCatalogsLoading(true);
+    try {
+      const data = await fetchJson<any>(ORGANIZATION_CATALOGS_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setOrganizationTypes(normalizeCatalogValues(data?.organization_types, FALLBACK_ORGANIZATION_TYPES));
+      setJurisdictionLevels(normalizeCatalogValues(data?.jurisdiction_levels, FALLBACK_JURISDICTION_LEVELS));
+    } catch (e: any) {
+      setOrganizationCatalogsErr(e?.message || "Erro ao carregar catálogos da organização");
+      setOrganizationTypes([...FALLBACK_ORGANIZATION_TYPES]);
+      setJurisdictionLevels([...FALLBACK_JURISDICTION_LEVELS]);
+    } finally {
+      setOrganizationCatalogsLoading(false);
+    }
+  }
+
   async function loadOne(orgId: string) {
     if (!orgId) return;
     setErr(null);
@@ -351,7 +429,24 @@ export function AdminOrganizationsPanel({
   useEffect(() => {
     void load();
     void loadFeatureCatalog();
+    void loadOrganizationCatalogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    function handleDocClick(e: MouseEvent) {
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+
+      const typeEl = organizationTypeWrapRef.current;
+      const jurisdictionEl = jurisdictionLevelWrapRef.current;
+
+      if (typeEl && !typeEl.contains(target)) setOrganizationTypeOpen(false);
+      if (jurisdictionEl && !jurisdictionEl.contains(target)) setJurisdictionLevelOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleDocClick);
+    return () => document.removeEventListener("mousedown", handleDocClick);
   }, []);
 
   useEffect(() => {
@@ -507,25 +602,91 @@ export function AdminOrganizationsPanel({
               placeholder="nome da organização"
               style={inputStyle()}
             />
-            <input
-              value={form.organization_type}
-              onChange={(e) => setField("organization_type", e.target.value)}
-              placeholder="tipo da organização"
-              style={inputStyle()}
-            />
+            <div className="customSelect" ref={organizationTypeWrapRef}>
+              <button
+                type="button"
+                className="customSelectBtn"
+                onClick={() => {
+                  setOrganizationTypeOpen((v) => {
+                    const next = !v;
+                    if (next) setJurisdictionLevelOpen(false);
+                    return next;
+                  });
+                }}
+                style={{ fontWeight: 500 }}
+              >
+                <span>{form.organization_type || (organizationCatalogsLoading ? "Carregando tipos..." : "tipo da organização")}</span>
+                <span className="customSelectChevron" />
+              </button>
+              {organizationTypeOpen && (
+                <div className="customSelectMenu">
+                  {organizationTypeOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={`customSelectItem ${form.organization_type === option ? "customSelectItemActive" : ""}`}
+                      onClick={() => {
+                        setField("organization_type", option);
+                        setOrganizationTypeOpen(false);
+                      }}
+                      style={{ fontWeight: 500 }}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <input
               value={form.acronym}
               onChange={(e) => setField("acronym", e.target.value)}
               placeholder="sigla"
               style={inputStyle()}
             />
-            <input
-              value={form.jurisdiction_level}
-              onChange={(e) => setField("jurisdiction_level", e.target.value)}
-              placeholder="nível de jurisdição"
-              style={inputStyle()}
-            />
+            <div className="customSelect" ref={jurisdictionLevelWrapRef}>
+              <button
+                type="button"
+                className="customSelectBtn"
+                onClick={() => {
+                  setJurisdictionLevelOpen((v) => {
+                    const next = !v;
+                    if (next) setOrganizationTypeOpen(false);
+                    return next;
+                  });
+                }}
+                style={{ fontWeight: 500 }}
+              >
+                <span>
+                  {form.jurisdiction_level || (organizationCatalogsLoading ? "Carregando níveis..." : "nível de jurisdição")}
+                </span>
+                <span className="customSelectChevron" />
+              </button>
+              {jurisdictionLevelOpen && (
+                <div className="customSelectMenu">
+                  {jurisdictionLevelOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={`customSelectItem ${form.jurisdiction_level === option ? "customSelectItemActive" : ""}`}
+                      onClick={() => {
+                        setField("jurisdiction_level", option);
+                        setJurisdictionLevelOpen(false);
+                      }}
+                      style={{ fontWeight: 500 }}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
+          {organizationCatalogsErr && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#92400e" }}>
+              {organizationCatalogsErr}. Usando catálogo local para os campos da organização.
+            </div>
+          )}
 
           <div
             style={{
