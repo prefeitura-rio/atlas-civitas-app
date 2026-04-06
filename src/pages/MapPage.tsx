@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
-import type { Camera, CameraIntel, CameraLpr, Me, Radar } from "./map/types";
+import type { Camera, CameraIntel, CameraLpr, Radar } from "./map/types";
 import { canAccessStreaming, isAdminRole, normalizeRole, roleLabel } from "./map/roles";
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
@@ -44,7 +44,21 @@ type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
 type AdminTab = "users" | "organizations" | "logs" | "cameras" | "radares";
+type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 
+const REPORT_LAYER_RULES = [
+  { feature: "cameras", layer: "cameras" },
+  { feature: "cameras_inteligentes", layer: "cameras_inteligentes" },
+  { feature: "cameras_lpr", layer: "cameras_lpr" },
+  { feature: "radares", layer: "radares" },
+] as const;
+
+const LIST_MODE_OPTIONS: Array<{ mode: ListMode; feature: string; label: string }> = [
+  { mode: "cameras", feature: "cameras", label: "Câmeras" },
+  { mode: "inteligentes", feature: "cameras_inteligentes", label: "Super Câmeras Inteligentes" },
+  { mode: "lpr", feature: "cameras_lpr", label: "LPR" },
+  { mode: "radares", feature: "radares", label: "Radares" },
+];
 
 const API_BASE =
   (import.meta as any).env?.VITE_API_URL?.toString() ||
@@ -512,16 +526,37 @@ function makeAreaDrawGeoJSON(points: Array<[number, number]>) {
 }
 
 export default function MapPage() {
-  const auth: any = useAuth();
+  const auth = useAuth();
   const nav = useNavigate();
 
   const accessToken =
-    auth?.accessToken ||
-    auth?.token ||
+    auth.accessToken ||
     sessionStorage.getItem("access_token") ||
     localStorage.getItem("access_token") ||
     "";
-  const authLoading = !!auth?.loading;
+  const authLoading = auth.loading;
+  const me = auth.user;
+  const hasFeature = auth.hasFeature;
+
+  const canViewCameras = hasFeature("cameras");
+  const canViewCamerasIntel = hasFeature("cameras_inteligentes");
+  const canViewCamerasLpr = hasFeature("cameras_lpr");
+  const canViewRadares = hasFeature("radares");
+  const canViewBairros = hasFeature("bairros");
+  const canViewRisp = hasFeature("risp");
+  const canViewAisp = hasFeature("aisp");
+  const canViewCisp = hasFeature("cisp");
+  const canUseGps = hasFeature("gps");
+  const canUseAreaDraw = hasFeature("desenhar_area");
+  const allowedReportLayers = useMemo(
+    () =>
+      REPORT_LAYER_RULES.filter(({ feature }) => hasFeature(feature)).map(
+        ({ layer }) => layer
+      ),
+    [hasFeature]
+  );
+  const canRequestBairroReport = canViewBairros && allowedReportLayers.length > 0;
+  const canRequestAreaReport = canUseAreaDraw && allowedReportLayers.length > 0;
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -598,7 +633,7 @@ export default function MapPage() {
     bairrosGeoRef.current = bairrosGeo;
   }, [bairrosGeo]);
 
-  const [listMode, setListMode] = useState<"cameras" | "inteligentes" | "lpr" | "radares">("cameras");
+  const [listMode, setListMode] = useState<ListMode>("cameras");
   const [query, setQuery] = useState("");
   const [pageCameras, setPageCameras] = useState(1);
   const [pageIntel, setPageIntel] = useState(1);
@@ -614,7 +649,6 @@ export default function MapPage() {
   const listScrollAnimFrameRef = useRef<number | null>(null);
   const pagePulseTimerRef = useRef<number | null>(null);
 
-  const [me, setMe] = useState<Me | null>(null);
   const [pwOld, setPwOld] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwNew2, setPwNew2] = useState("");
@@ -892,15 +926,90 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dockOpen]);
 
-  const role = normalizeRole(
-    me?.role ?? auth?.user?.role
-  );
+  const role = normalizeRole(me?.role ?? me?.roles?.[0]);
   const isAdmin = isAdminRole(role);
   const hasStreamingAccess = canAccessStreaming(role);
+  const availableListModes = useMemo(
+    () => LIST_MODE_OPTIONS.filter(({ feature }) => hasFeature(feature)),
+    [hasFeature]
+  );
 
   useEffect(() => {
     hasStreamingAccessRef.current = hasStreamingAccess;
   }, [hasStreamingAccess]);
+
+  useEffect(() => {
+    if (!availableListModes.length) return;
+    if (!availableListModes.some(({ mode }) => mode === listMode)) {
+      setListMode(availableListModes[0].mode);
+    }
+  }, [availableListModes, listMode]);
+
+  useEffect(() => {
+    if (!canViewCameras) {
+      setShowCameras(false);
+      setCameras([]);
+    }
+  }, [canViewCameras]);
+
+  useEffect(() => {
+    if (!canViewCamerasIntel) {
+      setShowCamerasIntel(false);
+      setCamerasIntel([]);
+    }
+  }, [canViewCamerasIntel]);
+
+  useEffect(() => {
+    if (!canViewCamerasLpr) {
+      setShowCamerasLpr(false);
+      setCamerasLpr([]);
+    }
+  }, [canViewCamerasLpr]);
+
+  useEffect(() => {
+    if (!canViewRadares) {
+      setShowRadares(false);
+      setRadares([]);
+    }
+  }, [canViewRadares]);
+
+  useEffect(() => {
+    if (!canViewBairros) {
+      setShowBairros(false);
+      setSelectedBairro("");
+      setBairroQuery("");
+      setBairroReportMsg(null);
+    }
+  }, [canViewBairros]);
+
+  useEffect(() => {
+    if (!canViewRisp) setShowRisp(false);
+  }, [canViewRisp]);
+
+  useEffect(() => {
+    if (!canViewAisp) setShowAisp(false);
+  }, [canViewAisp]);
+
+  useEffect(() => {
+    if (!canViewCisp) setShowCisp(false);
+  }, [canViewCisp]);
+
+  useEffect(() => {
+    if (!canUseGps) {
+      setGpsOn(false);
+      setGps(null);
+      setGpsErr(null);
+    }
+  }, [canUseGps]);
+
+  useEffect(() => {
+    if (!canUseAreaDraw) {
+      setAreaDrawMode(false);
+      setAreaToolsOpen(false);
+      setAreaDrawPoints([]);
+      setAreaReportMsg(null);
+    }
+  }, [canUseAreaDraw]);
 
   function togglePanel(next: TabKey) {
     setPanel((cur) => (cur === next ? null : next));
@@ -2289,6 +2398,8 @@ export default function MapPage() {
   }
 
   function toggleGps() {
+    if (!canUseGps) return;
+
     setGpsOn((prev) => {
       const next = !prev;
 
@@ -2308,32 +2419,14 @@ export default function MapPage() {
     bumpDockAutoHide();
   }
 
-  async function loadMe() {
-    if (!accessToken) {
-      setMe(null);
+  useEffect(() => {
+    if (!canViewBairros) {
+      setLoadingBairros(false);
+      setBairrosGeo(null);
+      setBairrosErr(null);
       return;
     }
 
-    try {
-      const data = await fetchJson<Me>(`${API_BASE}/users/me`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      setMe(data);
-    } catch (e: any) {
-      console.error(e);
-      setMe(null);
-    }
-  }
-
-  useEffect(() => {
-    loadMe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
-
-  useEffect(() => {
     let active = true;
     async function loadBairros() {
       setLoadingBairros(true);
@@ -2367,9 +2460,14 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [canViewBairros]);
 
   useEffect(() => {
+    if (!canViewRisp) {
+      setRispGeo(null);
+      return;
+    }
+
     let active = true;
     async function loadRisp() {
       const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
@@ -2392,9 +2490,14 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [canViewRisp]);
 
   useEffect(() => {
+    if (!canViewAisp) {
+      setAispGeo(null);
+      return;
+    }
+
     let active = true;
     async function loadAisp() {
       const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
@@ -2416,9 +2519,14 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [canViewAisp]);
 
   useEffect(() => {
+    if (!canViewCisp) {
+      setCispGeo(null);
+      return;
+    }
+
     let active = true;
     async function loadCisp() {
       const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
@@ -2440,7 +2548,7 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [canViewCisp]);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -2530,6 +2638,12 @@ export default function MapPage() {
   }, []);
 
   async function loadCameras() {
+    if (!canViewCameras) {
+      setCameras([]);
+      setLoadingCameras(false);
+      return;
+    }
+
     setLoadingCameras(true);
     try {
       const data = await fetchJson<any>(`${API_BASE}/cameras`, {
@@ -2552,6 +2666,11 @@ export default function MapPage() {
 
       setCameras(normalized);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (msg.startsWith("401") || msg.startsWith("403")) {
+        setCameras([]);
+        return;
+      }
       console.error(e);
       alert(e?.message || "Falha ao carregar câmeras");
     } finally {
@@ -2560,6 +2679,12 @@ export default function MapPage() {
   }
 
   async function loadCamerasIntel() {
+    if (!canViewCamerasIntel) {
+      setCamerasIntel([]);
+      setLoadingCamerasIntel(false);
+      return;
+    }
+
     setLoadingCamerasIntel(true);
     try {
       const data = await fetchJson<any>(`${API_BASE}/cameras-inteligentes`, {
@@ -2583,7 +2708,7 @@ export default function MapPage() {
       setCamerasIntel(normalized);
     } catch (e: any) {
       const msg = String(e?.message || "");
-      if (!hasStreamingAccess && (msg.startsWith("401") || msg.startsWith("403"))) {
+      if (msg.startsWith("401") || msg.startsWith("403")) {
         setCamerasIntel([]);
         return;
       }
@@ -2595,6 +2720,12 @@ export default function MapPage() {
   }
 
   async function loadCamerasLpr() {
+    if (!canViewCamerasLpr) {
+      setCamerasLpr([]);
+      setLoadingCamerasLpr(false);
+      return;
+    }
+
     setLoadingCamerasLpr(true);
     try {
       const data = await fetchJson<any>(`${API_BASE}/cameras-lpr`, {
@@ -2619,7 +2750,7 @@ export default function MapPage() {
       setCamerasLpr(normalized);
     } catch (e: any) {
       const msg = String(e?.message || "");
-      if (!hasStreamingAccess && (msg.startsWith("401") || msg.startsWith("403"))) {
+      if (msg.startsWith("401") || msg.startsWith("403")) {
         setCamerasLpr([]);
         return;
       }
@@ -2631,6 +2762,12 @@ export default function MapPage() {
   }
 
   async function loadRadares() {
+    if (!canViewRadares) {
+      setRadares([]);
+      setLoadingRadares(false);
+      return;
+    }
+
     setLoadingRadares(true);
     try {
       const data = await fetchJson<any>(`${API_BASE}/radares`, {
@@ -2653,6 +2790,11 @@ export default function MapPage() {
 
       setRadares(normalized);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (msg.startsWith("401") || msg.startsWith("403")) {
+        setRadares([]);
+        return;
+      }
       console.error(e);
       alert(e?.message || "Falha ao carregar radares");
     } finally {
@@ -2717,6 +2859,10 @@ export default function MapPage() {
   }
 
   async function downloadBairroReport() {
+    if (!canRequestBairroReport) {
+      setBairroReportMsg("Seu perfil não pode gerar relatório de bairros com as camadas atuais.");
+      return;
+    }
     if (!selectedBairro) return;
     if (!selectedBairroFeature?.geometry) {
       setBairroReportMsg("Geometria do bairro não disponível para gerar relatório.");
@@ -2729,7 +2875,7 @@ export default function MapPage() {
         bairro: selectedBairro,
         geometry: selectedBairroFeature.geometry,
         selected_ids: selectedBairroSelectionIds,
-        layers: ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"],
+        layers: allowedReportLayers,
         include_inactive: false,
         format: "pdf",
       };
@@ -2780,6 +2926,7 @@ export default function MapPage() {
   }
 
   function toggleAreaDrawing() {
+    if (!canUseAreaDraw) return;
     setAreaToolsOpen(true);
     setAreaDrawMode((prev) => !prev);
     setAreaReportMsg(null);
@@ -2791,6 +2938,10 @@ export default function MapPage() {
   }
 
   async function downloadAreaReport() {
+    if (!canRequestAreaReport) {
+      setAreaReportMsg("Seu perfil não pode gerar relatório por área com as camadas atuais.");
+      return;
+    }
     const geometry = areaGeometryFromPoints(areaDrawPoints);
     if (!geometry) {
       setAreaReportMsg("Desenhe uma área com pelo menos 3 pontos.");
@@ -2803,7 +2954,7 @@ export default function MapPage() {
       const payload = {
         name: `Relatório de Área - ${new Date().toISOString()}`,
         geometry,
-        layers: ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"],
+        layers: allowedReportLayers,
         include_inactive: false,
         format: "pdf",
       };
@@ -2837,31 +2988,66 @@ export default function MapPage() {
   }
 
   useEffect(() => {
-    loadCameras();
-    loadRadares();
+    if (canViewCameras) {
+      void loadCameras();
+    } else {
+      setCameras([]);
+    }
+    if (canViewRadares) {
+      void loadRadares();
+    } else {
+      setRadares([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canViewCameras, canViewRadares]);
 
   useEffect(() => {
-    if (!accessToken) return;
-    loadCamerasIntel();
-    loadCamerasLpr();
+    if (!accessToken) {
+      setCamerasIntel([]);
+      setCamerasLpr([]);
+      return;
+    }
+    if (canViewCamerasIntel) {
+      void loadCamerasIntel();
+    } else {
+      setCamerasIntel([]);
+    }
+    if (canViewCamerasLpr) {
+      void loadCamerasLpr();
+    } else {
+      setCamerasLpr([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+  }, [accessToken, canViewCamerasIntel, canViewCamerasLpr]);
 
   useEffect(() => {
     if (authLoading || !accessToken) return;
-    if (listMode === "inteligentes" && !loadingCamerasIntel && camerasIntel.length === 0) {
-      loadCamerasIntel();
+    if (
+      canViewCamerasIntel &&
+      listMode === "inteligentes" &&
+      !loadingCamerasIntel &&
+      camerasIntel.length === 0
+    ) {
+      void loadCamerasIntel();
     }
-    if (listMode === "lpr" && !loadingCamerasLpr && camerasLpr.length === 0) {
-      loadCamerasLpr();
+    if (canViewCamerasLpr && listMode === "lpr" && !loadingCamerasLpr && camerasLpr.length === 0) {
+      void loadCamerasLpr();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listMode, authLoading, accessToken, loadingCamerasIntel, loadingCamerasLpr, camerasIntel.length, camerasLpr.length]);
+  }, [
+    listMode,
+    authLoading,
+    accessToken,
+    canViewCamerasIntel,
+    canViewCamerasLpr,
+    loadingCamerasIntel,
+    loadingCamerasLpr,
+    camerasIntel.length,
+    camerasLpr.length,
+  ]);
 
   useEffect(() => {
-    if (!gpsOn) return;
+    if (!canUseGps || !gpsOn) return;
 
     if (!("geolocation" in navigator)) {
       setGpsErr("Geolocalização não suportada nesse navegador.");
@@ -2894,7 +3080,7 @@ export default function MapPage() {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [gpsOn]);
+  }, [canUseGps, gpsOn]);
 
   const poisGeo = useMemo(
     () =>
@@ -3025,12 +3211,26 @@ export default function MapPage() {
     };
   }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
 
-  const selectedBairroTotal = selectedBairroStats
-    ? selectedBairroStats.cameras +
-      selectedBairroStats.inteligentes +
-      selectedBairroStats.lpr +
-      selectedBairroStats.radares
-    : 0;
+  const bairroSummaryItems = useMemo(() => {
+    if (!selectedBairroStats) return [];
+
+    return [
+      canViewCameras ? { label: "Câmeras", value: selectedBairroStats.cameras } : null,
+      canViewCamerasIntel
+        ? { label: "Super Câmeras Inteligentes", value: selectedBairroStats.inteligentes }
+        : null,
+      canViewCamerasLpr ? { label: "LPR", value: selectedBairroStats.lpr } : null,
+      canViewRadares ? { label: "Radares", value: selectedBairroStats.radares } : null,
+    ].filter((item): item is { label: string; value: number } => !!item);
+  }, [
+    selectedBairroStats,
+    canViewCameras,
+    canViewCamerasIntel,
+    canViewCamerasLpr,
+    canViewRadares,
+  ]);
+
+  const selectedBairroTotal = bairroSummaryItems.reduce((total, item) => total + item.value, 0);
 
   const selectedBairroSelectionIds = useMemo(() => {
     if (!selectedBairroFeature?.geometry) {
@@ -3693,18 +3893,17 @@ export default function MapPage() {
   const panelSideInset = 16;
   const panelMaxHeight =
     panel === "admin"
-      ? adminTab === "users" && adminUsersOrgOpen
+      ? adminTab === "organizations"
+        ? "84vh"
+        : adminTab === "users" && adminUsersOrgOpen
         ? "84vh"
         : "74vh"
       : "56vh";
-  const listTitle =
-    listMode === "cameras"
-      ? "Câmeras"
-      : listMode === "inteligentes"
-      ? "Super Câmeras Inteligentes"
-      : listMode === "lpr"
-      ? "Câmeras LPR"
-      : "Radares";
+  const currentListOption =
+    availableListModes.find(({ mode }) => mode === listMode) ||
+    LIST_MODE_OPTIONS.find(({ mode }) => mode === listMode) ||
+    LIST_MODE_OPTIONS[0];
+  const listTitle = currentListOption?.label || "Camadas";
   const listCountLabel =
     listMode === "cameras"
       ? loadingCameras
@@ -3980,31 +4179,31 @@ export default function MapPage() {
                     fontSize: 9,
                   }}
                 >
-                  <div>Câmeras: {selectedBairroStats.cameras}</div>
-                  <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
-                  <div>LPR: {selectedBairroStats.lpr}</div>
-                  <div>Radares: {selectedBairroStats.radares}</div>
+                  {bairroSummaryItems.map((item) => (
+                    <div key={item.label}>
+                      {item.label}: {item.value}
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <>
-                  <div>Câmeras: {selectedBairroStats.cameras}</div>
-                  <div>Super Câmeras Inteligentes: {selectedBairroStats.inteligentes}</div>
-                  <div>LPR: {selectedBairroStats.lpr}</div>
-                  <div>Radares: {selectedBairroStats.radares}</div>
-                </>
+                bairroSummaryItems.map((item) => (
+                  <div key={item.label}>
+                    {item.label}: {item.value}
+                  </div>
+                ))
               )}
               <div style={{ marginTop: isMobile ? 6 : 10 }}>
                 <button
                   className="btnGhost"
                   onClick={downloadBairroReport}
-                  disabled={bairroReportLoading}
+                  disabled={!canRequestBairroReport || bairroReportLoading}
                   style={{
                     width: "100%",
                     borderRadius: 10,
                     minHeight: isMobile ? 30 : undefined,
                     padding: isMobile ? "6px 8px" : undefined,
                     fontSize: isMobile ? 11 : undefined,
-                    opacity: bairroReportLoading ? 0.7 : 1,
+                    opacity: !canRequestBairroReport || bairroReportLoading ? 0.7 : 1,
                   }}
                 >
                   {bairroReportLoading ? "Gerando PDF..." : "Baixar PDF"}
@@ -4012,6 +4211,11 @@ export default function MapPage() {
                 {bairroReportMsg && (
                   <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.8)" }}>
                     {bairroReportMsg}
+                  </div>
+                )}
+                {!canRequestBairroReport && (
+                  <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.72)" }}>
+                    Nenhuma camada autorizada para incluir neste relatório.
                   </div>
                 )}
               </div>
@@ -4072,113 +4276,119 @@ export default function MapPage() {
             <div className="dock">
               <div className="dockTitle">Camadas</div>
 
-            <button
-              className={`dockChip ${showCameras ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowCameras((v) => !v);
-                bumpDockAutoHide();
-                
-              }}
-              title={showCameras ? "Câmeras ON" : "Câmeras OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon">
-                  <img src={cameraIcon} alt="" />
+            {canViewCameras && (
+              <button
+                className={`dockChip ${showCameras ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowCameras((v) => !v);
+                  bumpDockAutoHide();
+                }}
+                title={showCameras ? "Câmeras ON" : "Câmeras OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon">
+                    <img src={cameraIcon} alt="" />
+                  </span>
+                  <span className="chipText">
+                    <span>Câmeras</span>
+                    <span className="chipLegend">Gravação de imagens</span>
+                  </span>
+                  <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>Câmeras</span>
-                  <span className="chipLegend">Gravação de imagens</span>
-                </span>
-                <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showCameras ? "ON" : "OFF"}</span>
-            </button>
+                <span className="chipState">{showCameras ? "ON" : "OFF"}</span>
+              </button>
+            )}
 
-            <button
-              className={`dockChip ${showCamerasIntel ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowCamerasIntel((v) => !v);
-                bumpDockAutoHide();
-                
-              }}
-              title={showCamerasIntel ? "Inteligentes ON" : "Inteligentes OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon">
-                  <img src={cameraIntelIcon} alt="" />
+            {canViewCamerasIntel && (
+              <button
+                className={`dockChip ${showCamerasIntel ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowCamerasIntel((v) => !v);
+                  bumpDockAutoHide();
+                }}
+                title={showCamerasIntel ? "Inteligentes ON" : "Inteligentes OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon">
+                    <img src={cameraIntelIcon} alt="" />
+                  </span>
+                  <span className="chipText">
+                    <span>Super Câmeras Inteligentes</span>
+                    <span className="chipLegend">Gravações e analíticos de IA</span>
+                  </span>
+                  <span className="chipDot" style={{ background: showCamerasIntel ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>Super Câmeras Inteligentes</span>
-                  <span className="chipLegend">Gravações e analíticos de IA</span>
-                </span>
-                <span className="chipDot" style={{ background: showCamerasIntel ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showCamerasIntel ? "ON" : "OFF"}</span>
-            </button>
+                <span className="chipState">{showCamerasIntel ? "ON" : "OFF"}</span>
+              </button>
+            )}
 
-            <button
-              className={`dockChip ${showCamerasLpr ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowCamerasLpr((v) => !v);
-                bumpDockAutoHide();
-                
-              }}
-              title={showCamerasLpr ? "LPR ON" : "LPR OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon">
-                  <img src={cameraLprIcon} alt="" />
+            {canViewCamerasLpr && (
+              <button
+                className={`dockChip ${showCamerasLpr ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowCamerasLpr((v) => !v);
+                  bumpDockAutoHide();
+                }}
+                title={showCamerasLpr ? "LPR ON" : "LPR OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon">
+                    <img src={cameraLprIcon} alt="" />
+                  </span>
+                  <span className="chipText">
+                    <span>LPR</span>
+                    <span className="chipLegend">Leitura de radar</span>
+                  </span>
+                  <span className="chipDot" style={{ background: showCamerasLpr ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>LPR</span>
-                  <span className="chipLegend">Leitura de radar</span>
-                </span>
-                <span className="chipDot" style={{ background: showCamerasLpr ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showCamerasLpr ? "ON" : "OFF"}</span>
-            </button>
+                <span className="chipState">{showCamerasLpr ? "ON" : "OFF"}</span>
+              </button>
+            )}
 
-            <button
-              className={`dockChip ${showRadares ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowRadares((v) => !v);
-                bumpDockAutoHide();
-                
-              }}
-              title={showRadares ? "Radares ON" : "Radares OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon">
-                  <img src={radarIcon} alt="" />
+            {canViewRadares && (
+              <button
+                className={`dockChip ${showRadares ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowRadares((v) => !v);
+                  bumpDockAutoHide();
+                }}
+                title={showRadares ? "Radares ON" : "Radares OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon">
+                    <img src={radarIcon} alt="" />
+                  </span>
+                  <span className="chipText">
+                    <span>Radares</span>
+                    <span className="chipLegend">Leitura de radar</span>
+                  </span>
+                  <span className="chipDot" style={{ background: showRadares ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>Radares</span>
-                  <span className="chipLegend">Leitura de radar</span>
-                </span>
-                <span className="chipDot" style={{ background: showRadares ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showRadares ? "ON" : "OFF"}</span>
-            </button>
+                <span className="chipState">{showRadares ? "ON" : "OFF"}</span>
+              </button>
+            )}
 
-            <button
-              className={`dockChip ${showBairros ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowBairros((v) => !v);
-                bumpDockAutoHide();
-              }}
-              title={showBairros ? "Bairros ON" : "Bairros OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" aria-hidden="true">
-                  <Building2 size={15} strokeWidth={2.1} />
+            {canViewBairros && (
+              <button
+                className={`dockChip ${showBairros ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowBairros((v) => !v);
+                  bumpDockAutoHide();
+                }}
+                title={showBairros ? "Bairros ON" : "Bairros OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <Building2 size={15} strokeWidth={2.1} />
+                  </span>
+                  <span>Bairros</span>
+                  <span className="chipDot" style={{ background: showBairros ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span>Bairros</span>
-                <span className="chipDot" style={{ background: showBairros ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showBairros ? "ON" : "OFF"}</span>
-            </button>
+                <span className="chipState">{showBairros ? "ON" : "OFF"}</span>
+              </button>
+            )}
 
-            {showBairros && (
+            {canViewBairros && showBairros && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(0,0,0,0.65)" }}>
                   Buscar bairro
@@ -4251,36 +4461,38 @@ export default function MapPage() {
               </div>
             )}
 
-            <button
-              className="dockChip"
-              onClick={() => {
-                if (areaDrawMode) {
-                  setAreaDrawMode(false);
-                  setAreaDrawPoints([]);
-                  setAreaToolsOpen(false);
+            {canUseAreaDraw && (
+              <button
+                className="dockChip"
+                onClick={() => {
+                  if (areaDrawMode) {
+                    setAreaDrawMode(false);
+                    setAreaDrawPoints([]);
+                    setAreaToolsOpen(false);
+                    setAreaReportMsg(null);
+                    return;
+                  }
+                  setAreaToolsOpen(true);
+                  setAreaDrawMode(true);
                   setAreaReportMsg(null);
-                  return;
-                }
-                setAreaToolsOpen(true);
-                setAreaDrawMode(true);
-                setAreaReportMsg(null);
-              }}
-              title="Desenhar área"
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" aria-hidden="true">
-                  <PenTool size={15} strokeWidth={2.1} />
+                }}
+                title="Desenhar área"
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <PenTool size={15} strokeWidth={2.1} />
+                  </span>
+                  <span className="chipText">
+                    <span>Desenhar área</span>
+                    <span className="chipLegend">Abrir relatório por área</span>
+                  </span>
+                  <span className="chipDot" style={{ background: areaDrawMode ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>Desenhar área</span>
-                  <span className="chipLegend">Abrir relatório por área</span>
-                </span>
-                <span className="chipDot" style={{ background: areaDrawMode ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{areaDrawMode ? "ON" : "OFF"}</span>
-            </button>
+                <span className="chipState">{areaDrawMode ? "ON" : "OFF"}</span>
+              </button>
+            )}
 
-            {areaToolsOpen && (
+            {canUseAreaDraw && areaToolsOpen && (
               <div
                 style={{
                   marginTop: 6,
@@ -4335,8 +4547,11 @@ export default function MapPage() {
                   <button
                     className="btnGhost"
                     onClick={downloadAreaReport}
-                    disabled={areaDrawPoints.length < 3 || areaReportLoading}
-                    style={{ borderRadius: 10, opacity: areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1 }}
+                    disabled={!canRequestAreaReport || areaDrawPoints.length < 3 || areaReportLoading}
+                    style={{
+                      borderRadius: 10,
+                      opacity: !canRequestAreaReport || areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1,
+                    }}
                   >
                     {areaReportLoading ? "Gerando..." : "Baixar PDF"}
                   </button>
@@ -4346,137 +4561,146 @@ export default function MapPage() {
                     {areaReportMsg}
                   </div>
                 )}
+                {!canRequestAreaReport && (
+                  <div className="dockNote" style={{ margin: 0, fontSize: 10 }}>
+                    Nenhuma camada autorizada para incluir neste relatório.
+                  </div>
+                )}
               </div>
             )}
 
-            <button
-              className={`dockChip ${showRisp ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowRisp((v) => {
-                  const next = !v;
-                  if (next) {
-                    setShowAisp(false);
-                    setShowCisp(false);
-                  }
-                  return next;
-                });
-                bumpDockAutoHide();
-                
-              }}
-              title={showRisp ? "RISP ON" : "RISP OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" aria-hidden="true">
-                  <Shield size={15} strokeWidth={2.1} />
+            {canViewRisp && (
+              <button
+                className={`dockChip ${showRisp ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowRisp((v) => {
+                    const next = !v;
+                    if (next) {
+                      setShowAisp(false);
+                      setShowCisp(false);
+                    }
+                    return next;
+                  });
+                  bumpDockAutoHide();
+                }}
+                title={showRisp ? "RISP ON" : "RISP OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <Shield size={15} strokeWidth={2.1} />
+                  </span>
+                  <span className="chipText">
+                    <span>RISP</span>
+                    <span className="chipLegend">Regiões Integradas de Segurança Pública</span>
+                  </span>
+                  <span className="chipDot" style={{ background: showRisp ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>RISP</span>
-                  <span className="chipLegend">Regiões Integradas de Segurança Pública</span>
-                </span>
-                <span className="chipDot" style={{ background: showRisp ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showRisp ? "ON" : "OFF"}</span>
-            </button>
-            {showRisp && multiCodeWarnings.risp.length > 0 && (
+                <span className="chipState">{showRisp ? "ON" : "OFF"}</span>
+              </button>
+            )}
+            {canViewRisp && showRisp && multiCodeWarnings.risp.length > 0 && (
               <div className="dockNote">
                 Aviso: {multiCodeWarnings.risp.length} bairros com mais de uma RISP não foram coloridos. Ex.:{" "}
                 {multiCodeWarnings.risp.slice(0, 4).join(", ")}
               </div>
             )}
 
-            <button
-              className={`dockChip ${showAisp ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowAisp((v) => {
-                  const next = !v;
-                  if (next) {
-                    setShowRisp(false);
-                    setShowCisp(false);
-                  }
-                  return next;
-                });
-                bumpDockAutoHide();
-                
-              }}
-              title={showAisp ? "AISP ON" : "AISP OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" aria-hidden="true">
-                  <ShieldAlert size={15} strokeWidth={2.1} />
+            {canViewAisp && (
+              <button
+                className={`dockChip ${showAisp ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowAisp((v) => {
+                    const next = !v;
+                    if (next) {
+                      setShowRisp(false);
+                      setShowCisp(false);
+                    }
+                    return next;
+                  });
+                  bumpDockAutoHide();
+                }}
+                title={showAisp ? "AISP ON" : "AISP OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <ShieldAlert size={15} strokeWidth={2.1} />
+                  </span>
+                  <span className="chipText">
+                    <span>AISP</span>
+                    <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
+                  </span>
+                  <span className="chipDot" style={{ background: showAisp ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>AISP</span>
-                  <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
-                </span>
-                <span className="chipDot" style={{ background: showAisp ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
-            </button>
-            {showAisp && multiCodeWarnings.aisp.length > 0 && (
+                <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
+              </button>
+            )}
+            {canViewAisp && showAisp && multiCodeWarnings.aisp.length > 0 && (
               <div className="dockNote">
                 Aviso: {multiCodeWarnings.aisp.length} bairros com mais de uma AISP não foram coloridos. Ex.:{" "}
                 {multiCodeWarnings.aisp.slice(0, 4).join(", ")}
               </div>
             )}
 
-            <button
-              className={`dockChip ${showCisp ? "dockChipOn" : ""}`}
-              onClick={() => {
-                setShowCisp((v) => {
-                  const next = !v;
-                  if (next) {
-                    setShowRisp(false);
-                    setShowAisp(false);
-                  }
-                  return next;
-                });
-                bumpDockAutoHide();
-                
-              }}
-              title={showCisp ? "CISP ON" : "CISP OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon" aria-hidden="true">
-                  <ShieldCheck size={15} strokeWidth={2.1} />
+            {canViewCisp && (
+              <button
+                className={`dockChip ${showCisp ? "dockChipOn" : ""}`}
+                onClick={() => {
+                  setShowCisp((v) => {
+                    const next = !v;
+                    if (next) {
+                      setShowRisp(false);
+                      setShowAisp(false);
+                    }
+                    return next;
+                  });
+                  bumpDockAutoHide();
+                }}
+                title={showCisp ? "CISP ON" : "CISP OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <ShieldCheck size={15} strokeWidth={2.1} />
+                  </span>
+                  <span className="chipText">
+                    <span>CISP</span>
+                    <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>
+                  </span>
+                  <span className="chipDot" style={{ background: showCisp ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipText">
-                  <span>CISP</span>
-                  <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>
-                </span>
-                <span className="chipDot" style={{ background: showCisp ? "#22c55e" : "#9ca3af" }} />
-              </span>
-              <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
-            </button>
-            {showCisp && multiCodeWarnings.cisp.length > 0 && (
+                <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
+              </button>
+            )}
+            {canViewCisp && showCisp && multiCodeWarnings.cisp.length > 0 && (
               <div className="dockNote">
                 Aviso: {multiCodeWarnings.cisp.length} bairros com mais de uma CISP não foram coloridos. Ex.:{" "}
                 {multiCodeWarnings.cisp.slice(0, 4).join(", ")}
               </div>
             )}
 
-            <button
-              className={`dockChip ${gpsOn ? "dockChipOn" : ""} ${gpsErr ? "dockChipDisabled" : ""}`}
-              onClick={() => {
-                if (gpsErr) return;
-                toggleGps();
-                
-              }}
-              title={gpsOn ? "GPS ON" : "GPS OFF"}
-            >
-              <span className="chipLeft">
-                <span className="chipIcon">
-                  <img src={mapPinRed} alt="" />
+            {canUseGps && (
+              <button
+                className={`dockChip ${gpsOn ? "dockChipOn" : ""} ${gpsErr ? "dockChipDisabled" : ""}`}
+                onClick={() => {
+                  if (gpsErr) return;
+                  toggleGps();
+                }}
+                title={gpsOn ? "GPS ON" : "GPS OFF"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon">
+                    <img src={mapPinRed} alt="" />
+                  </span>
+                  <span>GPS</span>
+                  <span
+                    className={`chipDot ${gpsOn ? "gpsPulse" : ""}`}
+                    style={{ background: gpsOn ? "#22c55e" : "#9ca3af" }}
+                  />
                 </span>
-                <span>GPS</span>
-                <span
-                  className={`chipDot ${gpsOn ? "gpsPulse" : ""}`}
-                  style={{ background: gpsOn ? "#22c55e" : "#9ca3af" }}
-                />
-              </span>
-              <span className="chipState">{gpsOn ? "ON" : "OFF"}</span>
-            </button>
+                <span className="chipState">{gpsOn ? "ON" : "OFF"}</span>
+              </button>
+            )}
 
-            {gpsOn && gps && !gpsErr && (
+            {canUseGps && gpsOn && gps && !gpsErr && (
               <button
                 className="dockCenterBtn"
                 onClick={() => {
@@ -4489,7 +4713,7 @@ export default function MapPage() {
               </button>
             )}
 
-            {gpsErr && <div className="dockNote">GPS com erro</div>}
+            {canUseGps && gpsErr && <div className="dockNote">GPS com erro</div>}
 
             <div className="dockDivider" />
 
@@ -4650,30 +4874,15 @@ export default function MapPage() {
             <>
               <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
                 <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
-                  <button
-                    className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("cameras")}
-                  >
-                    Câmeras
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("inteligentes")}
-                  >
-                    Super Câmeras Inteligentes
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("lpr")}
-                  >
-                    LPR
-                  </button>
-                  <button
-                    className={`subTab ${listMode === "radares" ? "subTabActive" : ""}`}
-                    onClick={() => setListMode("radares")}
-                  >
-                    Radares
-                  </button>
+                  {availableListModes.map((option) => (
+                    <button
+                      key={option.mode}
+                      className={`subTab ${listMode === option.mode ? "subTabActive" : ""}`}
+                      onClick={() => setListMode(option.mode)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
                 <div className="panelTitle">{listHeaderLabel}</div>
               </div>
@@ -5090,13 +5299,15 @@ export default function MapPage() {
                 }}
               >
                 <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>Dados do usuário</div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontSize: 12,fontWeight: 900}}>Nome</div>
-                  <div style={{ fontSize: 13,  }}>{me?.full_name || "-"}</div>
-                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
-                  <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
-                </div>
-              </div>
+	                <div style={{ display: "grid", gap: 8 }}>
+	                  <div style={{ fontSize: 12,fontWeight: 900}}>Nome</div>
+	                  <div style={{ fontSize: 13,  }}>{me?.full_name || "-"}</div>
+	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
+	                  <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
+	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Organização</div>
+	                  <div style={{ fontSize: 13, opacity: 0.85 }}>{auth.organizationName || "-"}</div>
+	                </div>
+	              </div>
 
                 <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
                 <div style={{ fontSize: 13, fontWeight: 900 }}>Trocar senha</div>
@@ -5528,30 +5739,15 @@ export default function MapPage() {
               <>
                 <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
                   <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
-                    <button
-                      className={`subTab ${listMode === "cameras" ? "subTabActive" : ""}`}
-                      onClick={() => setListMode("cameras")}
-                    >
-                      Câmeras
-                    </button>
-                    <button
-                      className={`subTab ${listMode === "inteligentes" ? "subTabActive" : ""}`}
-                      onClick={() => setListMode("inteligentes")}
-                    >
-                      Super Câmeras Inteligentes
-                    </button>
-                    <button
-                      className={`subTab ${listMode === "lpr" ? "subTabActive" : ""}`}
-                      onClick={() => setListMode("lpr")}
-                    >
-                      LPR
-                    </button>
-                    <button
-                      className={`subTab ${listMode === "radares" ? "subTabActive" : ""}`}
-                      onClick={() => setListMode("radares")}
-                    >
-                      Radares
-                    </button>
+                    {availableListModes.map((option) => (
+                      <button
+                        key={option.mode}
+                        className={`subTab ${listMode === option.mode ? "subTabActive" : ""}`}
+                        onClick={() => setListMode(option.mode)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                   <div className="panelTitle">{listHeaderLabel}</div>
                 </div>
@@ -5987,12 +6183,14 @@ export default function MapPage() {
                     <div style={{ fontSize: 13 }}>{me?.full_name || "-"}</div>
                     <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
                     <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
-                    <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Perfil de acesso</div>
-                    <div style={{ fontSize: 13, opacity: 0.85 }}>
-                      {roleLabel(role)}
-                    </div>
-                  </div>
-                </div>
+	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Perfil de acesso</div>
+	                  <div style={{ fontSize: 13, opacity: 0.85 }}>
+	                    {roleLabel(role)}
+	                  </div>
+	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Organização</div>
+	                  <div style={{ fontSize: 13, opacity: 0.85 }}>{auth.organizationName || "-"}</div>
+	                </div>
+	              </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
                   <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2 }}>Trocar senha</div>
