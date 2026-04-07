@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
-import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon } from "geojson";
+import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon, GeometryCollection } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
 import {
   Building2,
@@ -45,6 +45,7 @@ type PanelKey = TabKey | null;
 
 type AdminTab = "users" | "organizations" | "logs" | "cameras" | "radares";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
+type SecurityAreaKind = "risp" | "aisp" | "cisp";
 
 const REPORT_LAYER_RULES = [
   { feature: "cameras", layer: "cameras" },
@@ -105,10 +106,16 @@ const LAYERS = {
   bairros_selected_line: "lyr-bairros-selected-line",
   risp_fill: "lyr-risp-fill",
   risp_line: "lyr-risp-line",
+  risp_selected_fill: "lyr-risp-selected-fill",
+  risp_selected_line: "lyr-risp-selected-line",
   aisp_fill: "lyr-aisp-fill",
   aisp_line: "lyr-aisp-line",
+  aisp_selected_fill: "lyr-aisp-selected-fill",
+  aisp_selected_line: "lyr-aisp-selected-line",
   cisp_fill: "lyr-cisp-fill",
   cisp_line: "lyr-cisp-line",
+  cisp_selected_fill: "lyr-cisp-selected-fill",
+  cisp_selected_line: "lyr-cisp-selected-line",
   risp_label: "lyr-risp-label",
   aisp_label: "lyr-aisp-label",
   cisp_label: "lyr-cisp-label",
@@ -210,6 +217,185 @@ function loadImagePromise(map: mapboxgl.Map, url: string) {
 }
 
 type BairrosFeature = Feature<Polygon | MultiPolygon, { NOME?: string } & Record<string, any>>;
+type SecurityAreaFeature = Feature<Polygon | MultiPolygon, { name?: string | number } & Record<string, any>>;
+type GeometryStats = {
+  cameras: number;
+  inteligentes: number;
+  lpr: number;
+  radares: number;
+};
+type GeometrySelectionIds = {
+  cameras: string[];
+  super_cameras: string[];
+  lpr: string[];
+  radar: string[];
+};
+type PolygonalGeometry = Polygon | MultiPolygon;
+
+function emptyGeometrySelectionIds(): GeometrySelectionIds {
+  return {
+    cameras: [],
+    super_cameras: [],
+    lpr: [],
+    radar: [],
+  };
+}
+
+function buildGeometryStats(
+  geom: Polygon | MultiPolygon,
+  cameras: Camera[],
+  camerasIntel: CameraIntel[],
+  camerasLpr: CameraLpr[],
+  radares: Radar[]
+): GeometryStats | null {
+  const bbox = getGeometryBbox(geom);
+  if (!bbox) return null;
+
+  const inBbox = (lng: number, lat: number) =>
+    lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
+
+  const countPoints = (
+    points: Array<{ lng?: number | string | null; lat?: number | string | null }>
+  ) => {
+    let count = 0;
+    for (const p of points) {
+      const lng = Number(p.lng);
+      const lat = Number(p.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (!inBbox(lng, lat)) continue;
+      if (pointInGeometry([lng, lat], geom)) count++;
+    }
+    return count;
+  };
+
+  return {
+    cameras: countPoints(cameras),
+    inteligentes: countPoints(camerasIntel),
+    lpr: countPoints(camerasLpr),
+    radares: countPoints(radares),
+  };
+}
+
+function buildGeometrySelectionIds(
+  geom: Polygon | MultiPolygon,
+  cameras: Camera[],
+  camerasIntel: CameraIntel[],
+  camerasLpr: CameraLpr[],
+  radares: Radar[]
+): GeometrySelectionIds {
+  const bbox = getGeometryBbox(geom);
+  if (!bbox) return emptyGeometrySelectionIds();
+
+  const inBbox = (lng: number, lat: number) =>
+    lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
+
+  const camerasIds: string[] = [];
+  const superCameraIds: string[] = [];
+  const lprIds: string[] = [];
+  const radarIds: string[] = [];
+
+  for (const c of cameras) {
+    const lng = Number(c.lng);
+    const lat = Number(c.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+    if (!inBbox(lng, lat)) continue;
+    if (!pointInGeometry([lng, lat], geom)) continue;
+    const idOrCode = String((c as any).id || c.code || "").trim();
+    if (idOrCode) camerasIds.push(idOrCode);
+  }
+
+  for (const c of camerasIntel) {
+    const lng = Number(c.lng);
+    const lat = Number(c.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+    if (!inBbox(lng, lat)) continue;
+    if (!pointInGeometry([lng, lat], geom)) continue;
+    const idOrCode = String((c as any).id || c.code || "").trim();
+    if (idOrCode) superCameraIds.push(idOrCode);
+  }
+
+  for (const c of camerasLpr) {
+    const lng = Number(c.lng);
+    const lat = Number(c.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+    if (!inBbox(lng, lat)) continue;
+    if (!pointInGeometry([lng, lat], geom)) continue;
+    const idOrCode = String((c as any).id || c.code || "").trim();
+    if (idOrCode) lprIds.push(idOrCode);
+  }
+
+  for (const r of radares) {
+    const lng = Number(r.lng);
+    const lat = Number(r.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+    if (!inBbox(lng, lat)) continue;
+    if (!pointInGeometry([lng, lat], geom)) continue;
+    const idOrCodcet = String((r as any).id || r.codcet || "").trim();
+    if (idOrCodcet) radarIds.push(idOrCodcet);
+  }
+
+  return {
+    cameras: camerasIds,
+    super_cameras: superCameraIds,
+    lpr: lprIds,
+    radar: radarIds,
+  };
+}
+
+function getSecurityAreaFeatureCode(feature: SecurityAreaFeature | null | undefined) {
+  if (!feature) return "";
+  const raw = (feature.properties as any)?.name;
+  if (raw === null || raw === undefined) return "";
+  return String(raw).trim();
+}
+
+function geometryToMultiPolygonCoordinates(
+  geom: PolygonalGeometry | GeometryCollection
+): number[][][][] {
+  if (geom.type === "Polygon") return [geom.coordinates];
+  if (geom.type === "MultiPolygon") return geom.coordinates;
+  return geom.geometries.flatMap((geometry) => {
+    if (geometry.type === "Polygon") return [geometry.coordinates];
+    if (geometry.type === "MultiPolygon") return geometry.coordinates;
+    return [];
+  });
+}
+
+function normalizePolygonalGeometry(
+  geom: PolygonalGeometry | GeometryCollection | null | undefined
+): PolygonalGeometry | null {
+  if (!geom) return null;
+  const coordinates = geometryToMultiPolygonCoordinates(geom);
+  if (!coordinates.length) return null;
+  return coordinates.length === 1
+    ? { type: "Polygon", coordinates: coordinates[0] }
+    : { type: "MultiPolygon", coordinates };
+}
+
+function mergeSecurityAreaFeatures(features: SecurityAreaFeature[]): SecurityAreaFeature | null {
+  if (!features.length) return null;
+  const [firstFeature] = features;
+  const coordinates = features.flatMap((feature) => geometryToMultiPolygonCoordinates(feature.geometry));
+
+  if (!coordinates.length) return null;
+  if (coordinates.length === 1) {
+    return {
+      ...firstFeature,
+      geometry: {
+        type: "Polygon",
+        coordinates: coordinates[0],
+      },
+    };
+  }
+
+  return {
+    ...firstFeature,
+    geometry: {
+      type: "MultiPolygon",
+      coordinates,
+    },
+  };
+}
 
 function extendBboxFromCoords(coords: any, bbox: { minX: number; minY: number; maxX: number; maxY: number }) {
   if (!coords) return;
@@ -277,22 +463,27 @@ function pointInGeometry(point: [number, number], geom: Polygon | MultiPolygon) 
 }
 
 function normalizeCodeGeoByName(
-  data: FeatureCollection<Polygon | MultiPolygon, any>,
+  data: FeatureCollection<PolygonalGeometry | GeometryCollection, any>,
   candidates: string[]
-) {
+): FeatureCollection<PolygonalGeometry, any> {
   return {
     ...data,
-    features: data.features.map((feature) => {
-      const props: any = { ...(feature.properties || {}) };
-      for (const key of candidates) {
-        const v = Number(props?.[key]);
-        if (Number.isFinite(v)) {
-          props.name = v;
-          break;
+    features: data.features
+      .map((feature) => {
+        const geometry = normalizePolygonalGeometry(feature.geometry);
+        if (!geometry) return null;
+
+        const props: any = { ...(feature.properties || {}) };
+        for (const key of candidates) {
+          const v = Number(props?.[key]);
+          if (Number.isFinite(v)) {
+            props.name = v;
+            break;
+          }
         }
-      }
-      return { ...feature, properties: props };
-    }),
+        return { ...feature, geometry, properties: props };
+      })
+      .filter((feature): feature is Feature<PolygonalGeometry, any> => !!feature),
   };
 }
 
@@ -485,6 +676,110 @@ function poiCoordKey(lng: number, lat: number) {
   return `${lng.toFixed(6)}|${lat.toFixed(6)}`;
 }
 
+function closestPointOnSegment2D(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number
+) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+
+  if (lenSq <= 0) {
+    const distX = px - ax;
+    const distY = py - ay;
+    return { x: ax, y: ay, distanceSq: distX * distX + distY * distY };
+  }
+
+  const t = clamp(((px - ax) * dx + (py - ay) * dy) / lenSq, 0, 1);
+  const x = ax + dx * t;
+  const y = ay + dy * t;
+  const distX = px - x;
+  const distY = py - y;
+
+  return { x, y, distanceSq: distX * distX + distY * distY };
+}
+
+function getAreaDrawInsertInfo(
+  map: mapboxgl.Map,
+  points: Array<[number, number]>,
+  target: [number, number]
+) {
+  if (points.length < 2) return null;
+
+  const targetPx = map.project(target);
+  let best:
+    | {
+        insertIndex: number;
+        x: number;
+        y: number;
+        distanceSq: number;
+      }
+    | null = null;
+
+  const inspectSegment = (startIndex: number, endIndex: number) => {
+    const startPx = map.project(points[startIndex]);
+    const endPx = map.project(points[endIndex]);
+    const closest = closestPointOnSegment2D(
+      targetPx.x,
+      targetPx.y,
+      startPx.x,
+      startPx.y,
+      endPx.x,
+      endPx.y
+    );
+
+    if (!best || closest.distanceSq < best.distanceSq) {
+      best = {
+        insertIndex: startIndex + 1,
+        x: closest.x,
+        y: closest.y,
+        distanceSq: closest.distanceSq,
+      };
+    }
+  };
+
+  for (let i = 0; i < points.length - 1; i++) {
+    inspectSegment(i, i + 1);
+  }
+
+  if (points.length >= 3) {
+    inspectSegment(points.length - 1, 0);
+  }
+
+  if (!best) return null;
+  const finalBest = best;
+
+  const lngLat = map.unproject([finalBest.x, finalBest.y]);
+  return {
+    insertIndex: finalBest.insertIndex,
+    point: [lngLat.lng, lngLat.lat] as [number, number],
+  };
+}
+
+function insertAreaDrawPoint(
+  points: Array<[number, number]>,
+  insertIndex: number,
+  nextPoint: [number, number]
+) {
+  const next = [...points];
+  next.splice(insertIndex, 0, nextPoint);
+  return next;
+}
+
+function replaceAreaDrawPoint(
+  points: Array<[number, number]>,
+  index: number,
+  nextPoint: [number, number]
+) {
+  return points.map((point, pointIndex) =>
+    pointIndex === index ? nextPoint : point
+  );
+}
+
 function featureCoordKey(feature: Feature<Point, any>): string | null {
   const coords = feature.geometry?.coordinates;
   if (!Array.isArray(coords) || coords.length < 2) return null;
@@ -514,13 +809,13 @@ function makeAreaDrawGeoJSON(points: Array<[number, number]>) {
     } as any);
   }
 
-  for (const pt of points) {
+  points.forEach((pt, index) => {
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: pt },
-      properties: { kind: "area_point" },
+      properties: { kind: "area_point", point_index: index },
     } as any);
-  }
+  });
 
   return { type: "FeatureCollection", features } as FeatureCollection<any, any>;
 }
@@ -548,21 +843,30 @@ export default function MapPage() {
   const canViewCisp = hasFeature("cisp");
   const canUseGps = hasFeature("gps");
   const canUseAreaDraw = hasFeature("desenhar_area");
-  const allowedReportLayers = useMemo(
+  const authorizedReportLayers = useMemo(
     () =>
       REPORT_LAYER_RULES.filter(({ feature }) => hasFeature(feature)).map(
         ({ layer }) => layer
       ),
     [hasFeature]
   );
-  const canRequestBairroReport = canViewBairros && allowedReportLayers.length > 0;
-  const canRequestAreaReport = canUseAreaDraw && allowedReportLayers.length > 0;
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const areaDrawModeRef = useRef(false);
+  const areaDrawPointsRef = useRef<Array<[number, number]>>([]);
+  const draggingAreaPointIndexRef = useRef<number | null>(null);
+  const areaPointDragMovedRef = useRef(false);
+  const areaPointDragPanWasEnabledRef = useRef(false);
+  const suppressAreaDrawClickRef = useRef(false);
   const showBairrosRef = useRef(false);
+  const showRispRef = useRef(false);
+  const showAispRef = useRef(false);
+  const showCispRef = useRef(false);
   const bairrosGeoRef = useRef<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const rispGeoRef = useRef<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const aispGeoRef = useRef<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const cispGeoRef = useRef<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const hasStreamingAccessRef = useRef(false);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
@@ -605,6 +909,22 @@ export default function MapPage() {
   const [showAisp, setShowAisp] = useState(false);
   const [showCisp, setShowCisp] = useState(false);
 
+  const activeReportLayers = useMemo(
+    () =>
+      REPORT_LAYER_RULES.filter(({ feature, layer }) => {
+        if (!hasFeature(feature)) return false;
+        if (layer === "cameras") return showCameras;
+        if (layer === "cameras_inteligentes") return showCamerasIntel;
+        if (layer === "cameras_lpr") return showCamerasLpr;
+        if (layer === "radares") return showRadares;
+        return false;
+      }).map(({ layer }) => layer),
+    [hasFeature, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
+  );
+  const hasAuthorizedReportLayers = authorizedReportLayers.length > 0;
+  const canRequestBairroReport = canViewBairros && activeReportLayers.length > 0;
+  const canRequestAreaReport = canUseAreaDraw && activeReportLayers.length > 0;
+
   const [loadingBairros, setLoadingBairros] = useState(false);
   const [bairrosGeo, setBairrosGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [bairrosErr, setBairrosErr] = useState<string | null>(null);
@@ -612,26 +932,81 @@ export default function MapPage() {
   const [aispGeo, setAispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [cispGeo, setCispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [selectedBairro, setSelectedBairro] = useState<string>("");
+  const [selectedSecurityArea, setSelectedSecurityArea] = useState<{
+    kind: SecurityAreaKind;
+    code: string;
+  } | null>(null);
+  const [selectedSecurityStatsState, setSelectedSecurityStatsState] = useState<{
+    key: string;
+    stats: GeometryStats | null;
+  }>({ key: "", stats: null });
+  const [selectedSecuritySummaryLoading, setSelectedSecuritySummaryLoading] = useState(false);
   const [bairroQuery, setBairroQuery] = useState<string>("");
   const [bairroReportLoading, setBairroReportLoading] = useState(false);
   const [bairroReportMsg, setBairroReportMsg] = useState<string | null>(null);
+  const [securityAreaReportLoading, setSecurityAreaReportLoading] = useState(false);
+  const [securityAreaReportMsg, setSecurityAreaReportMsg] = useState<string | null>(null);
   const [areaDrawMode, setAreaDrawMode] = useState(false);
   const [areaToolsOpen, setAreaToolsOpen] = useState(false);
   const [areaDrawPoints, setAreaDrawPoints] = useState<Array<[number, number]>>([]);
   const [areaReportLoading, setAreaReportLoading] = useState(false);
   const [areaReportMsg, setAreaReportMsg] = useState<string | null>(null);
 
+  function clearSelectedSecurityArea() {
+    setSelectedSecurityArea(null);
+    setSelectedSecurityStatsState({ key: "", stats: null });
+    setSelectedSecuritySummaryLoading(false);
+    setSecurityAreaReportMsg(null);
+  }
+
+  function selectSecurityArea(area: { kind: SecurityAreaKind; code: string }) {
+    setSelectedSecurityArea(area);
+    setSelectedSecurityStatsState({ key: "", stats: null });
+    setSelectedSecuritySummaryLoading(area.kind === "risp");
+    setSecurityAreaReportMsg(null);
+    setSelectedBairro("");
+    setBairroReportMsg(null);
+  }
+
   useEffect(() => {
     areaDrawModeRef.current = areaDrawMode;
   }, [areaDrawMode]);
+
+  useEffect(() => {
+    areaDrawPointsRef.current = areaDrawPoints;
+  }, [areaDrawPoints]);
 
   useEffect(() => {
     showBairrosRef.current = showBairros;
   }, [showBairros]);
 
   useEffect(() => {
+    showRispRef.current = showRisp;
+  }, [showRisp]);
+
+  useEffect(() => {
+    showAispRef.current = showAisp;
+  }, [showAisp]);
+
+  useEffect(() => {
+    showCispRef.current = showCisp;
+  }, [showCisp]);
+
+  useEffect(() => {
     bairrosGeoRef.current = bairrosGeo;
   }, [bairrosGeo]);
+
+  useEffect(() => {
+    rispGeoRef.current = rispGeo;
+  }, [rispGeo]);
+
+  useEffect(() => {
+    aispGeoRef.current = aispGeo;
+  }, [aispGeo]);
+
+  useEffect(() => {
+    cispGeoRef.current = cispGeo;
+  }, [cispGeo]);
 
   const [listMode, setListMode] = useState<ListMode>("cameras");
   const [query, setQuery] = useState("");
@@ -995,6 +1370,25 @@ export default function MapPage() {
   }, [canViewCisp]);
 
   useEffect(() => {
+    if (!selectedSecurityArea) return;
+    if (selectedSecurityArea.kind === "risp" && showRisp) return;
+    if (selectedSecurityArea.kind === "aisp" && showAisp) return;
+    if (selectedSecurityArea.kind === "cisp" && showCisp) return;
+    clearSelectedSecurityArea();
+  }, [selectedSecurityArea, showRisp, showAisp, showCisp]);
+
+  useEffect(() => {
+    if (!selectedBairro) return;
+    clearSelectedSecurityArea();
+  }, [selectedBairro]);
+
+  useEffect(() => {
+    if (!selectedSecurityArea) return;
+    setSelectedBairro("");
+    setBairroReportMsg(null);
+  }, [selectedSecurityArea]);
+
+  useEffect(() => {
     if (!canUseGps) {
       setGpsOn(false);
       setGps(null);
@@ -1345,9 +1739,9 @@ export default function MapPage() {
         source: SOURCES.area_draw,
         filter: ["==", ["get", "kind"], "area_point"],
         paint: {
-          "circle-radius": 4.5,
+          "circle-radius": 6,
           "circle-color": "#e0f2fe",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-width": 2,
           "circle-stroke-color": "#0284c7",
         },
       });
@@ -1453,6 +1847,35 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getLayer(LAYERS.risp_selected_fill)) {
+      map.addLayer({
+        id: LAYERS.risp_selected_fill,
+        type: "fill",
+        source: SOURCES.risp,
+        layout: { visibility: "none" },
+        filter: ["==", ["to-string", ["get", "name"]], ""],
+        paint: {
+          "fill-color": "#22c55e",
+          "fill-opacity": 0.16,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.risp_selected_line)) {
+      map.addLayer({
+        id: LAYERS.risp_selected_line,
+        type: "line",
+        source: SOURCES.risp,
+        layout: { visibility: "none" },
+        filter: ["==", ["to-string", ["get", "name"]], ""],
+        paint: {
+          "line-color": "#14532d",
+          "line-width": 3.5,
+          "line-opacity": 1,
+        },
+      });
+    }
+
     if (!map.getLayer(LAYERS.aisp_fill)) {
       map.addLayer({
         id: LAYERS.aisp_fill,
@@ -1503,6 +1926,35 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getLayer(LAYERS.aisp_selected_fill)) {
+      map.addLayer({
+        id: LAYERS.aisp_selected_fill,
+        type: "fill",
+        source: SOURCES.aisp,
+        layout: { visibility: "none" },
+        filter: ["==", ["to-string", ["get", "name"]], ""],
+        paint: {
+          "fill-color": "#3b82f6",
+          "fill-opacity": 0.16,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.aisp_selected_line)) {
+      map.addLayer({
+        id: LAYERS.aisp_selected_line,
+        type: "line",
+        source: SOURCES.aisp,
+        layout: { visibility: "none" },
+        filter: ["==", ["to-string", ["get", "name"]], ""],
+        paint: {
+          "line-color": "#1d4ed8",
+          "line-width": 3.5,
+          "line-opacity": 1,
+        },
+      });
+    }
+
     if (!map.getLayer(LAYERS.cisp_fill)) {
       map.addLayer({
         id: LAYERS.cisp_fill,
@@ -1513,6 +1965,35 @@ export default function MapPage() {
         paint: {
           "fill-color": "#f59e0b",
           "fill-opacity": 0.28,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.cisp_selected_fill)) {
+      map.addLayer({
+        id: LAYERS.cisp_selected_fill,
+        type: "fill",
+        source: SOURCES.cisp,
+        layout: { visibility: "none" },
+        filter: ["==", ["to-string", ["get", "name"]], ""],
+        paint: {
+          "fill-color": "#f59e0b",
+          "fill-opacity": 0.16,
+        },
+      });
+    }
+
+    if (!map.getLayer(LAYERS.cisp_selected_line)) {
+      map.addLayer({
+        id: LAYERS.cisp_selected_line,
+        type: "line",
+        source: SOURCES.cisp,
+        layout: { visibility: "none" },
+        filter: ["==", ["to-string", ["get", "name"]], ""],
+        paint: {
+          "line-color": "#b45309",
+          "line-width": 3.5,
+          "line-opacity": 1,
         },
       });
     }
@@ -1668,12 +2149,29 @@ export default function MapPage() {
     visible: boolean,
     fillId: string,
     lineId: string,
-    labelId?: string
+    labelId?: string,
+    selectedFillId?: string,
+    selectedLineId?: string,
+    selectedCode?: string
   ) {
     const v = visible ? "visible" : "none";
     if (map.getLayer(fillId)) map.setLayoutProperty(fillId, "visibility", v);
     if (map.getLayer(lineId)) map.setLayoutProperty(lineId, "visibility", v);
     if (labelId && map.getLayer(labelId)) map.setLayoutProperty(labelId, "visibility", v);
+
+    const selectedVisibility = visible && selectedCode ? "visible" : "none";
+    const selectedFilter = selectedCode
+      ? ["==", ["to-string", ["get", "name"]], selectedCode]
+      : ["==", ["to-string", ["get", "name"]], ""];
+
+    if (selectedFillId && map.getLayer(selectedFillId)) {
+      map.setLayoutProperty(selectedFillId, "visibility", selectedVisibility);
+      map.setFilter(selectedFillId, selectedFilter as any);
+    }
+    if (selectedLineId && map.getLayer(selectedLineId)) {
+      map.setLayoutProperty(selectedLineId, "visibility", selectedVisibility);
+      map.setFilter(selectedLineId, selectedFilter as any);
+    }
   }
 
   function metersToPixelsAtLat(meters: number, lat: number, zoom: number) {
@@ -2006,11 +2504,94 @@ export default function MapPage() {
       return true;
     }
 
+    function consumeSuppressedAreaDrawClick() {
+      if (!suppressAreaDrawClickRef.current) return false;
+      suppressAreaDrawClickRef.current = false;
+      return true;
+    }
+
+    function setCursorForIdleMap() {
+      if (draggingAreaPointIndexRef.current !== null) {
+        map.getCanvas().style.cursor = "grabbing";
+        return;
+      }
+      map.getCanvas().style.cursor = areaDrawModeRef.current ? "crosshair" : "";
+    }
+
+    function stopAreaPointDrag() {
+      const dragIndex = draggingAreaPointIndexRef.current;
+      if (dragIndex === null) return;
+
+      window.removeEventListener("mouseup", stopAreaPointDrag);
+      window.removeEventListener("blur", stopAreaPointDrag);
+
+      if (areaPointDragPanWasEnabledRef.current) {
+        map.dragPan.enable();
+      }
+
+      draggingAreaPointIndexRef.current = null;
+      areaPointDragPanWasEnabledRef.current = false;
+
+      if (areaPointDragMovedRef.current) {
+        setAreaDrawPoints(areaDrawPointsRef.current);
+      }
+      areaPointDragMovedRef.current = false;
+      setCursorForIdleMap();
+    }
+
     function setCursorPointer() {
+      if (draggingAreaPointIndexRef.current !== null) {
+        map.getCanvas().style.cursor = "grabbing";
+        return;
+      }
       map.getCanvas().style.cursor = "pointer";
     }
     function setCursorDefault() {
-      map.getCanvas().style.cursor = "";
+      setCursorForIdleMap();
+    }
+
+    function getSecurityAreaKindFromLayerId(layerId: string): SecurityAreaKind | null {
+      if (layerId.startsWith("lyr-risp-")) return "risp";
+      if (layerId.startsWith("lyr-aisp-")) return "aisp";
+      if (layerId.startsWith("lyr-cisp-")) return "cisp";
+      return null;
+    }
+
+    function findSecurityAreaFromGeometry(point: [number, number]) {
+      const collections: Array<{
+        kind: SecurityAreaKind;
+        enabled: boolean;
+        data: FeatureCollection<Polygon | MultiPolygon, any> | null;
+      }> = [
+        { kind: "risp", enabled: showRispRef.current, data: rispGeoRef.current },
+        { kind: "aisp", enabled: showAispRef.current, data: aispGeoRef.current },
+        { kind: "cisp", enabled: showCispRef.current, data: cispGeoRef.current },
+      ];
+
+      for (const collection of collections) {
+        if (!collection.enabled || !collection.data?.features?.length) continue;
+
+        for (const feature of collection.data.features as SecurityAreaFeature[]) {
+          if (!feature.geometry) continue;
+          const bbox = getGeometryBbox(feature.geometry);
+          if (!bbox) continue;
+          if (
+            point[0] < bbox.minX ||
+            point[0] > bbox.maxX ||
+            point[1] < bbox.minY ||
+            point[1] > bbox.maxY
+          ) {
+            continue;
+          }
+          if (!pointInGeometry(point, feature.geometry)) continue;
+
+          const code = getSecurityAreaFeatureCode(feature);
+          if (!code) continue;
+          return { kind: collection.kind, code };
+        }
+      }
+
+      return null;
     }
 
     const hoverLayerIds = [LAYERS.cameras_intel_points, LAYERS.cameras_lpr_points, LAYERS.radares_points, LAYERS.clusters];
@@ -2018,6 +2599,89 @@ export default function MapPage() {
       map.on("mouseenter", lid, setCursorPointer);
       map.on("mouseleave", lid, setCursorDefault);
     }
+
+    map.on("mouseenter", LAYERS.area_draw_points, () => {
+      map.getCanvas().style.cursor =
+        draggingAreaPointIndexRef.current !== null ? "grabbing" : "grab";
+    });
+
+    map.on("mouseleave", LAYERS.area_draw_points, () => {
+      if (draggingAreaPointIndexRef.current !== null) return;
+      setCursorForIdleMap();
+    });
+
+    map.on("mouseenter", LAYERS.area_draw_line, () => {
+      if (draggingAreaPointIndexRef.current !== null) {
+        map.getCanvas().style.cursor = "grabbing";
+        return;
+      }
+      map.getCanvas().style.cursor = "copy";
+    });
+
+    map.on("mouseleave", LAYERS.area_draw_line, () => {
+      if (draggingAreaPointIndexRef.current !== null) return;
+      setCursorForIdleMap();
+    });
+
+    map.on("click", LAYERS.area_draw_line, (e) => {
+      if (suppressAreaDrawClickRef.current) return;
+      if (areaDrawPointsRef.current.length < 2) return;
+
+      const lng = Number(e.lngLat?.lng);
+      const lat = Number(e.lngLat?.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+      const insertInfo = getAreaDrawInsertInfo(map, areaDrawPointsRef.current, [lng, lat]);
+      if (!insertInfo) return;
+
+      suppressAreaDrawClickRef.current = true;
+      const nextPoints = insertAreaDrawPoint(
+        areaDrawPointsRef.current,
+        insertInfo.insertIndex,
+        insertInfo.point
+      );
+      areaDrawPointsRef.current = nextPoints;
+      setAreaDrawPoints(nextPoints);
+      e.preventDefault();
+    });
+
+    map.on("mousedown", LAYERS.area_draw_points, (e) => {
+      const feature: any = e.features?.[0];
+      const dragIndex = Number(feature?.properties?.point_index);
+      if (!Number.isInteger(dragIndex) || dragIndex < 0) return;
+
+      suppressAreaDrawClickRef.current = true;
+      areaPointDragMovedRef.current = false;
+      draggingAreaPointIndexRef.current = dragIndex;
+      areaPointDragPanWasEnabledRef.current = map.dragPan.isEnabled();
+      if (areaPointDragPanWasEnabledRef.current) {
+        map.dragPan.disable();
+      }
+
+      map.getCanvas().style.cursor = "grabbing";
+      e.preventDefault();
+      window.addEventListener("mouseup", stopAreaPointDrag);
+      window.addEventListener("blur", stopAreaPointDrag);
+    });
+
+    map.on("mousemove", (e) => {
+      const dragIndex = draggingAreaPointIndexRef.current;
+      if (dragIndex === null) return;
+
+      const lng = Number(e.lngLat?.lng);
+      const lat = Number(e.lngLat?.lat);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+      areaPointDragMovedRef.current = true;
+      const nextPoints = replaceAreaDrawPoint(areaDrawPointsRef.current, dragIndex, [lng, lat]);
+      areaDrawPointsRef.current = nextPoints;
+      updateAreaDrawData(map, nextPoints);
+      map.getCanvas().style.cursor = "grabbing";
+    });
+
+    map.on("mouseup", () => {
+      stopAreaPointDrag();
+    });
 
     map.on("mouseenter", LAYERS.cameras_points, (e) => {
       setCursorPointer();
@@ -2301,6 +2965,7 @@ export default function MapPage() {
 
     map.on("click", (e) => {
       hideHoverPreview();
+      if (consumeSuppressedAreaDrawClick()) return;
       if (areaDrawModeRef.current) {
         const lng = Number(e.lngLat?.lng);
         const lat = Number(e.lngLat?.lat);
@@ -2320,6 +2985,50 @@ export default function MapPage() {
         ],
       });
       if (!features || features.length === 0) {
+        const codeFeature = map
+          .queryRenderedFeatures(e.point, {
+            layers: [
+              LAYERS.risp_selected_fill,
+              LAYERS.risp_selected_line,
+              LAYERS.risp_fill,
+              LAYERS.risp_line,
+              LAYERS.risp_label,
+              LAYERS.aisp_selected_fill,
+              LAYERS.aisp_selected_line,
+              LAYERS.aisp_fill,
+              LAYERS.aisp_line,
+              LAYERS.aisp_label,
+              LAYERS.cisp_selected_fill,
+              LAYERS.cisp_selected_line,
+              LAYERS.cisp_fill,
+              LAYERS.cisp_line,
+              LAYERS.cisp_label,
+            ],
+          })
+          .find((feature: any) => {
+            const code = feature?.properties?.name;
+            return code !== undefined && code !== null && String(code).trim().length > 0;
+          }) as any;
+
+        if (codeFeature) {
+          const kind = getSecurityAreaKindFromLayerId(codeFeature.layer?.id || "");
+          const code = String(codeFeature.properties?.name || "").trim();
+          if (kind && code) {
+            selectSecurityArea({ kind, code });
+            return;
+          }
+        }
+
+        const lng = Number(e.lngLat?.lng);
+        const lat = Number(e.lngLat?.lat);
+        if (Number.isFinite(lng) && Number.isFinite(lat)) {
+          const geometryMatch = findSecurityAreaFromGeometry([lng, lat]);
+          if (geometryMatch) {
+            selectSecurityArea(geometryMatch);
+            return;
+          }
+        }
+
         let clickedBairro = "";
 
         if (showBairrosRef.current) {
@@ -2365,6 +3074,7 @@ export default function MapPage() {
         }
 
         if (clickedBairro) {
+          clearSelectedSecurityArea();
           setSelectedBairro(clickedBairro);
           setBairroQuery("");
           setBairroReportMsg(null);
@@ -2612,9 +3322,36 @@ export default function MapPage() {
         updateCispData(map, cispGeo);
       }
       applyBairrosVisibility(map, showBairros, selectedBairro);
-      applyCodeVisibility(map, showRisp, LAYERS.risp_fill, LAYERS.risp_line, LAYERS.risp_label);
-      applyCodeVisibility(map, showAisp, LAYERS.aisp_fill, LAYERS.aisp_line, LAYERS.aisp_label);
-      applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
+      applyCodeVisibility(
+        map,
+        showRisp,
+        LAYERS.risp_fill,
+        LAYERS.risp_line,
+        LAYERS.risp_label,
+        LAYERS.risp_selected_fill,
+        LAYERS.risp_selected_line,
+        selectedSecurityArea?.kind === "risp" ? selectedSecurityArea.code : ""
+      );
+      applyCodeVisibility(
+        map,
+        showAisp,
+        LAYERS.aisp_fill,
+        LAYERS.aisp_line,
+        LAYERS.aisp_label,
+        LAYERS.aisp_selected_fill,
+        LAYERS.aisp_selected_line,
+        selectedSecurityArea?.kind === "aisp" ? selectedSecurityArea.code : ""
+      );
+      applyCodeVisibility(
+        map,
+        showCisp,
+        LAYERS.cisp_fill,
+        LAYERS.cisp_line,
+        LAYERS.cisp_label,
+        LAYERS.cisp_selected_fill,
+        LAYERS.cisp_selected_line,
+        selectedSecurityArea?.kind === "cisp" ? selectedSecurityArea.code : ""
+      );
       updateGpsData(map, gps, gpsOnRef.current);
       updateSearchPin(map, searchPin);
       updateAreaDrawData(map, areaDrawPoints);
@@ -2860,7 +3597,11 @@ export default function MapPage() {
 
   async function downloadBairroReport() {
     if (!canRequestBairroReport) {
-      setBairroReportMsg("Seu perfil não pode gerar relatório de bairros com as camadas atuais.");
+      setBairroReportMsg(
+        hasAuthorizedReportLayers
+          ? "Ative pelo menos uma camada para gerar o relatório do bairro."
+          : "Seu perfil não possui camadas autorizadas para este relatório."
+      );
       return;
     }
     if (!selectedBairro) return;
@@ -2874,8 +3615,8 @@ export default function MapPage() {
       const payload = {
         bairro: selectedBairro,
         geometry: selectedBairroFeature.geometry,
-        selected_ids: selectedBairroSelectionIds,
-        layers: allowedReportLayers,
+        selected_ids: selectedBairroReportSelectionIds,
+        layers: activeReportLayers,
         include_inactive: false,
         format: "pdf",
       };
@@ -2911,7 +3652,7 @@ export default function MapPage() {
     }
   }
 
-  function areaGeometryFromPoints(points: Array<[number, number]>) {
+  function areaGeometryFromPoints(points: Array<[number, number]>): Polygon | null {
     if (points.length < 3) return null;
     const ring = [...points, points[0]];
     return {
@@ -2939,7 +3680,11 @@ export default function MapPage() {
 
   async function downloadAreaReport() {
     if (!canRequestAreaReport) {
-      setAreaReportMsg("Seu perfil não pode gerar relatório por área com as camadas atuais.");
+      setAreaReportMsg(
+        hasAuthorizedReportLayers
+          ? "Ative pelo menos uma camada para gerar o relatório por área."
+          : "Seu perfil não possui camadas autorizadas para este relatório."
+      );
       return;
     }
     const geometry = areaGeometryFromPoints(areaDrawPoints);
@@ -2951,10 +3696,23 @@ export default function MapPage() {
     setAreaReportLoading(true);
     setAreaReportMsg("Solicitando geração do relatório...");
     try {
+      const selectionIds = buildGeometrySelectionIds(
+        geometry,
+        cameras,
+        camerasIntel,
+        camerasLpr,
+        radares
+      );
       const payload = {
         name: `Relatório de Área - ${new Date().toISOString()}`,
         geometry,
-        layers: allowedReportLayers,
+        selected_ids: {
+          cameras: showCameras ? selectionIds.cameras : [],
+          super_cameras: showCamerasIntel ? selectionIds.super_cameras : [],
+          lpr: showCamerasLpr ? selectionIds.lpr : [],
+          radar: showRadares ? selectionIds.radar : [],
+        },
+        layers: activeReportLayers,
         include_inactive: false,
         format: "pdf",
       };
@@ -2984,6 +3742,76 @@ export default function MapPage() {
       setAreaReportMsg(e?.message || "Falha ao gerar relatório da área.");
     } finally {
       setAreaReportLoading(false);
+    }
+  }
+
+  function formatSecurityAreaLabel(kind: SecurityAreaKind, code: string) {
+    const normalizedCode = String(code || "").trim();
+    if (!normalizedCode) return kind.toUpperCase();
+    return `${normalizedCode}ª ${kind.toUpperCase()}`;
+  }
+
+  async function downloadSecurityAreaReport() {
+    if (!selectedSecurityFeature?.geometry || !selectedSecurityArea) {
+      setSecurityAreaReportMsg("Geometria da área selecionada não está disponível.");
+      return;
+    }
+    if (activeReportLayers.length === 0) {
+      setSecurityAreaReportMsg(
+        hasAuthorizedReportLayers
+          ? "Ative pelo menos uma camada para gerar o relatório desta área."
+          : "Seu perfil não possui camadas autorizadas para este relatório."
+      );
+      return;
+    }
+
+    const areaLabel = formatSecurityAreaLabel(
+      selectedSecurityArea.kind,
+      selectedSecurityArea.code
+    );
+
+    setSecurityAreaReportLoading(true);
+    setSecurityAreaReportMsg("Solicitando geração do relatório...");
+    try {
+      const payload = {
+        name: `Relatório de ${areaLabel} - ${new Date().toISOString()}`,
+        geometry: selectedSecurityFeature.geometry,
+        selected_ids: selectedSecurityReportSelectionIds,
+        layers: activeReportLayers,
+        include_inactive: false,
+        format: "pdf",
+      };
+
+      const created = await fetchJson<any>(`${API_BASE}/reports/areas`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let downloadUrl = created?.download_url as string | undefined;
+      if (!downloadUrl && created?.id) {
+        setSecurityAreaReportMsg("Gerando PDF no servidor...");
+        const detail = await waitForReportCompletion(String(created.id));
+        downloadUrl = detail?.download_url;
+      }
+      if (!downloadUrl) {
+        throw new Error("Relatório criado, mas sem URL de download.");
+      }
+
+      const safeArea = areaLabel
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "_")
+        .toLowerCase();
+      await downloadReportFile(downloadUrl, `relatorio_${safeArea}.pdf`);
+      setSecurityAreaReportMsg("PDF baixado com sucesso.");
+    } catch (e: any) {
+      setSecurityAreaReportMsg(e?.message || "Falha ao gerar relatório da área.");
+    } finally {
+      setSecurityAreaReportLoading(false);
     }
   }
 
@@ -3182,45 +4010,27 @@ export default function MapPage() {
 
   const selectedBairroStats = useMemo(() => {
     if (!selectedBairroFeature?.geometry) return null;
-    const geom = selectedBairroFeature.geometry;
-    const bbox = getGeometryBbox(geom);
-    if (!bbox) return null;
-
-    const inBbox = (lng: number, lat: number) =>
-      lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
-
-    const countPoints = (
-      points: Array<{ lng?: number | string | null; lat?: number | string | null }>
-    ) => {
-      let count = 0;
-      for (const p of points) {
-        const lng = Number(p.lng);
-        const lat = Number(p.lat);
-        if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-        if (!inBbox(lng, lat)) continue;
-        if (pointInGeometry([lng, lat], geom)) count++;
-      }
-      return count;
-    };
-
-    return {
-      cameras: countPoints(cameras),
-      inteligentes: countPoints(camerasIntel),
-      lpr: countPoints(camerasLpr),
-      radares: countPoints(radares),
-    };
+    return buildGeometryStats(
+      selectedBairroFeature.geometry,
+      cameras,
+      camerasIntel,
+      camerasLpr,
+      radares
+    );
   }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
 
   const bairroSummaryItems = useMemo(() => {
     if (!selectedBairroStats) return [];
 
     return [
-      canViewCameras ? { label: "Câmeras", value: selectedBairroStats.cameras } : null,
-      canViewCamerasIntel
+      canViewCameras && showCameras
+        ? { label: "Câmeras", value: selectedBairroStats.cameras }
+        : null,
+      canViewCamerasIntel && showCamerasIntel
         ? { label: "Super Câmeras Inteligentes", value: selectedBairroStats.inteligentes }
         : null,
-      canViewCamerasLpr ? { label: "LPR", value: selectedBairroStats.lpr } : null,
-      canViewRadares ? { label: "Radares", value: selectedBairroStats.radares } : null,
+      canViewCamerasLpr && showCamerasLpr ? { label: "LPR", value: selectedBairroStats.lpr } : null,
+      canViewRadares && showRadares ? { label: "Radares", value: selectedBairroStats.radares } : null,
     ].filter((item): item is { label: string; value: number } => !!item);
   }, [
     selectedBairroStats,
@@ -3228,86 +4038,166 @@ export default function MapPage() {
     canViewCamerasIntel,
     canViewCamerasLpr,
     canViewRadares,
+    showCameras,
+    showCamerasIntel,
+    showCamerasLpr,
+    showRadares,
   ]);
 
   const selectedBairroTotal = bairroSummaryItems.reduce((total, item) => total + item.value, 0);
 
   const selectedBairroSelectionIds = useMemo(() => {
-    if (!selectedBairroFeature?.geometry) {
-      return {
-        cameras: [] as string[],
-        super_cameras: [] as string[],
-        lpr: [] as string[],
-        radar: [] as string[],
-      };
-    }
-
-    const geom = selectedBairroFeature.geometry;
-    const bbox = getGeometryBbox(geom);
-    if (!bbox) {
-      return {
-        cameras: [] as string[],
-        super_cameras: [] as string[],
-        lpr: [] as string[],
-        radar: [] as string[],
-      };
-    }
-
-    const inBbox = (lng: number, lat: number) =>
-      lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY;
-
-    const camerasIds: string[] = [];
-    const superCameraIds: string[] = [];
-    const lprIds: string[] = [];
-    const radarIds: string[] = [];
-
-    for (const c of cameras) {
-      const lng = Number(c.lng);
-      const lat = Number(c.lat);
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-      if (!inBbox(lng, lat)) continue;
-      if (!pointInGeometry([lng, lat], geom)) continue;
-      const idOrCode = String((c as any).id || c.code || "").trim();
-      if (idOrCode) camerasIds.push(idOrCode);
-    }
-
-    for (const c of camerasIntel) {
-      const lng = Number(c.lng);
-      const lat = Number(c.lat);
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-      if (!inBbox(lng, lat)) continue;
-      if (!pointInGeometry([lng, lat], geom)) continue;
-      const idOrCode = String((c as any).id || c.code || "").trim();
-      if (idOrCode) superCameraIds.push(idOrCode);
-    }
-
-    for (const c of camerasLpr) {
-      const lng = Number(c.lng);
-      const lat = Number(c.lat);
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-      if (!inBbox(lng, lat)) continue;
-      if (!pointInGeometry([lng, lat], geom)) continue;
-      const idOrCode = String((c as any).id || c.code || "").trim();
-      if (idOrCode) lprIds.push(idOrCode);
-    }
-
-    for (const r of radares) {
-      const lng = Number(r.lng);
-      const lat = Number(r.lat);
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-      if (!inBbox(lng, lat)) continue;
-      if (!pointInGeometry([lng, lat], geom)) continue;
-      const idOrCodcet = String((r as any).id || r.codcet || "").trim();
-      if (idOrCodcet) radarIds.push(idOrCodcet);
-    }
-
-    return {
-      cameras: camerasIds,
-      super_cameras: superCameraIds,
-      lpr: lprIds,
-      radar: radarIds,
-    };
+    if (!selectedBairroFeature?.geometry) return emptyGeometrySelectionIds();
+    return buildGeometrySelectionIds(
+      selectedBairroFeature.geometry,
+      cameras,
+      camerasIntel,
+      camerasLpr,
+      radares
+    );
   }, [selectedBairroFeature, cameras, camerasIntel, camerasLpr, radares]);
+
+  const selectedBairroReportSelectionIds = useMemo(
+    () => ({
+      cameras: showCameras ? selectedBairroSelectionIds.cameras : [],
+      super_cameras: showCamerasIntel ? selectedBairroSelectionIds.super_cameras : [],
+      lpr: showCamerasLpr ? selectedBairroSelectionIds.lpr : [],
+      radar: showRadares ? selectedBairroSelectionIds.radar : [],
+    }),
+    [selectedBairroSelectionIds, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
+  );
+
+  const selectedSecurityFeature = useMemo(() => {
+    if (!selectedSecurityArea) return null;
+
+    const collection =
+      selectedSecurityArea.kind === "risp"
+        ? rispGeo
+        : selectedSecurityArea.kind === "aisp"
+        ? aispGeo
+        : cispGeo;
+
+    if (!collection) return null;
+
+    const matches = (collection.features as SecurityAreaFeature[]).filter(
+      (feature) => getSecurityAreaFeatureCode(feature) === selectedSecurityArea.code
+    );
+
+    return mergeSecurityAreaFeatures(matches);
+  }, [selectedSecurityArea, rispGeo, aispGeo, cispGeo]);
+
+  const selectedSecurityStatsKey = selectedSecurityArea
+    ? `${selectedSecurityArea.kind}:${selectedSecurityArea.code}`
+    : "";
+
+  useEffect(() => {
+    if (!selectedSecurityFeature?.geometry || !selectedSecurityArea) {
+      setSelectedSecurityStatsState({ key: "", stats: null });
+      setSelectedSecuritySummaryLoading(false);
+      return;
+    }
+
+    const key = `${selectedSecurityArea.kind}:${selectedSecurityArea.code}`;
+    let cancelled = false;
+
+    const finish = (stats: GeometryStats | null) => {
+      if (cancelled) return;
+      setSelectedSecurityStatsState({ key, stats });
+      setSelectedSecuritySummaryLoading(false);
+    };
+
+    if (selectedSecurityArea.kind === "risp") {
+      setSelectedSecurityStatsState({ key, stats: null });
+      setSelectedSecuritySummaryLoading(true);
+
+      const timer = window.setTimeout(() => {
+        finish(
+          buildGeometryStats(
+            selectedSecurityFeature.geometry,
+            cameras,
+            camerasIntel,
+            camerasLpr,
+            radares
+          )
+        );
+      }, 0);
+
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
+    }
+
+    finish(
+      buildGeometryStats(
+        selectedSecurityFeature.geometry,
+        cameras,
+        camerasIntel,
+        camerasLpr,
+        radares
+      )
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSecurityArea, selectedSecurityFeature, cameras, camerasIntel, camerasLpr, radares]);
+
+  const selectedSecurityStats =
+    selectedSecurityStatsState.key === selectedSecurityStatsKey
+      ? selectedSecurityStatsState.stats
+      : null;
+
+  const selectedSecuritySummaryItems = useMemo(() => {
+    if (!selectedSecurityStats) return [];
+
+    return [
+      canViewCameras && showCameras
+        ? { label: "Câmeras", value: selectedSecurityStats.cameras }
+        : null,
+      canViewCamerasIntel && showCamerasIntel
+        ? { label: "Super Câmeras Inteligentes", value: selectedSecurityStats.inteligentes }
+        : null,
+      canViewCamerasLpr && showCamerasLpr ? { label: "LPR", value: selectedSecurityStats.lpr } : null,
+      canViewRadares && showRadares ? { label: "Radares", value: selectedSecurityStats.radares } : null,
+    ].filter((item): item is { label: string; value: number } => !!item);
+  }, [
+    selectedSecurityStats,
+    canViewCameras,
+    canViewCamerasIntel,
+    canViewCamerasLpr,
+    canViewRadares,
+    showCameras,
+    showCamerasIntel,
+    showCamerasLpr,
+    showRadares,
+  ]);
+
+  const selectedSecurityTotal = selectedSecuritySummaryItems.reduce(
+    (total, item) => total + item.value,
+    0
+  );
+
+  const selectedSecuritySelectionIds = useMemo(() => {
+    if (!selectedSecurityFeature?.geometry) return emptyGeometrySelectionIds();
+    return buildGeometrySelectionIds(
+      selectedSecurityFeature.geometry,
+      cameras,
+      camerasIntel,
+      camerasLpr,
+      radares
+    );
+  }, [selectedSecurityFeature, cameras, camerasIntel, camerasLpr, radares]);
+
+  const selectedSecurityReportSelectionIds = useMemo(
+    () => ({
+      cameras: showCameras ? selectedSecuritySelectionIds.cameras : [],
+      super_cameras: showCamerasIntel ? selectedSecuritySelectionIds.super_cameras : [],
+      lpr: showCamerasLpr ? selectedSecuritySelectionIds.lpr : [],
+      radar: showRadares ? selectedSecuritySelectionIds.radar : [],
+    }),
+    [selectedSecuritySelectionIds, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
+  );
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3423,25 +4313,79 @@ export default function MapPage() {
     if (map.isStyleLoaded()) {
       ensureSourcesAndLayers(map);
       applyBairrosVisibility(map, showBairros, selectedBairro);
-      applyCodeVisibility(map, showRisp, LAYERS.risp_fill, LAYERS.risp_line, LAYERS.risp_label);
-      applyCodeVisibility(map, showAisp, LAYERS.aisp_fill, LAYERS.aisp_line, LAYERS.aisp_label);
-      applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
+      applyCodeVisibility(
+        map,
+        showRisp,
+        LAYERS.risp_fill,
+        LAYERS.risp_line,
+        LAYERS.risp_label,
+        LAYERS.risp_selected_fill,
+        LAYERS.risp_selected_line,
+        selectedSecurityArea?.kind === "risp" ? selectedSecurityArea.code : ""
+      );
+      applyCodeVisibility(
+        map,
+        showAisp,
+        LAYERS.aisp_fill,
+        LAYERS.aisp_line,
+        LAYERS.aisp_label,
+        LAYERS.aisp_selected_fill,
+        LAYERS.aisp_selected_line,
+        selectedSecurityArea?.kind === "aisp" ? selectedSecurityArea.code : ""
+      );
+      applyCodeVisibility(
+        map,
+        showCisp,
+        LAYERS.cisp_fill,
+        LAYERS.cisp_line,
+        LAYERS.cisp_label,
+        LAYERS.cisp_selected_fill,
+        LAYERS.cisp_selected_line,
+        selectedSecurityArea?.kind === "cisp" ? selectedSecurityArea.code : ""
+      );
       return;
     }
 
     const handleLoad = () => {
       ensureSourcesAndLayers(map);
       applyBairrosVisibility(map, showBairros, selectedBairro);
-      applyCodeVisibility(map, showRisp, LAYERS.risp_fill, LAYERS.risp_line, LAYERS.risp_label);
-      applyCodeVisibility(map, showAisp, LAYERS.aisp_fill, LAYERS.aisp_line, LAYERS.aisp_label);
-      applyCodeVisibility(map, showCisp, LAYERS.cisp_fill, LAYERS.cisp_line, LAYERS.cisp_label);
+      applyCodeVisibility(
+        map,
+        showRisp,
+        LAYERS.risp_fill,
+        LAYERS.risp_line,
+        LAYERS.risp_label,
+        LAYERS.risp_selected_fill,
+        LAYERS.risp_selected_line,
+        selectedSecurityArea?.kind === "risp" ? selectedSecurityArea.code : ""
+      );
+      applyCodeVisibility(
+        map,
+        showAisp,
+        LAYERS.aisp_fill,
+        LAYERS.aisp_line,
+        LAYERS.aisp_label,
+        LAYERS.aisp_selected_fill,
+        LAYERS.aisp_selected_line,
+        selectedSecurityArea?.kind === "aisp" ? selectedSecurityArea.code : ""
+      );
+      applyCodeVisibility(
+        map,
+        showCisp,
+        LAYERS.cisp_fill,
+        LAYERS.cisp_line,
+        LAYERS.cisp_label,
+        LAYERS.cisp_selected_fill,
+        LAYERS.cisp_selected_line,
+        selectedSecurityArea?.kind === "cisp" ? selectedSecurityArea.code : ""
+      );
     };
     map.once("load", handleLoad);
     return () => {
       map.off("load", handleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showBairros, selectedBairro, showRisp, showAisp, showCisp]);
+  }, [showBairros, selectedBairro, showRisp, showAisp, showCisp, selectedSecurityArea]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3474,6 +4418,23 @@ export default function MapPage() {
       { padding: 40, duration: 700, maxZoom: 14 }
     );
   }, [selectedBairro, bairrosGeo]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!selectedSecurityFeature?.geometry) return;
+
+    const bbox = getGeometryBbox(selectedSecurityFeature.geometry);
+    if (!bbox) return;
+
+    map.fitBounds(
+      [
+        [bbox.minX, bbox.minY],
+        [bbox.maxX, bbox.maxY],
+      ],
+      { padding: 40, duration: 700, maxZoom: 14 }
+    );
+  }, [selectedSecurityFeature]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3921,6 +4882,167 @@ export default function MapPage() {
       ? "Carregando..."
       : `${radares.length}`;
   const listHeaderLabel = `${listTitle} - ${listCountLabel}`;
+  const selectedSecurityAreaLabel = selectedSecurityArea
+    ? formatSecurityAreaLabel(selectedSecurityArea.kind, selectedSecurityArea.code)
+    : "";
+  const canRequestSecurityAreaReport =
+    !!selectedSecurityFeature?.geometry && activeReportLayers.length > 0;
+
+  const renderGeometrySummaryCard = ({
+    title,
+    total,
+    items,
+    onClose,
+    onDownload,
+    reportLoading,
+    reportMsg,
+    canRequest,
+    loading = false,
+    loadingText = "Carregando resumo...",
+  }: {
+    title: string;
+    total: number;
+    items: Array<{ label: string; value: number }>;
+    onClose: () => void;
+    onDownload: () => void;
+    reportLoading: boolean;
+    reportMsg: string | null;
+    canRequest: boolean;
+    loading?: boolean;
+    loadingText?: string;
+  }) => (
+    <div
+      className="dock"
+      style={
+        isMobile
+          ? { width: "100%", maxWidth: 360, padding: 8, gap: 4 }
+          : { minWidth: 220 }
+      }
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="dockTitle" style={{ marginBottom: 0 }}>
+          Resumo
+        </div>
+        <button
+          className="btnGhost"
+          onClick={onClose}
+          style={{
+            width: isMobile ? 24 : 28,
+            height: isMobile ? 24 : 28,
+            padding: 0,
+            borderRadius: 999,
+            lineHeight: 1,
+          }}
+          title="Fechar resumo"
+        >
+          ✕
+        </button>
+      </div>
+      <div
+        className="dockNote"
+        style={{ lineHeight: isMobile ? 1.25 : 1.4, marginTop: isMobile ? 2 : 6, fontSize: isMobile ? 9 : undefined }}
+      >
+        <div style={{ fontSize: isMobile ? 11 : 13, marginBottom: isMobile ? 3 : 4 }}>
+          <strong>{loading ? title : `${title} - Total: ${total}`}</strong>
+        </div>
+        {loading ? (
+          <div className="summaryLoadingRow" style={{ marginTop: isMobile ? 6 : 8 }}>
+            <span className="summaryLoadingSpinner" aria-hidden="true" />
+            <span>{loadingText}</span>
+          </div>
+        ) : (
+          <>
+            {isMobile ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "2px 8px",
+                  fontSize: 9,
+                }}
+              >
+                {items.map((item) => (
+                  <div key={item.label}>
+                    {item.label}: {item.value}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              items.map((item) => (
+                <div key={item.label}>
+                  {item.label}: {item.value}
+                </div>
+              ))
+            )}
+            <div style={{ marginTop: isMobile ? 6 : 10 }}>
+              <button
+                className="btnGhost"
+                onClick={onDownload}
+                disabled={!canRequest || reportLoading}
+                style={{
+                  width: "100%",
+                  borderRadius: 10,
+                  minHeight: isMobile ? 30 : undefined,
+                  padding: isMobile ? "6px 8px" : undefined,
+                  fontSize: isMobile ? 11 : undefined,
+                  opacity: !canRequest || reportLoading ? 0.7 : 1,
+                }}
+              >
+                {reportLoading ? "Gerando PDF..." : "Baixar PDF"}
+              </button>
+              {reportMsg && (
+                <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.8)" }}>
+                  {reportMsg}
+                </div>
+              )}
+              {!canRequest && (
+                <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.72)" }}>
+                  {hasAuthorizedReportLayers
+                    ? "Ative pelo menos uma camada para incluir neste relatório."
+                    : "Nenhuma camada autorizada para incluir neste relatório."}
+                </div>
+              )}
+            </div>
+            {isMobile ? (
+              <div style={{ marginTop: 6, fontSize: 8.5, lineHeight: 1.2, color: "rgba(15,23,42,0.72)" }}>
+                * O total pode não refletir pontos únicos no mapa.
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginTop: 8,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 4,
+                  fontSize: 9,
+                  lineHeight: 1.35,
+                  color: "rgba(15,23,42,0.75)",
+                }}
+              >
+                <span
+                  title="Alguns equipamentos podem compartilhar a mesma coordenada."
+                  style={{
+                    display: "inline-block",
+                    marginTop: 1,
+                    fontWeight: 900,
+                    fontSize: 10,
+                    lineHeight: 1,
+                  }}
+                >
+                  *
+                </span>
+                <div>
+                  Podem existir câmeras, radares, LPR e Super Câmeras Inteligentes na mesma coordenada.
+                  <br />
+                  Por isso, o total pode não refletir pontos únicos no mapa.
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   const renderCivitasPanel = () => {
     const civitasToolIcons = [
@@ -4135,128 +5257,40 @@ export default function MapPage() {
           bumpDockAutoHide();
         }}
       >
-        {showBairros && selectedBairro && selectedBairroStats && (
-          <div
-            className="dock"
-            style={
-              isMobile
-                ? { width: "100%", maxWidth: 360, padding: 8, gap: 4 }
-                : { minWidth: 220 }
-            }
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div className="dockTitle" style={{ marginBottom: 0 }}>Resumo</div>
-              <button
-                className="btnGhost"
-                onClick={() => setSelectedBairro("")}
-                style={{
-                  width: isMobile ? 24 : 28,
-                  height: isMobile ? 24 : 28,
-                  padding: 0,
-                  borderRadius: 999,
-                  lineHeight: 1,
-                }}
-                title="Fechar resumo"
-              >
-                ✕
-              </button>
-            </div>
-            <div
-              className="dockNote"
-              style={{ lineHeight: isMobile ? 1.25 : 1.4, marginTop: isMobile ? 2 : 6, fontSize: isMobile ? 9 : undefined }}
-            >
-              <div style={{ fontSize: isMobile ? 11 : 13, marginBottom: isMobile ? 3 : 4 }}>
-                <strong>
-                  {selectedBairro} - Total: {selectedBairroTotal}
-                </strong>
-              </div>
-              {isMobile ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "2px 8px",
-                    fontSize: 9,
-                  }}
-                >
-                  {bairroSummaryItems.map((item) => (
-                    <div key={item.label}>
-                      {item.label}: {item.value}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                bairroSummaryItems.map((item) => (
-                  <div key={item.label}>
-                    {item.label}: {item.value}
-                  </div>
-                ))
-              )}
-              <div style={{ marginTop: isMobile ? 6 : 10 }}>
-                <button
-                  className="btnGhost"
-                  onClick={downloadBairroReport}
-                  disabled={!canRequestBairroReport || bairroReportLoading}
-                  style={{
-                    width: "100%",
-                    borderRadius: 10,
-                    minHeight: isMobile ? 30 : undefined,
-                    padding: isMobile ? "6px 8px" : undefined,
-                    fontSize: isMobile ? 11 : undefined,
-                    opacity: !canRequestBairroReport || bairroReportLoading ? 0.7 : 1,
-                  }}
-                >
-                  {bairroReportLoading ? "Gerando PDF..." : "Baixar PDF"}
-                </button>
-                {bairroReportMsg && (
-                  <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.8)" }}>
-                    {bairroReportMsg}
-                  </div>
-                )}
-                {!canRequestBairroReport && (
-                  <div style={{ marginTop: 6, fontSize: 10, color: "rgba(15,23,42,0.72)" }}>
-                    Nenhuma camada autorizada para incluir neste relatório.
-                  </div>
-                )}
-              </div>
-              {isMobile ? (
-                <div style={{ marginTop: 6, fontSize: 8.5, lineHeight: 1.2, color: "rgba(15,23,42,0.72)" }}>
-                  * O total pode não refletir pontos únicos no mapa.
-                </div>
-              ) : (
-                <div
-                  style={{
-                    marginTop: 8,
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 4,
-                    fontSize: 9,
-                    lineHeight: 1.35,
-                    color: "rgba(15,23,42,0.75)",
-                  }}
-                >
-                  <span
-                    title="Alguns equipamentos podem compartilhar a mesma coordenada."
-                    style={{
-                      display: "inline-block",
-                      marginTop: 1,
-                      fontWeight: 900,
-                      fontSize: 10,
-                      lineHeight: 1,
-                    }}
-                  >
-                    *
-                  </span>
-                  <div>
-                    Podem existir câmeras, radares, LPR e Super Câmeras Inteligentes na mesma coordenada.
-                    <br />
-                    Por isso, o total pode não refletir pontos únicos no mapa.
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {showBairros &&
+          selectedBairro &&
+          selectedBairroStats &&
+          renderGeometrySummaryCard({
+            title: selectedBairro,
+            total: selectedBairroTotal,
+            items: bairroSummaryItems,
+            onClose: () => {
+              setSelectedBairro("");
+              setBairroReportMsg(null);
+            },
+            onDownload: downloadBairroReport,
+            reportLoading: bairroReportLoading,
+            reportMsg: bairroReportMsg,
+            canRequest: canRequestBairroReport,
+          })}
+
+        {selectedSecurityArea &&
+          (selectedSecuritySummaryLoading || selectedSecurityStats) &&
+          renderGeometrySummaryCard({
+            title: selectedSecurityAreaLabel,
+            total: selectedSecurityTotal,
+            items: selectedSecuritySummaryItems,
+            onClose: clearSelectedSecurityArea,
+            onDownload: downloadSecurityAreaReport,
+            reportLoading: securityAreaReportLoading,
+            reportMsg: securityAreaReportMsg,
+            canRequest: canRequestSecurityAreaReport,
+            loading: selectedSecuritySummaryLoading,
+            loadingText:
+              selectedSecurityArea.kind === "risp"
+                ? "Carregando resumo da RISP..."
+                : "Carregando resumo...",
+          })}
 
         {!dockOpen && (
           <div
@@ -4563,7 +5597,9 @@ export default function MapPage() {
                 )}
                 {!canRequestAreaReport && (
                   <div className="dockNote" style={{ margin: 0, fontSize: 10 }}>
-                    Nenhuma camada autorizada para incluir neste relatório.
+                    {hasAuthorizedReportLayers
+                      ? "Ative pelo menos uma camada para incluir neste relatório."
+                      : "Nenhuma camada autorizada para incluir neste relatório."}
                   </div>
                 )}
               </div>
