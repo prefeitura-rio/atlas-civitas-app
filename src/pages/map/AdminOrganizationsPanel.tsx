@@ -1,19 +1,111 @@
-import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
-import type { AdminOrganization } from "./types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Building2,
+  PenTool,
+  RefreshCw,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
+import type { AdminOrganization, FeatureCatalogItem } from "./types";
 import { fetchJson, inputStyle } from "./shared";
+import cameraIcon from "@/assets/camera-icon.png";
+import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
+import cameraLprIcon from "@/assets/camera-lpr-icon.png";
+import mapPinRed from "@/assets/map-pin-red.svg";
+import radarIcon from "@/assets/radar-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
+
+type FeatureCardIconConfig =
+  | { kind: "image"; src: string }
+  | { kind: "lucide"; Icon: LucideIcon };
+
+const FEATURE_DISPLAY_NAMES: Record<string, string> = {
+  cameras: "Câmeras",
+  cameras_inteligentes: "Super Câmeras Inteligentes",
+  cameras_lpr: "Câmeras LPR",
+  radares: "Radares",
+  bairros: "Bairros",
+  risp: "RISP",
+  aisp: "AISP",
+  cisp: "CISP",
+  gps: "GPS",
+  desenhar_area: "Desenhar Área",
+};
+
+const FEATURE_CARD_ICONS: Partial<Record<string, FeatureCardIconConfig>> = {
+  cameras: { kind: "image", src: cameraIcon },
+  cameras_inteligentes: { kind: "image", src: cameraIntelIcon },
+  cameras_lpr: { kind: "image", src: cameraLprIcon },
+  radares: { kind: "image", src: radarIcon },
+  bairros: { kind: "lucide", Icon: Building2 },
+  risp: { kind: "lucide", Icon: Shield },
+  aisp: { kind: "lucide", Icon: ShieldAlert },
+  cisp: { kind: "lucide", Icon: ShieldCheck },
+  gps: { kind: "image", src: mapPinRed },
+  desenhar_area: { kind: "lucide", Icon: PenTool },
+};
+
+const FALLBACK_FEATURE_CATALOG: FeatureCatalogItem[] = [
+  { code: "cameras", name: "Câmeras", category: "layer" },
+  { code: "cameras_inteligentes", name: "Super Câmeras Inteligentes", category: "layer" },
+  { code: "cameras_lpr", name: "Câmeras LPR", category: "layer" },
+  { code: "radares", name: "Radares", category: "layer" },
+  { code: "bairros", name: "Bairros", category: "layer" },
+  { code: "risp", name: "RISP", category: "layer" },
+  { code: "aisp", name: "AISP", category: "layer" },
+  { code: "cisp", name: "CISP", category: "layer" },
+  { code: "gps", name: "GPS", category: "tool" },
+  { code: "desenhar_area", name: "Desenhar Área", category: "tool" },
+];
+
+const FALLBACK_ORGANIZATION_TYPES = [
+  "Órgão Público",
+  "Empresa",
+  "Concessionária",
+  "Fornecedora",
+  "Parceira Tecnológica",
+  "Instituição do Sistema de Justiça",
+  "Força de Segurança",
+  "Órgão de Emergência",
+  "Secretaria",
+];
+
+const FALLBACK_JURISDICTION_LEVELS = ["Federal", "Estadual", "Municipal", "Privada"];
 
 type OrganizationForm = {
   name: string;
   organization_type: string;
   acronym: string;
   jurisdiction_level: string;
+  feature_codes: string[];
 };
 
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeFeatureCodes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  for (const item of value) {
+    const code = clean(item).toLowerCase();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    next.push(code);
+  }
+
+  return next;
+}
+
+function sameFeatureCodes(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  return a.every((code, index) => code === b[index]);
 }
 
 function normalizeOrganization(raw: any, idx = 0): AdminOrganization {
@@ -24,9 +116,63 @@ function normalizeOrganization(raw: any, idx = 0): AdminOrganization {
     organization_type: clean(raw?.organization_type || raw?.tipo_organizacao),
     acronym: clean(raw?.acronym || raw?.sigla),
     jurisdiction_level: clean(raw?.jurisdiction_level || raw?.nivel_jurisdicao),
+    feature_codes: normalizeFeatureCodes(raw?.feature_codes),
     created_at: clean(raw?.created_at) || null,
     updated_at: clean(raw?.updated_at) || null,
   };
+}
+
+function normalizeFeatureCatalogItem(raw: any, idx = 0): FeatureCatalogItem {
+  const code = clean(raw?.code || raw?.feature_code || raw?.id || `feature-${idx}`).toLowerCase();
+  const rawName = clean(raw?.name || raw?.label || code || `Feature ${idx + 1}`);
+  return {
+    code,
+    name: getFeatureDisplayName(code, rawName),
+    category: clean(raw?.category || raw?.group || "other").toLowerCase() || "other",
+    description: clean(raw?.description) || null,
+  };
+}
+
+function getFeatureDisplayName(code: string, fallback = "") {
+  const normalized = clean(code).toLowerCase();
+  if (!normalized) return clean(fallback) || "-";
+
+  const mapped = FEATURE_DISPLAY_NAMES[normalized];
+  if (mapped) return mapped;
+
+  const safeFallback = clean(fallback);
+  if (safeFallback) return safeFallback;
+
+  return normalized
+    .split("_")
+    .filter(Boolean)
+    .map((part) => {
+      if (part.length <= 4) return part.toUpperCase();
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
+
+function normalizeCatalogValues(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return [...fallback];
+
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  for (const item of value) {
+    const normalized = clean(item);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    next.push(normalized);
+  }
+
+  return next.length ? next : [...fallback];
+}
+
+function withCurrentValue(options: string[], currentValue: string) {
+  const current = clean(currentValue);
+  if (!current || options.includes(current)) return options;
+  return [current, ...options];
 }
 
 function formatDateTime(value?: string | null) {
@@ -36,18 +182,34 @@ function formatDateTime(value?: string | null) {
   return date.toLocaleString("pt-BR");
 }
 
+function formatCategoryLabel(value: string) {
+  if (value === "layer") return "Camadas";
+  if (value === "tool") return "Ferramentas";
+  return value ? value.replace(/_/g, " ") : "Outros";
+}
+
+function sortFeatureCodes(codes: string[], catalog: FeatureCatalogItem[]) {
+  const order = new Map(catalog.map((item, index) => [item.code, index]));
+  return [...codes].sort((a, b) => {
+    const diff = (order.get(a) ?? Number.MAX_SAFE_INTEGER) - (order.get(b) ?? Number.MAX_SAFE_INTEGER);
+    if (diff !== 0) return diff;
+    return a.localeCompare(b, "pt-BR");
+  });
+}
+
 function getInitialForm(): OrganizationForm {
   return {
     name: "",
     organization_type: "",
     acronym: "",
     jurisdiction_level: "",
+    feature_codes: [],
   };
 }
 
 function makeUpdatePayload(original: OrganizationForm | null, current: OrganizationForm) {
   const payload: Partial<OrganizationForm> = {};
-  const keys: (keyof OrganizationForm)[] = [
+  const keys: Array<keyof OrganizationForm> = [
     "name",
     "organization_type",
     "acronym",
@@ -58,8 +220,12 @@ function makeUpdatePayload(original: OrganizationForm | null, current: Organizat
     const nextValue = clean(current[key]);
     const prevValue = clean(original?.[key] ?? "");
     if (nextValue && nextValue !== prevValue) {
-      payload[key] = nextValue;
+      payload[key] = nextValue as never;
     }
+  }
+
+  if (!sameFeatureCodes(original?.feature_codes || [], current.feature_codes)) {
+    payload.feature_codes = current.feature_codes;
   }
 
   return payload;
@@ -75,13 +241,22 @@ export function AdminOrganizationsPanel({
   isMobile: boolean;
 }) {
   const ORGS_URL = `${apiBase}/organizations`;
+  const FEATURE_CATALOG_URL = `${apiBase}/organizations/feature-catalog`;
+  const ORGANIZATION_CATALOGS_URL = `${apiBase}/organizations/catalogs`;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [organizationCatalogsLoading, setOrganizationCatalogsLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [catalogErr, setCatalogErr] = useState<string | null>(null);
+  const [organizationCatalogsErr, setOrganizationCatalogsErr] = useState<string | null>(null);
   const [items, setItems] = useState<AdminOrganization[]>([]);
+  const [featureCatalog, setFeatureCatalog] = useState<FeatureCatalogItem[]>([]);
+  const [organizationTypes, setOrganizationTypes] = useState<string[]>(FALLBACK_ORGANIZATION_TYPES);
+  const [jurisdictionLevels, setJurisdictionLevels] = useState<string[]>(FALLBACK_JURISDICTION_LEVELS);
 
   const [orgTab, setOrgTab] = useState<"create" | "manage">("create");
   const [id, setId] = useState<string | null>(null);
@@ -90,15 +265,62 @@ export function AdminOrganizationsPanel({
   const [manageFilter, setManageFilter] = useState("");
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
+  const [organizationTypeOpen, setOrganizationTypeOpen] = useState(false);
+  const [jurisdictionLevelOpen, setJurisdictionLevelOpen] = useState(false);
+  const organizationTypeWrapRef = useRef<HTMLDivElement | null>(null);
+  const jurisdictionLevelWrapRef = useRef<HTMLDivElement | null>(null);
 
-  function setField<K extends keyof OrganizationForm>(key: K, value: string) {
+  const catalogItems = useMemo(() => {
+    const source = featureCatalog.length ? featureCatalog : FALLBACK_FEATURE_CATALOG;
+    return source.filter((item, index, array) => array.findIndex((candidate) => candidate.code === item.code) === index);
+  }, [featureCatalog]);
+
+  const catalogByCategory = useMemo(() => {
+    const grouped = new Map<string, FeatureCatalogItem[]>();
+
+    for (const item of catalogItems) {
+      const current = grouped.get(item.category) || [];
+      current.push(item);
+      grouped.set(item.category, current);
+    }
+
+    return Array.from(grouped.entries());
+  }, [catalogItems]);
+
+  const organizationTypeOptions = useMemo(
+    () => withCurrentValue(organizationTypes, form.organization_type),
+    [organizationTypes, form.organization_type]
+  );
+
+  const jurisdictionLevelOptions = useMemo(
+    () => withCurrentValue(jurisdictionLevels, form.jurisdiction_level),
+    [jurisdictionLevels, form.jurisdiction_level]
+  );
+
+  function setField<K extends keyof OrganizationForm>(key: K, value: OrganizationForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleFeature(code: string) {
+    setForm((prev) => {
+      const exists = prev.feature_codes.includes(code);
+      const nextCodes = exists
+        ? prev.feature_codes.filter((item) => item !== code)
+        : [...prev.feature_codes, code];
+
+      return {
+        ...prev,
+        feature_codes: sortFeatureCodes(nextCodes, catalogItems),
+      };
+    });
   }
 
   function resetForm(opts?: { clearMessages?: boolean }) {
     setId(null);
     setForm(getInitialForm());
     setOriginalForm(null);
+    setOrganizationTypeOpen(false);
+    setJurisdictionLevelOpen(false);
     if (opts?.clearMessages !== false) {
       setErr(null);
       setSuccess(null);
@@ -111,10 +333,13 @@ export function AdminOrganizationsPanel({
       organization_type: clean(org.organization_type),
       acronym: clean(org.acronym),
       jurisdiction_level: clean(org.jurisdiction_level),
+      feature_codes: sortFeatureCodes(normalizeFeatureCodes(org.feature_codes), catalogItems),
     };
     setId(clean(org.id) || null);
     setForm(normalized);
     setOriginalForm(normalized);
+    setOrganizationTypeOpen(false);
+    setJurisdictionLevelOpen(false);
   }
 
   async function load() {
@@ -141,6 +366,50 @@ export function AdminOrganizationsPanel({
     }
   }
 
+  async function loadFeatureCatalog() {
+    setCatalogErr(null);
+    setCatalogLoading(true);
+    try {
+      const data = await fetchJson<any>(FEATURE_CATALOG_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.results)
+        ? data.results
+        : [];
+
+      setFeatureCatalog(list.map((raw: any, idx: number) => normalizeFeatureCatalogItem(raw, idx)));
+    } catch (e: any) {
+      setCatalogErr(e?.message || "Erro ao carregar catálogo de features");
+      setFeatureCatalog([]);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  async function loadOrganizationCatalogs() {
+    setOrganizationCatalogsErr(null);
+    setOrganizationCatalogsLoading(true);
+    try {
+      const data = await fetchJson<any>(ORGANIZATION_CATALOGS_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setOrganizationTypes(normalizeCatalogValues(data?.organization_types, FALLBACK_ORGANIZATION_TYPES));
+      setJurisdictionLevels(normalizeCatalogValues(data?.jurisdiction_levels, FALLBACK_JURISDICTION_LEVELS));
+    } catch (e: any) {
+      setOrganizationCatalogsErr(e?.message || "Erro ao carregar catálogos da organização");
+      setOrganizationTypes([...FALLBACK_ORGANIZATION_TYPES]);
+      setJurisdictionLevels([...FALLBACK_JURISDICTION_LEVELS]);
+    } finally {
+      setOrganizationCatalogsLoading(false);
+    }
+  }
+
   async function loadOne(orgId: string) {
     if (!orgId) return;
     setErr(null);
@@ -151,15 +420,33 @@ export function AdminOrganizationsPanel({
       });
       applyOrganization(normalizeOrganization(data));
     } catch {
-      // Mantém dados da listagem caso o endpoint de detalhe falhe.
+      // Mantém dados já conhecidos caso o detalhe não exista.
     } finally {
       setDetailLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
+    void load();
+    void loadFeatureCatalog();
+    void loadOrganizationCatalogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    function handleDocClick(e: MouseEvent) {
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+
+      const typeEl = organizationTypeWrapRef.current;
+      const jurisdictionEl = jurisdictionLevelWrapRef.current;
+
+      if (typeEl && !typeEl.contains(target)) setOrganizationTypeOpen(false);
+      if (jurisdictionEl && !jurisdictionEl.contains(target)) setJurisdictionLevelOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleDocClick);
+    return () => document.removeEventListener("mousedown", handleDocClick);
   }, []);
 
   useEffect(() => {
@@ -170,13 +457,15 @@ export function AdminOrganizationsPanel({
   const filteredItems = useMemo(() => {
     const q = manageFilter.trim().toLowerCase();
     if (!q) return items;
+
     return items.filter((org) => {
       return (
         clean(org.id).toLowerCase().includes(q) ||
         clean(org.name).toLowerCase().includes(q) ||
         clean(org.organization_type).toLowerCase().includes(q) ||
         clean(org.acronym).toLowerCase().includes(q) ||
-        clean(org.jurisdiction_level).toLowerCase().includes(q)
+        clean(org.jurisdiction_level).toLowerCase().includes(q) ||
+        org.feature_codes.some((code) => code.includes(q) || getFeatureDisplayName(code).toLowerCase().includes(q))
       );
     });
   }, [items, manageFilter]);
@@ -191,6 +480,7 @@ export function AdminOrganizationsPanel({
       organization_type: clean(form.organization_type),
       acronym: clean(form.acronym),
       jurisdiction_level: clean(form.jurisdiction_level),
+      feature_codes: sortFeatureCodes(normalizeFeatureCodes(form.feature_codes), catalogItems),
     };
 
     if (!editingId) {
@@ -246,7 +536,9 @@ export function AdminOrganizationsPanel({
   function pick(org: AdminOrganization) {
     setOrgTab("create");
     applyOrganization(org);
-    if (org.id) loadOne(org.id);
+    if (org.id) {
+      void loadOne(org.id);
+    }
   }
 
   async function removeOrganization(org: AdminOrganization) {
@@ -259,6 +551,7 @@ export function AdminOrganizationsPanel({
 
     setErr(null);
     setSuccess(null);
+
     try {
       await fetchJson(`${ORGS_URL}/${encodeURIComponent(orgId)}`, {
         method: "DELETE",
@@ -309,24 +602,185 @@ export function AdminOrganizationsPanel({
               placeholder="nome da organização"
               style={inputStyle()}
             />
-            <input
-              value={form.organization_type}
-              onChange={(e) => setField("organization_type", e.target.value)}
-              placeholder="tipo da organização"
-              style={inputStyle()}
-            />
+            <div className="customSelect" ref={organizationTypeWrapRef}>
+              <button
+                type="button"
+                className="customSelectBtn"
+                onClick={() => {
+                  setOrganizationTypeOpen((v) => {
+                    const next = !v;
+                    if (next) setJurisdictionLevelOpen(false);
+                    return next;
+                  });
+                }}
+                style={{ fontWeight: 500 }}
+              >
+                <span>{form.organization_type || (organizationCatalogsLoading ? "Carregando tipos..." : "tipo da organização")}</span>
+                <span className="customSelectChevron" />
+              </button>
+              {organizationTypeOpen && (
+                <div className="customSelectMenu">
+                  {organizationTypeOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={`customSelectItem ${form.organization_type === option ? "customSelectItemActive" : ""}`}
+                      onClick={() => {
+                        setField("organization_type", option);
+                        setOrganizationTypeOpen(false);
+                      }}
+                      style={{ fontWeight: 500 }}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <input
               value={form.acronym}
               onChange={(e) => setField("acronym", e.target.value)}
               placeholder="sigla"
               style={inputStyle()}
             />
-            <input
-              value={form.jurisdiction_level}
-              onChange={(e) => setField("jurisdiction_level", e.target.value)}
-              placeholder="nível de jurisdição"
-              style={inputStyle()}
-            />
+            <div className="customSelect" ref={jurisdictionLevelWrapRef}>
+              <button
+                type="button"
+                className="customSelectBtn"
+                onClick={() => {
+                  setJurisdictionLevelOpen((v) => {
+                    const next = !v;
+                    if (next) setOrganizationTypeOpen(false);
+                    return next;
+                  });
+                }}
+                style={{ fontWeight: 500 }}
+              >
+                <span>
+                  {form.jurisdiction_level || (organizationCatalogsLoading ? "Carregando níveis..." : "nível de jurisdição")}
+                </span>
+                <span className="customSelectChevron" />
+              </button>
+              {jurisdictionLevelOpen && (
+                <div className="customSelectMenu">
+                  {jurisdictionLevelOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={`customSelectItem ${form.jurisdiction_level === option ? "customSelectItemActive" : ""}`}
+                      onClick={() => {
+                        setField("jurisdiction_level", option);
+                        setJurisdictionLevelOpen(false);
+                      }}
+                      style={{ fontWeight: 500 }}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {organizationCatalogsErr && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#92400e" }}>
+              {organizationCatalogsErr}. Usando catálogo local para os campos da organização.
+            </div>
+          )}
+
+          <div
+            style={{
+              marginTop: 10,
+              padding: 8,
+              borderRadius: 14,
+              border: "1px solid rgba(0,0,0,0.08)",
+              background: "rgba(248,250,252,0.86)",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.78)" }}>Features habilitadas</div>
+              <div style={{ fontSize: 11, opacity: 0.72 }}>
+                {catalogLoading ? "Carregando catálogo..." : `${form.feature_codes.length} selecionada(s)`}
+              </div>
+            </div>
+
+            {catalogErr && (
+              <div style={{ fontSize: 11, color: "#92400e" }}>
+                {catalogErr}. Usando catálogo local para edição.
+              </div>
+            )}
+
+            {catalogByCategory.map(([category, categoryItems]) => (
+              <div key={category} style={{ display: "grid", gap: 5 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: "rgba(15,23,42,0.74)" }}>
+                  {formatCategoryLabel(category)}
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                  }}
+                >
+                  {categoryItems.map((feature) => {
+                    const active = form.feature_codes.includes(feature.code);
+                    const icon = FEATURE_CARD_ICONS[feature.code];
+                    return (
+                      <button
+                        key={feature.code}
+                        type="button"
+                        onClick={() => toggleFeature(feature.code)}
+                        style={{
+                          textAlign: "left",
+                          padding: isMobile ? "11px 13px" : "11px 12px",
+                          borderRadius: 10,
+                          border: active ? "1px solid rgba(37,99,235,0.32)" : "1px solid rgba(0,0,0,0.10)",
+                          background: active ? "rgba(219,234,254,0.82)" : "rgba(255,255,255,0.92)",
+                          color: "rgba(15,23,42,0.88)",
+                          cursor: "pointer",
+                          display: "grid",
+                          gap: 2,
+                        }}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          {icon && (
+                            <span
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(15,23,42,0.10)",
+                                background: "rgba(255,255,255,0.88)",
+                                display: "grid",
+                                placeItems: "center",
+                                flex: "0 0 auto",
+                                color: "rgba(15,23,42,0.72)",
+                              }}
+                            >
+                              {icon.kind === "image" ? (
+                                <img
+                                  src={icon.src}
+                                  alt=""
+                                  style={{ width: 11, height: 11, objectFit: "contain", opacity: 0.9 }}
+                                />
+                              ) : (
+                                <icon.Icon size={11} strokeWidth={2.1} />
+                              )}
+                            </span>
+                          )}
+                          <span style={{ fontSize: isMobile ? 12.5 : 12, fontWeight: 900 }}>{feature.name}</span>
+                        </span>
+                        {isMobile && feature.description && (
+                          <span style={{ fontSize: 10, opacity: 0.72 }}>{feature.description}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
@@ -390,11 +844,14 @@ export function AdminOrganizationsPanel({
             <input
               value={manageFilter}
               onChange={(e) => setManageFilter(e.target.value)}
-              placeholder="Filtrar por nome, tipo, sigla, jurisdição ou ID"
+              placeholder="Filtrar por nome, tipo, sigla, jurisdição, ID ou feature"
               style={{ ...inputStyle(), flex: 1, minWidth: 0 }}
             />
             <button
-              onClick={load}
+              onClick={() => {
+                void load();
+                void loadFeatureCatalog();
+              }}
               style={{
                 width: 40,
                 height: 40,
@@ -408,8 +865,8 @@ export function AdminOrganizationsPanel({
                 justifyContent: "center",
                 flex: "0 0 auto",
               }}
-              title="Recarregar organizações"
-              aria-label="Recarregar organizações"
+              title="Recarregar organizações e catálogo"
+              aria-label="Recarregar organizações e catálogo"
             >
               <RefreshCw size={16} />
             </button>
@@ -490,11 +947,36 @@ export function AdminOrganizationsPanel({
                     Tipo: {org.organization_type || "-"} • Jurisdição: {org.jurisdiction_level || "-"}
                   </div>
 
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    {org.feature_codes.length ? (
+                      org.feature_codes.map((code) => (
+                        <span
+                          key={code}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            borderRadius: 999,
+                            padding: "2px 8px",
+                            fontSize: 10,
+                            fontWeight: 800,
+                            border: "1px solid rgba(37,99,235,0.16)",
+                            background: "rgba(219,234,254,0.92)",
+                            color: "#1d4ed8",
+                          }}
+                        >
+                          {getFeatureDisplayName(code)}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: 11, opacity: 0.68 }}>Sem features configuradas</span>
+                    )}
+                  </div>
+
                   <div
                     style={{
                       fontSize: 12,
                       opacity: 0.68,
-                      marginTop: 2,
+                      marginTop: 6,
                       whiteSpace: "normal",
                       overflow: "visible",
                       textOverflow: "clip",
@@ -502,7 +984,7 @@ export function AdminOrganizationsPanel({
                       wordBreak: "break-word",
                     }}
                   >
-                    {org.created_at ? ` • Criada em ${formatDateTime(org.created_at)}` : ""}
+                    {org.created_at ? `Criada em ${formatDateTime(org.created_at)}` : ""}
                     {org.updated_at ? ` • Atualizada em ${formatDateTime(org.updated_at)}` : ""}
                   </div>
                 </div>
@@ -524,7 +1006,7 @@ export function AdminOrganizationsPanel({
                 </button>
 
                 <button
-                  onClick={() => removeOrganization(org)}
+                  onClick={() => void removeOrganization(org)}
                   className="adminRowBtn"
                   style={{
                     padding: "8px 10px",
