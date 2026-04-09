@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import type { Camera, CameraIntel, CameraLpr } from "./types";
 import { fetchJson } from "./shared";
+import Swal from "sweetalert2";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
-const SYNC_DISABLED_NOTICE = "Disponível na versão 2.0 do CIVITAS Map";
-const syncDisabled = true;
+type StatusFilter = "all" | "active" | "inactive";
 
 function coerceCoord(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -30,18 +30,15 @@ function getLng(value: any) {
 export function AdminCamerasPanel({
   apiBase,
   token,
-  onSynced,
+  onStatusChanged,
   isMobile,
 }: {
   apiBase: string;
   token: string;
-  onSynced?: () => void;
+  onStatusChanged?: () => void;
   isMobile: boolean;
 }) {
   const CAMS_URL = `${apiBase}/cameras`;
-  const SYNC_CAMERAS_URL = `${apiBase}/sync/cameras`;
-  const SYNC_CAMS_INTEL_URL = `${apiBase}/sync/cameras-inteligentes`;
-  const SYNC_CAMS_LPR_URL = `${apiBase}/sync/cameras-lpr`;
   const CAMS_INTEL_URL = `${apiBase}/cameras-inteligentes`;
   const CAMS_LPR_URL = `${apiBase}/cameras-lpr`;
 
@@ -53,9 +50,6 @@ export function AdminCamerasPanel({
   const [lprLoading, setLprLoading] = useState(false);
   const [lprItems, setLprItems] = useState<CameraLpr[]>([]);
 
-  const [deactivateMissing, setDeactivateMissing] = useState(true);
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [camTab, setCamTab] = useState<"cameras" | "civitas">("cameras");
   const [civitasTab, setCivitasTab] = useState<"inteligentes" | "lpr">("inteligentes");
   const [pageCams, setPageCams] = useState(1);
@@ -64,6 +58,10 @@ export function AdminCamerasPanel({
   const [mobileCountCams, setMobileCountCams] = useState(ADMIN_PAGE_SIZE);
   const [mobileCountIntel, setMobileCountIntel] = useState(ADMIN_PAGE_SIZE);
   const [mobileCountLpr, setMobileCountLpr] = useState(ADMIN_PAGE_SIZE);
+  const [camsStatusFilter, setCamsStatusFilter] = useState<StatusFilter>("all");
+  const [intelStatusFilter, setIntelStatusFilter] = useState<StatusFilter>("all");
+  const [lprStatusFilter, setLprStatusFilter] = useState<StatusFilter>("all");
+  const [statusLoadingKey, setStatusLoadingKey] = useState<string | null>(null);
   const cardRowStyle = {
     border: "1px solid rgba(15,23,42,0.10)",
     borderRadius: 14,
@@ -88,13 +86,214 @@ export function AdminCamerasPanel({
     background: "rgba(248,250,252,0.95)",
     color: "rgba(15,23,42,0.85)",
   } as const;
+  const statusSwitchStyle = (active: boolean, disabled: boolean) =>
+    ({
+      width: 46,
+      height: 28,
+      borderRadius: 999,
+      border: active ? "1px solid rgba(22,163,74,0.65)" : "1px solid rgba(100,116,139,0.42)",
+      background: active ? "linear-gradient(135deg, #34d399, #22c55e)" : "linear-gradient(135deg, #d4d4d8, #cbd5e1)",
+      position: "relative",
+      padding: 0,
+      cursor: disabled ? "not-allowed" : "pointer",
+      transition: "all .2s ease",
+      boxShadow: active ? "0 6px 16px rgba(34,197,94,0.28)" : "0 4px 12px rgba(15,23,42,0.12)",
+      opacity: disabled ? 0.7 : 1,
+    }) as const;
+  const statusKnobStyle = (active: boolean) =>
+    ({
+      position: "absolute",
+      top: 2,
+      left: active ? 20 : 2,
+      width: 22,
+      height: 22,
+      borderRadius: "50%",
+      background: "#fff",
+      boxShadow: "0 3px 8px rgba(15,23,42,0.22)",
+      transition: "left .2s ease",
+    }) as const;
+  const swalBase = {
+    customClass: {
+      popup: "atlasSwalPopup",
+      title: "atlasSwalTitle",
+      htmlContainer: "atlasSwalHtml",
+      footer: "atlasSwalFooter",
+      confirmButton: "atlasSwalBtn atlasSwalBtnPrimary",
+      cancelButton: "atlasSwalBtn atlasSwalBtnGhost",
+    },
+    buttonsStyling: false,
+    backdrop: "rgba(2, 6, 23, 0.74)",
+  } as const;
 
-  function formatSyncMsg(result: any) {
-    const base = `Sincronização concluída. (criados=${result?.created ?? "-"}, atualizados=${result?.updated ?? "-"}`;
-    const withReactivated =
-      result?.reactivated === undefined ? base : `${base}, reativados=${result?.reactivated ?? "-"}`;
-    const withDeactivated = `${withReactivated}, desativados=${result?.deactivated ?? "-"}`;
-    return result?.total_seen === undefined ? `${withDeactivated})` : `${withDeactivated}, total_lido=${result?.total_seen ?? "-"})`;
+  type CameraScope = "cameras" | "inteligentes" | "lpr";
+
+  function applyStatusFilter<T extends { is_active?: boolean }>(list: T[], filter: StatusFilter) {
+    if (filter === "all") return list;
+    if (filter === "active") return list.filter((item) => item.is_active !== false);
+    return list.filter((item) => item.is_active === false);
+  }
+
+  function renderStatusFilter(value: StatusFilter, onChange: (next: StatusFilter) => void) {
+    const btnStyle = (active: boolean) =>
+      ({
+        padding: "4px 10px",
+        borderRadius: 999,
+        border: active ? "1px solid rgba(15,23,42,0.3)" : "1px solid rgba(15,23,42,0.14)",
+        background: active ? "rgba(15,23,42,0.10)" : "rgba(255,255,255,0.92)",
+        color: active ? "#0f172a" : "rgba(15,23,42,0.72)",
+        fontSize: 11,
+        fontWeight: 800,
+        cursor: "pointer",
+      }) as const;
+
+    return (
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <button type="button" style={btnStyle(value === "all")} onClick={() => onChange("all")}>
+          Todos
+        </button>
+        <button type="button" style={btnStyle(value === "active")} onClick={() => onChange("active")}>
+          Ativos
+        </button>
+        <button type="button" style={btnStyle(value === "inactive")} onClick={() => onChange("inactive")}>
+          Desativados
+        </button>
+      </div>
+    );
+  }
+
+  function getResourceBase(scope: CameraScope) {
+    if (scope === "cameras") return CAMS_URL;
+    if (scope === "inteligentes") return CAMS_INTEL_URL;
+    return CAMS_LPR_URL;
+  }
+
+  function getCameraKey(item: Camera | CameraIntel | CameraLpr) {
+    return String((item as any).id ?? item.code ?? "");
+  }
+
+  function getCameraActive(item: Camera | CameraIntel | CameraLpr) {
+    return (item as any).is_active !== false;
+  }
+
+  function patchLocalStatus(scope: CameraScope, key: string, nextActive: boolean) {
+    const patch = <T extends { id?: string; code: string; is_active?: boolean }>(arr: T[]) =>
+      arr.map((row) => (String((row as any).id ?? row.code ?? "") === key ? { ...row, is_active: nextActive } : row));
+
+    if (scope === "cameras") {
+      setItems((prev) => patch(prev as any) as Camera[]);
+      return;
+    }
+    if (scope === "inteligentes") {
+      setIntelItems((prev) => patch(prev as any) as CameraIntel[]);
+      return;
+    }
+    setLprItems((prev) => patch(prev as any) as CameraLpr[]);
+  }
+
+  const filteredCams = applyStatusFilter(items, camsStatusFilter);
+  const filteredIntel = applyStatusFilter(intelItems, intelStatusFilter);
+  const filteredLpr = applyStatusFilter(lprItems, lprStatusFilter);
+
+  async function saveCameraStatus(scope: CameraScope, key: string, nextActive: boolean) {
+    const baseUrl = getResourceBase(scope);
+    const encoded = encodeURIComponent(key);
+    const authHeaders = { Authorization: `Bearer ${token}` };
+    const jsonHeaders = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+    const body = JSON.stringify({ is_active: nextActive });
+
+    const attempts = [
+      () =>
+        fetchJson<any>(`${baseUrl}/${encoded}`, {
+          method: "PUT",
+          headers: jsonHeaders,
+          body,
+        }),
+      () =>
+        fetchJson<any>(`${baseUrl}/${encoded}`, {
+          method: "PATCH",
+          headers: jsonHeaders,
+          body,
+        }),
+      () =>
+        fetchJson<any>(`${baseUrl}/${encoded}/${nextActive ? "reactivate" : "deactivate"}`, {
+          method: "POST",
+          headers: authHeaders,
+        }),
+    ];
+
+    let lastErr: any = null;
+    for (const run of attempts) {
+      try {
+        await run();
+        return;
+      } catch (err: any) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("Falha ao atualizar status da câmera.");
+  }
+
+  async function toggleCameraStatus(scope: CameraScope, item: Camera | CameraIntel | CameraLpr) {
+    const key = getCameraKey(item);
+    if (!key) {
+      setErr("Não foi possível identificar esta câmera para atualizar o status.");
+      return;
+    }
+    const name = (item as any).name || item.code || "câmera";
+    const isActive = getCameraActive(item);
+    const nextActive = !isActive;
+
+    const result = await Swal.fire({
+      ...swalBase,
+      icon: "warning",
+      title: nextActive ? "Ativar câmera?" : "Desativar câmera?",
+      text: nextActive
+        ? "Ela voltará a aparecer no mapa assim que a atualização automática for aplicada."
+        : "Ao desativar, essa câmera deixará de aparecer no mapa.",
+      showCancelButton: true,
+      confirmButtonText: nextActive ? "Sim, ativar" : "Sim, desativar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: nextActive ? "#15803d" : "#b91c1c",
+      cancelButtonColor: "#334155",
+      reverseButtons: true,
+      focusCancel: true,
+      footer: `Câmera: <strong>${name}</strong>`,
+    });
+    if (!result.isConfirmed) return;
+
+    setErr(null);
+    setStatusLoadingKey(`${scope}:${key}`);
+    try {
+      await saveCameraStatus(scope, key, nextActive);
+      patchLocalStatus(scope, key, nextActive);
+      onStatusChanged?.();
+
+      await Swal.fire({
+        ...swalBase,
+        icon: "success",
+        title: nextActive ? "Câmera ativada" : "Câmera desativada",
+        text: nextActive
+          ? "Tudo certo. Ela ficará disponível no mapa novamente."
+          : "Pronto. Ela sairá do mapa após a atualização.",
+        timer: 1700,
+        showConfirmButton: false,
+      });
+    } catch (e: any) {
+      const msg = e?.message || "Não foi possível atualizar o status desta câmera.";
+      setErr(msg);
+      await Swal.fire({
+        ...swalBase,
+        icon: "error",
+        title: "Não foi possível concluir",
+        text: msg,
+        confirmButtonText: "Fechar",
+      });
+    } finally {
+      setStatusLoadingKey(null);
+    }
   }
 
   async function load() {
@@ -183,68 +382,16 @@ export function AdminCamerasPanel({
     setMobileCountCams(ADMIN_PAGE_SIZE);
     setMobileCountIntel(ADMIN_PAGE_SIZE);
     setMobileCountLpr(ADMIN_PAGE_SIZE);
-  }, [camTab, civitasTab, items.length, intelItems.length, lprItems.length]);
-
-  async function runSyncCameras() {
-    setSyncMsg(null);
-    setErr(null);
-
-    setSyncLoading(true);
-    try {
-      const resp = await fetchJson<any>(SYNC_CAMERAS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          deactivate_missing: !!deactivateMissing,
-        }),
-      });
-
-      setSyncMsg(
-        formatSyncMsg(resp?.result)
-      );
-
-      await load();
-      onSynced?.();
-    } catch (e: any) {
-      setSyncMsg(null);
-      setErr(e?.message || "Erro na sincronização de câmeras");
-    } finally {
-      setSyncLoading(false);
-    }
-  }
-
-  async function runSyncCivitas() {
-    setSyncMsg(null);
-    setErr(null);
-
-    setSyncLoading(true);
-    try {
-      const syncUrl = civitasTab === "inteligentes" ? SYNC_CAMS_INTEL_URL : SYNC_CAMS_LPR_URL;
-      const resp = await fetchJson<any>(syncUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          deactivate_missing: !!deactivateMissing,
-        }),
-      });
-
-      setSyncMsg(formatSyncMsg(resp?.result));
-
-      if (civitasTab === "inteligentes") await loadIntel();
-      if (civitasTab === "lpr") await loadLpr();
-    } catch (e: any) {
-      setSyncMsg(null);
-      setErr(e?.message || `Erro na sincronização de ${civitasTab === "inteligentes" ? "câmeras inteligentes" : "câmeras LPR"}`);
-    } finally {
-      setSyncLoading(false);
-    }
-  }
+  }, [
+    camTab,
+    civitasTab,
+    items.length,
+    intelItems.length,
+    lprItems.length,
+    camsStatusFilter,
+    intelStatusFilter,
+    lprStatusFilter,
+  ]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -271,6 +418,12 @@ export function AdminCamerasPanel({
         </div>
       )}
 
+      {err && (
+        <div style={{ fontSize: 12, opacity: 0.9, color: "#991b1b" }}>
+          {err}
+        </div>
+      )}
+
       {camTab === "cameras" && (
         <>
           <div
@@ -282,68 +435,11 @@ export function AdminCamerasPanel({
               border: "1px solid rgba(0,0,0,0.10)",
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Câmeras</div>
-
-            <div style={{ display: "grid", gap: 10 }}>
-              <button
-                onClick={runSyncCameras}
-                disabled={syncDisabled || syncLoading}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  background: "rgba(0,0,0,0.86)",
-                  color: "#fff",
-                  cursor: syncDisabled || syncLoading ? "not-allowed" : "pointer",
-                  fontWeight: 900,
-                  opacity: syncDisabled || syncLoading ? 0.7 : 1,
-                }}
-              >
-                {syncLoading ? "Sincronizando..." : "Sincronizar Câmeras"}
-              </button>
-
-              <label
-                className="adminLabelWrap"
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  background: "rgba(255,255,255,0.95)",
-                  fontWeight: 900,
-                  color: "rgba(0,0,0,0.82)",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={deactivateMissing}
-                  onChange={(e) => setDeactivateMissing(e.target.checked)}
-                  style={{ transform: "scale(1.1)" }}
-                />
-                Desativar registros ausentes na fonte de dados
-              </label>
-            </div>
-
-            {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{SYNC_DISABLED_NOTICE}</div>
-            {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
-
-          </div>
-
-          <div
-            className="adminCard"
-            style={{
-              padding: 12,
-              borderRadius: 16,
-              background: "rgba(255,255,255,0.90)",
-              border: "1px solid rgba(0,0,0,0.10)",
-            }}
-          >
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
               <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${items.length} itens`}</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${filteredCams.length} itens`}</div>
+              <div style={{ flex: 1 }} />
+              {renderStatusFilter(camsStatusFilter, setCamsStatusFilter)}
             </div>
 
             <div
@@ -358,9 +454,166 @@ export function AdminCamerasPanel({
               }}
             >
               {(isMobile
-                ? items.slice(0, mobileCountCams)
-                : items.slice((pageCams - 1) * ADMIN_PAGE_SIZE, pageCams * ADMIN_PAGE_SIZE)
-              ).map((c) => (
+                ? filteredCams.slice(0, mobileCountCams)
+                : filteredCams.slice((pageCams - 1) * ADMIN_PAGE_SIZE, pageCams * ADMIN_PAGE_SIZE)
+              ).map((c) => {
+                const key = getCameraKey(c);
+                const active = getCameraActive(c);
+                const loadingStatus = statusLoadingKey === `cameras:${key}`;
+                return (
+                  <div
+                    key={c.id || c.code}
+                    className="adminRow"
+                    style={{
+                      ...cardRowStyle,
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 999,
+                        border: "1px solid rgba(59,130,246,0.30)",
+                        background: "rgba(219,234,254,0.90)",
+                        display: "grid",
+                        placeItems: "center",
+                        flex: "0 0 auto",
+                      }}
+                    >
+                      <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                        <div
+                          style={{
+                            fontWeight: 900,
+                            fontSize: 13,
+                            whiteSpace: "normal",
+                            overflow: "visible",
+                            textOverflow: "clip",
+                            wordBreak: "break-word",
+                            color: "#0f172a",
+                          }}
+                        >
+                          {c.name}
+                        </div>
+                        <span
+                          style={{
+                            ...chipStyle,
+                            borderColor: "rgba(59,130,246,0.32)",
+                            background: "rgba(219,234,254,0.92)",
+                            color: "#1d4ed8",
+                          }}
+                        >
+                          {c.code}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                        <span style={chipStyle}>
+                          {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
+                            [c.city, c.uf].filter(Boolean).join(" - ") ||
+                            "-"}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", justifyItems: "end", gap: 6, flex: "0 0 auto" }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleCameraStatus("cameras", c)}
+                        disabled={loadingStatus}
+                        style={statusSwitchStyle(active, loadingStatus)}
+                        title={active ? "Desativar câmera" : "Ativar câmera"}
+                        aria-label={active ? "Desativar câmera" : "Ativar câmera"}
+                      >
+                        <span style={statusKnobStyle(active)} />
+                      </button>
+                      <span
+                        style={{
+                          ...chipStyle,
+                          minWidth: 72,
+                          justifyContent: "center",
+                          borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
+                          background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
+                          color: active ? "#166534" : "#475569",
+                        }}
+                      >
+                        {active ? "ATIVO" : "INATIVO"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {!filteredCams.length && !loading && (
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera encontrada.</div>
+              )}
+            </div>
+
+            {!isMobile && filteredCams.length > ADMIN_PAGE_SIZE && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
+                <button
+                  className="btnGhost"
+                  onClick={() => setPageCams((v) => Math.max(1, v - 1))}
+                  disabled={pageCams <= 1}
+                  style={{ opacity: pageCams <= 1 ? 0.5 : 1 }}
+                >
+                  Anterior
+                </button>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  Página {pageCams} de {Math.max(1, Math.ceil(filteredCams.length / ADMIN_PAGE_SIZE))}
+                </div>
+                <button
+                  className="btnGhost"
+                  onClick={() => setPageCams((v) => Math.min(Math.ceil(filteredCams.length / ADMIN_PAGE_SIZE), v + 1))}
+                  disabled={pageCams >= Math.ceil(filteredCams.length / ADMIN_PAGE_SIZE)}
+                  style={{ opacity: pageCams >= Math.ceil(filteredCams.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+                >
+                  Próxima
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {camTab === "civitas" && civitasTab === "inteligentes" && (
+        <div
+          className="adminCard"
+          style={{
+            padding: 12,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.90)",
+            border: "1px solid rgba(0,0,0,0.10)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              {intelLoading ? "Carregando..." : `${filteredIntel.length} itens`}
+            </div>
+            <div style={{ flex: 1 }} />
+            {renderStatusFilter(intelStatusFilter, setIntelStatusFilter)}
+          </div>
+          <div
+            className="scrollbarHidden"
+            style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+            onScroll={(e) => {
+              if (!isMobile) return;
+              const el = e.currentTarget;
+              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+                setMobileCountIntel((v) => v + ADMIN_PAGE_SIZE);
+              }
+            }}
+          >
+            {(isMobile
+              ? filteredIntel.slice(0, mobileCountIntel)
+              : filteredIntel.slice((pageIntel - 1) * ADMIN_PAGE_SIZE, pageIntel * ADMIN_PAGE_SIZE)
+            ).map((c) => {
+              const key = getCameraKey(c);
+              const active = getCameraActive(c);
+              const loadingStatus = statusLoadingKey === `inteligentes:${key}`;
+              return (
                 <div
                   key={c.id || c.code}
                   className="adminRow"
@@ -374,14 +627,14 @@ export function AdminCamerasPanel({
                       width: 18,
                       height: 18,
                       borderRadius: 999,
-                      border: "1px solid rgba(59,130,246,0.30)",
-                      background: "rgba(219,234,254,0.90)",
+                      border: "1px solid rgba(234,88,12,0.30)",
+                      background: "rgba(255,237,213,0.92)",
                       display: "grid",
                       placeItems: "center",
                       flex: "0 0 auto",
                     }}
                   >
-                    <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                    <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
@@ -401,208 +654,52 @@ export function AdminCamerasPanel({
                       <span
                         style={{
                           ...chipStyle,
-                          borderColor: "rgba(59,130,246,0.32)",
-                          background: "rgba(219,234,254,0.92)",
-                          color: "#1d4ed8",
+                          borderColor: "rgba(234,88,12,0.30)",
+                          background: "rgba(255,237,213,0.92)",
+                          color: "#c2410c",
                         }}
                       >
                         {c.code}
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                      <span style={chipStyle}>
-                        {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
-                          [c.city, c.uf].filter(Boolean).join(" - ") ||
-                          "-"}
-                      </span>
+                      <span style={chipStyle}>Responsável: {c.responsavel || (c as any).responsavel || "-"}</span>
+                      <span style={chipStyle}>Direção: {c.direction || "-"}</span>
                     </div>
                   </div>
-                </div>
-              ))}
-
-              {!items.length && !loading && (
-                <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera encontrada.</div>
-              )}
-            </div>
-
-            {!isMobile && items.length > ADMIN_PAGE_SIZE && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
-                <button
-                  className="btnGhost"
-                  onClick={() => setPageCams((v) => Math.max(1, v - 1))}
-                  disabled={pageCams <= 1}
-                  style={{ opacity: pageCams <= 1 ? 0.5 : 1 }}
-                >
-                  Anterior
-                </button>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  Página {pageCams} de {Math.max(1, Math.ceil(items.length / ADMIN_PAGE_SIZE))}
-                </div>
-                <button
-                  className="btnGhost"
-                  onClick={() => setPageCams((v) => Math.min(Math.ceil(items.length / ADMIN_PAGE_SIZE), v + 1))}
-                  disabled={pageCams >= Math.ceil(items.length / ADMIN_PAGE_SIZE)}
-                  style={{ opacity: pageCams >= Math.ceil(items.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
-                >
-                  Próxima
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-      {camTab === "civitas" && (
-        <div
-          className="adminCard"
-          style={{
-            padding: 12,
-            borderRadius: 16,
-            background: "rgba(255,255,255,0.90)",
-            border: "1px solid rgba(0,0,0,0.10)",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>Sincronização de Câmeras Civitas</div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <button
-              onClick={runSyncCivitas}
-              disabled={syncDisabled || syncLoading}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.12)",
-                background: "rgba(0,0,0,0.86)",
-                color: "#fff",
-                cursor: syncDisabled || syncLoading ? "not-allowed" : "pointer",
-                fontWeight: 900,
-                opacity: syncDisabled || syncLoading ? 0.7 : 1,
-              }}
-            >
-              {syncLoading
-                ? "Sincronizando..."
-                : civitasTab === "inteligentes"
-                ? "Sincronizar Câmeras Inteligentes"
-                : "Sincronizar Câmeras LPR"}
-            </button>
-
-            <label
-              className="adminLabelWrap"
-              style={{
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.10)",
-                background: "rgba(255,255,255,0.95)",
-                fontWeight: 900,
-                color: "rgba(0,0,0,0.82)",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={deactivateMissing}
-                onChange={(e) => setDeactivateMissing(e.target.checked)}
-                style={{ transform: "scale(1.1)" }}
-              />
-              Desativar registros ausentes na fonte de dados
-            </label>
-          </div>
-
-          {syncMsg && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{syncMsg}</div>}
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>{SYNC_DISABLED_NOTICE}</div>
-          {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
-        </div>
-      )}
-
-      {camTab === "civitas" && civitasTab === "inteligentes" && (
-        <div
-          className="adminCard"
-          style={{
-            padding: 12,
-            borderRadius: 16,
-            background: "rgba(255,255,255,0.90)",
-            border: "1px solid rgba(0,0,0,0.10)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {intelLoading ? "Carregando..." : `${intelItems.length} itens`}
-            </div>
-          </div>
-          <div
-            className="scrollbarHidden"
-            style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-            onScroll={(e) => {
-              if (!isMobile) return;
-              const el = e.currentTarget;
-              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-                setMobileCountIntel((v) => v + ADMIN_PAGE_SIZE);
-              }
-            }}
-          >
-            {(isMobile
-              ? intelItems.slice(0, mobileCountIntel)
-              : intelItems.slice((pageIntel - 1) * ADMIN_PAGE_SIZE, pageIntel * ADMIN_PAGE_SIZE)
-            ).map((c) => (
-              <div
-                key={c.id || c.code}
-                className="adminRow"
-                style={cardRowStyle}
-              >
-                <div
-                  style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 999,
-                    border: "1px solid rgba(234,88,12,0.30)",
-                    background: "rgba(255,237,213,0.92)",
-                    display: "grid",
-                    placeItems: "center",
-                    flex: "0 0 auto",
-                  }}
-                >
-                  <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        fontSize: 13,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        color: "#0f172a",
-                      }}
+                  <div style={{ display: "grid", justifyItems: "end", gap: 6, flex: "0 0 auto" }}>
+                    <button
+                      type="button"
+                      onClick={() => toggleCameraStatus("inteligentes", c)}
+                      disabled={loadingStatus}
+                      style={statusSwitchStyle(active, loadingStatus)}
+                      title={active ? "Desativar câmera inteligente" : "Ativar câmera inteligente"}
+                      aria-label={active ? "Desativar câmera inteligente" : "Ativar câmera inteligente"}
                     >
-                      {c.name}
-                    </div>
+                      <span style={statusKnobStyle(active)} />
+                    </button>
                     <span
                       style={{
                         ...chipStyle,
-                        borderColor: "rgba(234,88,12,0.30)",
-                        background: "rgba(255,237,213,0.92)",
-                        color: "#c2410c",
+                        minWidth: 72,
+                        justifyContent: "center",
+                        borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
+                        background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
+                        color: active ? "#166534" : "#475569",
                       }}
                     >
-                      {c.code}
+                      {active ? "ATIVO" : "INATIVO"}
                     </span>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                    <span style={chipStyle}>Responsável: {c.responsavel || (c as any).responsavel || "-"}</span>
-                    <span style={chipStyle}>Direção: {c.direction || "-"}</span>
-                  </div>
                 </div>
-              </div>
-            ))}
-            {!intelItems.length && !intelLoading && (
+              );
+            })}
+            {!filteredIntel.length && !intelLoading && (
               <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma Super Câmera Inteligente encontrada.</div>
             )}
           </div>
 
-          {!isMobile && intelItems.length > ADMIN_PAGE_SIZE && (
+          {!isMobile && filteredIntel.length > ADMIN_PAGE_SIZE && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
               <button
                 className="btnGhost"
@@ -613,13 +710,13 @@ export function AdminCamerasPanel({
                 Anterior
               </button>
               <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Página {pageIntel} de {Math.max(1, Math.ceil(intelItems.length / ADMIN_PAGE_SIZE))}
+                Página {pageIntel} de {Math.max(1, Math.ceil(filteredIntel.length / ADMIN_PAGE_SIZE))}
               </div>
               <button
                 className="btnGhost"
-                onClick={() => setPageIntel((v) => Math.min(Math.ceil(intelItems.length / ADMIN_PAGE_SIZE), v + 1))}
-                disabled={pageIntel >= Math.ceil(intelItems.length / ADMIN_PAGE_SIZE)}
-                style={{ opacity: pageIntel >= Math.ceil(intelItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+                onClick={() => setPageIntel((v) => Math.min(Math.ceil(filteredIntel.length / ADMIN_PAGE_SIZE), v + 1))}
+                disabled={pageIntel >= Math.ceil(filteredIntel.length / ADMIN_PAGE_SIZE)}
+                style={{ opacity: pageIntel >= Math.ceil(filteredIntel.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
               >
                 Próxima
               </button>
@@ -641,8 +738,10 @@ export function AdminCamerasPanel({
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras LPR</div>
             <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {lprLoading ? "Carregando..." : `${lprItems.length} itens`}
+              {lprLoading ? "Carregando..." : `${filteredLpr.length} itens`}
             </div>
+            <div style={{ flex: 1 }} />
+            {renderStatusFilter(lprStatusFilter, setLprStatusFilter)}
           </div>
           <div
             className="scrollbarHidden"
@@ -656,66 +755,99 @@ export function AdminCamerasPanel({
             }}
           >
             {(isMobile
-              ? lprItems.slice(0, mobileCountLpr)
-              : lprItems.slice((pageLpr - 1) * ADMIN_PAGE_SIZE, pageLpr * ADMIN_PAGE_SIZE)
-            ).map((c) => (
-              <div
-                key={c.id || c.code}
-                className="adminRow"
-                style={cardRowStyle}
-              >
+              ? filteredLpr.slice(0, mobileCountLpr)
+              : filteredLpr.slice((pageLpr - 1) * ADMIN_PAGE_SIZE, pageLpr * ADMIN_PAGE_SIZE)
+            ).map((c) => {
+              const key = getCameraKey(c);
+              const active = getCameraActive(c);
+              const loadingStatus = statusLoadingKey === `lpr:${key}`;
+              return (
                 <div
+                  key={c.id || c.code}
+                  className="adminRow"
                   style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 999,
-                    border: "1px solid rgba(22,163,74,0.30)",
-                    background: "rgba(220,252,231,0.92)",
-                    display: "grid",
-                    placeItems: "center",
-                    flex: "0 0 auto",
+                    ...cardRowStyle,
+                    alignItems: "flex-start",
                   }}
                 >
-                  <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        fontSize: 13,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        color: "#0f172a",
-                      }}
-                    >
-                      {c.name}
+                  <div
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 999,
+                      border: "1px solid rgba(22,163,74,0.30)",
+                      background: "rgba(220,252,231,0.92)",
+                      display: "grid",
+                      placeItems: "center",
+                      flex: "0 0 auto",
+                    }}
+                  >
+                    <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 13,
+                          whiteSpace: "normal",
+                          overflow: "visible",
+                          textOverflow: "clip",
+                          wordBreak: "break-word",
+                          color: "#0f172a",
+                        }}
+                      >
+                        {c.name}
+                      </div>
+                      <span
+                        style={{
+                          ...chipStyle,
+                          borderColor: "rgba(22,163,74,0.30)",
+                          background: "rgba(220,252,231,0.92)",
+                          color: "#166534",
+                        }}
+                      >
+                        {c.code}
+                      </span>
                     </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      <span style={chipStyle}>Bairro: {c.neighborhood || (c as any).bairro || "-"}</span>
+                      <span style={chipStyle}>Direção: {c.direction || "-"}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", justifyItems: "end", gap: 6, flex: "0 0 auto" }}>
+                    <button
+                      type="button"
+                      onClick={() => toggleCameraStatus("lpr", c)}
+                      disabled={loadingStatus}
+                      style={statusSwitchStyle(active, loadingStatus)}
+                      title={active ? "Desativar câmera LPR" : "Ativar câmera LPR"}
+                      aria-label={active ? "Desativar câmera LPR" : "Ativar câmera LPR"}
+                    >
+                      <span style={statusKnobStyle(active)} />
+                    </button>
                     <span
                       style={{
                         ...chipStyle,
-                        borderColor: "rgba(22,163,74,0.30)",
-                        background: "rgba(220,252,231,0.92)",
-                        color: "#166534",
+                        minWidth: 72,
+                        justifyContent: "center",
+                        borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
+                        background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
+                        color: active ? "#166534" : "#475569",
                       }}
                     >
-                      {c.code}
+                      {active ? "ATIVO" : "INATIVO"}
                     </span>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                    <span style={chipStyle}>Bairro: {c.neighborhood || (c as any).bairro || "-"}</span>
-                    <span style={chipStyle}>Direção: {c.direction || "-"}</span>
-                  </div>
                 </div>
-              </div>
-            ))}
-            {!lprItems.length && !lprLoading && (
+              );
+            })}
+            {!filteredLpr.length && !lprLoading && (
               <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera LPR encontrada.</div>
             )}
           </div>
 
-          {!isMobile && lprItems.length > ADMIN_PAGE_SIZE && (
+          {!isMobile && filteredLpr.length > ADMIN_PAGE_SIZE && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
               <button
                 className="btnGhost"
@@ -726,13 +858,13 @@ export function AdminCamerasPanel({
                 Anterior
               </button>
               <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Página {pageLpr} de {Math.max(1, Math.ceil(lprItems.length / ADMIN_PAGE_SIZE))}
+                Página {pageLpr} de {Math.max(1, Math.ceil(filteredLpr.length / ADMIN_PAGE_SIZE))}
               </div>
               <button
                 className="btnGhost"
-                onClick={() => setPageLpr((v) => Math.min(Math.ceil(lprItems.length / ADMIN_PAGE_SIZE), v + 1))}
-                disabled={pageLpr >= Math.ceil(lprItems.length / ADMIN_PAGE_SIZE)}
-                style={{ opacity: pageLpr >= Math.ceil(lprItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+                onClick={() => setPageLpr((v) => Math.min(Math.ceil(filteredLpr.length / ADMIN_PAGE_SIZE), v + 1))}
+                disabled={pageLpr >= Math.ceil(filteredLpr.length / ADMIN_PAGE_SIZE)}
+                style={{ opacity: pageLpr >= Math.ceil(filteredLpr.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
               >
                 Próxima
               </button>

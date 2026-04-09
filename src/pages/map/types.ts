@@ -1,5 +1,7 @@
 import type { UserRole } from "./roles";
 
+export type FeatureCode = string;
+
 export type Camera = {
   id?: string;
   name: string;
@@ -73,7 +75,11 @@ export type Me = {
   email: string;
   full_name: string;
   role: UserRole;
+  roles?: string[] | null;
   is_active: boolean;
+  organization_id?: string | null;
+  organization_name?: string | null;
+  feature_codes: FeatureCode[];
   expires_at?: string | null;
   last_login_at?: string | null;
 };
@@ -93,6 +99,24 @@ export type AdminUser = {
   last_login_at?: string | null;
   accepted_terms_version?: string | null;
   terms_accepted_at?: string | null;
+};
+
+export type AdminOrganization = {
+  id: string;
+  name: string;
+  organization_type: string;
+  acronym: string;
+  jurisdiction_level: string;
+  feature_codes: FeatureCode[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type FeatureCatalogItem = {
+  code: FeatureCode;
+  name: string;
+  category: string;
+  description?: string | null;
 };
 
 export type AdminLog = {

@@ -1,20 +1,32 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-type User = {
+export type AuthUser = {
   id?: string;
   email?: string;
+  full_name?: string;
+  name?: string;
   role?: string;
   roles?: string[];
-  name?: string;
+  is_active?: boolean;
+  organization_id?: string | null;
+  organization_name?: string | null;
+  feature_codes: string[];
+  expires_at?: string | null;
+  last_login_at?: string | null;
 };
 
 type AuthCtx = {
   isAuthed: boolean;
   loading: boolean;
   accessToken: string | null;
-  user: User | null;
+  user: AuthUser | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  featureCodes: string[];
+  hasFeature: (code: string) => boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  reloadCurrentUser: () => Promise<AuthUser | null>;
 };
 
 const AuthContext = createContext<AuthCtx | null>(null);
@@ -33,36 +45,67 @@ function safeJsonParse<T>(s: string | null): T | null {
   }
 }
 
+function cleanString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeFeatureCodes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  for (const item of value) {
+    const code = cleanString(item).toLowerCase();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    next.push(code);
+  }
+
+  return next;
+}
+
+function normalizeRoles(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanString(item).toLowerCase())
+    .filter(Boolean);
+}
+
+function normalizeUser(payload: any): AuthUser | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const role = cleanString(payload.role || payload.user_role).toLowerCase();
+  const roles = normalizeRoles(payload.roles);
+  const fullName = cleanString(payload.full_name || payload.name);
+  const featureCodes = normalizeFeatureCodes(payload.feature_codes);
+  const organizationId =
+    cleanString(payload.organization_id || payload.organization?.id || payload.org_id) || null;
+  const organizationName =
+    cleanString(payload.organization_name || payload.organization?.name || payload.org_name) || null;
+
+  return {
+    id: cleanString(payload.id) || undefined,
+    email: cleanString(payload.email) || undefined,
+    full_name: fullName || undefined,
+    name: fullName || undefined,
+    role: role || roles[0] || undefined,
+    roles: roles.length ? roles : undefined,
+    is_active: typeof payload.is_active === "boolean" ? payload.is_active : undefined,
+    organization_id: organizationId,
+    organization_name: organizationName,
+    feature_codes: featureCodes,
+    expires_at: cleanString(payload.expires_at) || null,
+    last_login_at: cleanString(payload.last_login_at) || null,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const migrateItem = (key: string) => {
-      const existing = sessionStorage.getItem(key);
-      if (existing !== null) return existing;
-      const legacy = localStorage.getItem(key);
-      if (legacy !== null) {
-        sessionStorage.setItem(key, legacy);
-        localStorage.removeItem(key);
-      }
-      return legacy;
-    };
-
-    // carrega estado inicial do storage
-    const token = migrateItem("access_token");
-    migrateItem("refresh_token");
-    const storedUser = safeJsonParse<User>(migrateItem("user"));
-    migrateItem("user_role");
-
-    setAccessToken(token);
-    setUser(storedUser);
-    setLoading(false);
-  }, []);
-
-  function clearAuthStorage() {
+  const clearAuthStorage = useCallback(() => {
     sessionStorage.removeItem("access_token");
     sessionStorage.removeItem("refresh_token");
     sessionStorage.removeItem("user");
@@ -73,9 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("user");
     localStorage.removeItem("user_role");
     localStorage.removeItem("tokens");
-  }
+  }, []);
 
-  function persistUser(nextUser: User | null) {
+  const persistUser = useCallback((nextUser: AuthUser | null) => {
     if (nextUser) {
       sessionStorage.setItem("user", JSON.stringify(nextUser));
       localStorage.removeItem("user");
@@ -90,33 +133,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return;
     }
+
     setUser(null);
     sessionStorage.removeItem("user");
     sessionStorage.removeItem("user_role");
     localStorage.removeItem("user");
     localStorage.removeItem("user_role");
-  }
+  }, []);
 
-  async function loadCurrentUser(token: string) {
-    try {
-      const res = await fetch(`${API_BASE}/users/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) return;
-      const payload = await res.json().catch(() => null);
-      const nextUser: User | null = payload
-        ? {
-            id: payload.id,
-            email: payload.email,
-            role: payload.role,
-            name: payload.full_name || payload.name,
+  const loadCurrentUser = useCallback(
+    async (token: string) => {
+      try {
+        const res = await fetch(`${API_BASE}/users/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            clearAuthStorage();
+            setAccessToken(null);
+            persistUser(null);
           }
-        : null;
-      persistUser(nextUser);
-    } catch {}
-  }
+          return null;
+        }
+
+        const payload = await res.json().catch(() => null);
+        const nextUser = normalizeUser(payload);
+        persistUser(nextUser);
+        return nextUser;
+      } catch {
+        return null;
+      }
+    },
+    [clearAuthStorage, persistUser]
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    const migrateItem = (key: string) => {
+      const existing = sessionStorage.getItem(key);
+      if (existing !== null) return existing;
+      const legacy = localStorage.getItem(key);
+      if (legacy !== null) {
+        sessionStorage.setItem(key, legacy);
+        localStorage.removeItem(key);
+      }
+      return legacy;
+    };
+
+    async function bootstrap() {
+      const token = migrateItem("access_token");
+      migrateItem("refresh_token");
+      const storedUser = normalizeUser(safeJsonParse<any>(migrateItem("user")));
+      migrateItem("user_role");
+
+      if (!active) return;
+      setAccessToken(token);
+      setUser(storedUser);
+
+      if (token) {
+        await loadCurrentUser(token);
+      }
+
+      if (!active) return;
+      setLoading(false);
+    }
+
+    void bootstrap();
+
+    return () => {
+      active = false;
+    };
+  }, [loadCurrentUser]);
+
+  const reloadCurrentUser = useCallback(async () => {
+    if (!accessToken) {
+      persistUser(null);
+      return null;
+    }
+    return loadCurrentUser(accessToken);
+  }, [accessToken, loadCurrentUser, persistUser]);
 
   async function login(email: string, password: string) {
     const body = new URLSearchParams();
@@ -129,20 +228,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body,
     });
 
-    // tenta ler json; se falhar, lê texto
     const contentType = res.headers.get("content-type") || "";
     const payload = contentType.includes("application/json")
       ? await res.json().catch(() => null)
       : await res.text().catch(() => "");
 
     if (!res.ok) {
-      // tenta pegar uma mensagem padrão do back
       const msg =
         (payload && (payload.detail || payload.message || payload.error)) ||
         (typeof payload === "string" && payload) ||
         `Falha no login (${res.status})`;
-
-      // joga erro pra cair no catch do Login.tsx
       throw new Error(msg);
     }
 
@@ -167,6 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem("refresh_token", refreshToken);
       localStorage.removeItem("refresh_token");
     }
+
     setAccessToken(token);
     await loadCurrentUser(token);
   }
@@ -180,20 +276,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onTokens = (event: Event) => {
       const custom = event as CustomEvent<{ accessToken?: string | null }>;
-      const next = custom.detail?.accessToken;
-      if (typeof next === "string" && next) {
-        setAccessToken(next);
+      const nextToken = custom.detail?.accessToken;
+      if (typeof nextToken === "string" && nextToken) {
+        setAccessToken(nextToken);
+        void loadCurrentUser(nextToken);
       }
     };
+
     window.addEventListener("auth:tokens", onTokens as EventListener);
     return () => window.removeEventListener("auth:tokens", onTokens as EventListener);
-  }, []);
+  }, [loadCurrentUser]);
+
+  const featureCodes = user?.feature_codes || [];
+  const organizationId = user?.organization_id || null;
+  const organizationName = user?.organization_name || null;
+  const hasFeature = useCallback(
+    (code: string) => {
+      const normalized = cleanString(code).toLowerCase();
+      if (!normalized) return false;
+      return featureCodes.includes(normalized);
+    },
+    [featureCodes]
+  );
 
   const isAuthed = !!accessToken;
 
   const value = useMemo(
-    () => ({ isAuthed, loading, accessToken, user, login, logout }),
-    [isAuthed, loading, accessToken, user]
+    () => ({
+      isAuthed,
+      loading,
+      accessToken,
+      user,
+      organizationId,
+      organizationName,
+      featureCodes,
+      hasFeature,
+      login,
+      logout,
+      reloadCurrentUser,
+    }),
+    [isAuthed, loading, accessToken, user, organizationId, organizationName, featureCodes, hasFeature, reloadCurrentUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
