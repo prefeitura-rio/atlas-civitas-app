@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfWorkerUrl from "../workers/pdf.worker.ts?worker&url";
 import { fetchJson } from "./map/shared";
 
 type Props = {
@@ -13,15 +14,12 @@ type Props = {
 
 const TERMS_PDF_URL = "/termos.pdf";
 
-GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 function describePdfError(error: unknown): string {
   const message =
     typeof error === "object" && error !== null && "message" in error
-      ? String((error as any).message || "")
+      ? String(Reflect.get(error, "message") || "")
       : "";
   const normalized = message.toLowerCase();
 
@@ -175,8 +173,12 @@ export default function Terms({
         body: JSON.stringify({ version: currentVersion, accepted: true }),
       });
       onAccepted?.();
-    } catch (e: any) {
-      setSubmitErr(e?.message ?? "Falha ao aceitar termos");
+    } catch (e: unknown) {
+      const message =
+        typeof e === "object" && e !== null && "message" in e
+          ? String(Reflect.get(e, "message") || "")
+          : "";
+      setSubmitErr(message || "Falha ao aceitar termos");
     } finally {
       setSubmitting(false);
     }
