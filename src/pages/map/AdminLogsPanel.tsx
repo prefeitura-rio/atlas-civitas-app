@@ -67,11 +67,11 @@ export function AdminLogsPanel({
             style={{
               padding: "10px 12px",
               borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
+              border: "1px solid rgba(10,40,75,0.82)",
+              background: "rgba(255,255,255,0.96)",
               cursor: "pointer",
               fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
+              color: "#0a284b",
             }}
           >
             Recarregar

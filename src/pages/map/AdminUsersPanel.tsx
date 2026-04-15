@@ -465,14 +465,57 @@ export function AdminUsersPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div className="tabsRail tabsRailSection tabsRailCompact">
-        <button className={`subTab ${userTab === "create" ? "subTabActive" : ""}`} onClick={() => setUserTab("create")}>
-          Criar Usuário
-        </button>
-        <button className={`subTab ${userTab === "manage" ? "subTabActive" : ""}`} onClick={() => setUserTab("manage")}>
-          Gerenciar Usuários
-        </button>
-      </div>
+      {!isMobile ? (
+        <div className="tabsRail tabsRailSection tabsRailCompact">
+          <button className={`subTab ${userTab === "create" ? "subTabActive" : ""}`} onClick={() => setUserTab("create")}>
+            Criar Usuário
+          </button>
+          <button className={`subTab ${userTab === "manage" ? "subTabActive" : ""}`} onClick={() => setUserTab("manage")}>
+            Gerenciar Usuários
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gap: 6,
+            padding: "10px 12px",
+            borderRadius: 16,
+            border: "1px solid rgba(10,40,75,0.08)",
+            background: "rgba(255,255,255,0.88)",
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>MODO</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              { key: "create" as const, label: "Criar Usuário" },
+              { key: "manage" as const, label: "Gerenciar Usuários" },
+            ].map((option) => {
+              const active = userTab === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setUserTab(option.key)}
+                  style={{
+                    padding: "7px 12px",
+                    borderRadius: 999,
+                    border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
+                    background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
+                    color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {userTab === "create" && (
       <div
         className="adminCard"
@@ -802,8 +845,8 @@ export function AdminUsersPanel({
             style={{
               padding: "10px 12px",
               borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(0,0,0,0.86)",
+              border: "1px solid rgba(10,40,75,0.18)",
+              background: "rgba(10,40,75,0.92)",
               color: "#fff",
               cursor: "pointer",
               fontWeight: 900,
@@ -817,11 +860,11 @@ export function AdminUsersPanel({
             style={{
               padding: "10px 12px",
               borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
+              border: "1px solid rgba(10,40,75,0.82)",
+              background: "rgba(255,255,255,0.96)",
               cursor: "pointer",
               fontWeight: 900,
-              color: "rgba(0,0,0,0.85)",
+              color: "#0a284b",
             }}
           >
             Limpar
@@ -863,10 +906,10 @@ export function AdminUsersPanel({
               width: 40,
               height: 40,
               borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "rgba(255,255,255,0.90)",
+              border: "1px solid rgba(10,40,75,0.82)",
+              background: "rgba(255,255,255,0.96)",
               cursor: "pointer",
-              color: "rgba(0,0,0,0.78)",
+              color: "#0a284b",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1033,10 +1076,11 @@ export function AdminUsersPanel({
                 style={{
                   padding: "8px 10px",
                   borderRadius: 12,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  background: "rgba(255,255,255,0.90)",
+                  border: "1px solid rgba(10,40,75,0.82)",
+                  background: "rgba(255,255,255,0.96)",
                   cursor: "pointer",
                   fontWeight: 900,
+                  color: "#0a284b",
                 }}
               >
                 Editar
@@ -1049,8 +1093,8 @@ export function AdminUsersPanel({
                   style={{
                     padding: "8px 10px",
                     borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(0,0,0,0.86)",
+                    border: "1px solid rgba(10,40,75,0.18)",
+                    background: "rgba(10,40,75,0.92)",
                     color: "#fff",
                     cursor: "pointer",
                     fontWeight: 900,
