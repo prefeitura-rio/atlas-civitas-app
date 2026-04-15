@@ -1,4 +1,4 @@
-export const USER_ROLES = ["admin", "user"] as const;
+export const USER_ROLES = ["admin", "user", "user_stream"] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 
@@ -18,6 +18,7 @@ export function normalizeRole(value: unknown): UserRole {
 export function roleLabel(role: unknown): string {
   const normalized = normalizeRole(role);
   if (normalized === "admin") return "Administrador";
+  if (normalized === "user_stream") return "Usuário com streaming";
   return "Usuário sem streaming";
 }
 
@@ -26,5 +27,6 @@ export function isAdminRole(role: unknown): boolean {
 }
 
 export function canAccessStreaming(role: unknown): boolean {
-  return normalizeRole(role) === "admin";
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "user_stream";
 }

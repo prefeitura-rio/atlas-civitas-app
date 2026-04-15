@@ -7,6 +7,7 @@ export type AuthUser = {
   name?: string;
   role?: string;
   roles?: string[];
+  matricula?: string | null;
   is_active?: boolean;
   organization_id?: string | null;
   organization_name?: string | null;
@@ -83,6 +84,7 @@ function normalizeUser(payload: any): AuthUser | null {
     cleanString(payload.organization_id || payload.organization?.id || payload.org_id) || null;
   const organizationName =
     cleanString(payload.organization_name || payload.organization?.name || payload.org_name) || null;
+  const matricula = cleanString(payload.matricula) || null;
 
   return {
     id: cleanString(payload.id) || undefined,
@@ -91,6 +93,7 @@ function normalizeUser(payload: any): AuthUser | null {
     name: fullName || undefined,
     role: role || roles[0] || undefined,
     roles: roles.length ? roles : undefined,
+    matricula,
     is_active: typeof payload.is_active === "boolean" ? payload.is_active : undefined,
     organization_id: organizationId,
     organization_name: organizationName,

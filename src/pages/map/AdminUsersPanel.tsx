@@ -9,7 +9,24 @@ const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWER = "abcdefghijklmnopqrstuvwxyz";
 const PASSWORD_CHARS = `${UPPER}${LOWER}`;
 const SUGGESTED_PASSWORD_SIZE = 10;
-type OrganizationOption = { name: string; organization_type: string };
+type OrganizationOption = {
+  name: string;
+  organization_type: string;
+  jurisdiction_level: string;
+};
+
+function normalizeNullableText(value: unknown) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || null;
+}
+
+function isPrivateOrganization(value: unknown) {
+  return typeof value === "string" && value.trim().toLowerCase() === "privada";
+}
+
+function formatMatriculaLabel(value: unknown) {
+  return normalizeNullableText(value) || "sem matrícula";
+}
 
 function randomIndex(max: number) {
   if (max <= 0) return 0;
@@ -123,6 +140,7 @@ export function AdminUsersPanel({
   const [fullName, setFullName] = useState("");
   const [cpf, setCpf] = useState("");
   const [matricula, setMatricula] = useState("");
+  const [matriculaTouched, setMatriculaTouched] = useState(false);
   const [unidade, setUnidade] = useState("");
   const [orgao, setOrgao] = useState("");
   const [password, setPassword] = useState("");
@@ -149,6 +167,7 @@ export function AdminUsersPanel({
     setFullName("");
     setCpf("");
     setMatricula("");
+    setMatriculaTouched(false);
     setUnidade("");
     setOrgao("");
     setPassword("");
@@ -156,6 +175,7 @@ export function AdminUsersPanel({
     setPasswordCopied(false);
     setRole("user");
     setIsActive(true);
+    setRoleOpen(false);
     setOrgOpen(false);
     setErr(null);
     setSuccess(null);
@@ -169,7 +189,10 @@ export function AdminUsersPanel({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const list: AdminUser[] = Array.isArray(data) ? data : [];
+      const list: AdminUser[] = (Array.isArray(data) ? data : []).map((raw: any) => ({
+        ...raw,
+        matricula: normalizeNullableText(raw?.matricula),
+      }));
 
       setItems(list);
     } catch (e: any) {
@@ -198,6 +221,7 @@ export function AdminUsersPanel({
         .map((raw: any) => ({
           name: (raw?.name ?? "").toString().trim(),
           organization_type: (raw?.organization_type ?? "").toString().trim(),
+          jurisdiction_level: (raw?.jurisdiction_level ?? "").toString().trim(),
         }))
         .filter((org: OrganizationOption) => org.name);
       const dedup = Array.from(
@@ -246,8 +270,8 @@ export function AdminUsersPanel({
   }, []);
 
   useEffect(() => {
-    onOrgDropdownOpenChange?.(orgOpen);
-  }, [orgOpen, onOrgDropdownOpenChange]);
+    onOrgDropdownOpenChange?.(orgOpen || roleOpen);
+  }, [orgOpen, roleOpen, onOrgDropdownOpenChange]);
 
   useEffect(() => {
     return () => {
@@ -262,6 +286,7 @@ export function AdminUsersPanel({
     setFullName(u.full_name || "");
     setCpf(formatCpf(u.cpf || ""));
     setMatricula(u.matricula || "");
+    setMatriculaTouched(false);
     const nextOrgao = (u.orgao || "").toString();
     const matchedOrg = organizations.find((org) => org.name === nextOrgao);
     setOrgao(nextOrgao);
@@ -343,19 +368,22 @@ export function AdminUsersPanel({
     const fullNameV = fullName.trim();
     const roleV = role.trim().toLowerCase();
     const cpfV = normalizeCpf(cpf.trim());
-    const matriculaV = matricula.trim();
+    const matriculaV = normalizeNullableText(matricula);
     const orgaoV = orgao.trim();
     const selectedOrg = organizations.find((org) => org.name === orgaoV);
     const unidadeV = (selectedOrg?.organization_type || unidade).trim();
+    const requiresMatricula = !isPrivateOrganization(selectedOrg?.jurisdiction_level);
 
     if (!emailV) return setErr("Email é obrigatório.");
     if (!fullNameV || fullNameV.length < 3) return setErr("Nome completo inválido.");
-    if (!roleV) return setErr("Role é obrigatório (admin/user).");
-    if (!isUserRole(roleV)) return setErr("Role deve ser admin ou user.");
-    if (!matriculaV) return setErr("Matrícula é obrigatória.");
+    if (!roleV) return setErr("Role é obrigatório (admin/user/user_stream).");
+    if (!isUserRole(roleV)) return setErr("Role deve ser admin, user ou user_stream.");
     if (!orgaoV) return setErr("Órgão é obrigatório.");
     if (!selectedOrg) return setErr("Selecione um órgão válido da lista.");
     if (!unidadeV) return setErr("Tipo da organização é obrigatório.");
+    if (requiresMatricula && !matriculaV) {
+      return setErr("Matrícula é obrigatória para organizações públicas.");
+    }
 
     if (!id) {
       if (cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
@@ -376,7 +404,7 @@ export function AdminUsersPanel({
             email: emailV,
             full_name: fullNameV,
             cpf: cpfV,
-            matricula: matriculaV,
+            matricula: requiresMatricula ? matriculaV : matriculaV || null,
             unidade: unidadeV || null,
             orgao: orgaoV,
             password,
@@ -389,7 +417,9 @@ export function AdminUsersPanel({
         if (fullNameV) payload.full_name = fullNameV;
         if (roleV) payload.role = roleV;
         if (cpfV) payload.cpf = cpfV;
-        if (matriculaV) payload.matricula = matriculaV;
+        if (matriculaTouched) {
+          payload.matricula = matriculaV;
+        }
         payload.unidade = unidadeV || null;
         if (orgaoV) payload.orgao = orgaoV;
 
@@ -456,6 +486,8 @@ export function AdminUsersPanel({
   const shouldShowFiveOrgRows = filteredOrganizations.length >= 5;
   const selectedOrganization = organizations.find((org) => org.name === orgao);
   const selectedOrganizationType = selectedOrganization?.organization_type || "";
+  const selectedJurisdictionLevel = selectedOrganization?.jurisdiction_level || "";
+  const requiresMatricula = !isPrivateOrganization(selectedJurisdictionLevel);
   const filteredItems = items.filter((u) => {
     if (!normalizedManageFilter) return true;
     const name = (u.full_name || "").toLowerCase();
@@ -549,12 +581,29 @@ export function AdminUsersPanel({
             style={inputStyle()}
           />
 
-          <input
-            value={matricula}
-            onChange={(e) => setMatricula(e.target.value)}
-            placeholder="matrícula"
-            style={inputStyle()}
-          />
+          <div style={{ display: "grid", gap: 6 }}>
+            <input
+              value={matricula}
+              onChange={(e) => {
+                setMatricula(e.target.value);
+                setMatriculaTouched(true);
+              }}
+              placeholder={requiresMatricula ? "matrícula" : "matrícula (opcional para organização privada)"}
+              style={inputStyle()}
+            />
+            <div
+              style={{
+                paddingLeft: 2,
+                fontSize: 11,
+                fontWeight: 700,
+                color: requiresMatricula ? "#0a284b" : "rgba(15,23,42,0.58)",
+              }}
+            >
+              {requiresMatricula
+                ? "Obrigatória para organizações públicas."
+                : "Opcional para organização privada."}
+            </div>
+          </div>
           <div className="customSelect" ref={orgWrapRef}>
             <button
               type="button"
@@ -810,6 +859,16 @@ export function AdminUsersPanel({
                 >
                   Administrador
                 </button>
+                <button
+                  type="button"
+                  className={`customSelectItem ${role === "user_stream" ? "customSelectItemActive" : ""}`}
+                  onClick={() => {
+                    setRole("user_stream");
+                    setRoleOpen(false);
+                  }}
+                >
+                  Usuário com streaming
+                </button>
               </div>
             )}
           </div>
@@ -1003,7 +1062,7 @@ export function AdminUsersPanel({
                   >
                     {u.is_active ? "ATIVO" : "INATIVO"}
                     {u.cpf ? ` • CPF: ${u.cpf}` : ""}
-                    {u.matricula ? ` • Matrícula: ${u.matricula}` : ""}
+                    {` • Matrícula: ${formatMatriculaLabel(u.matricula)}`}
                     {u.orgao ? ` • ${u.orgao}` : ""}
                     {u.unidade ? ` • ${u.unidade}` : ""}
                   </div>

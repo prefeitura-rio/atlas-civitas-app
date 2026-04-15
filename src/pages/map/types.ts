@@ -76,6 +76,7 @@ export type Me = {
   full_name: string;
   role: UserRole;
   roles?: string[] | null;
+  matricula?: string | null;
   is_active: boolean;
   organization_id?: string | null;
   organization_name?: string | null;
