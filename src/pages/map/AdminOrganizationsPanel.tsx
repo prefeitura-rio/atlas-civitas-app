@@ -569,14 +569,57 @@ export function AdminOrganizationsPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div className="tabsRail tabsRailSection tabsRailCompact">
-        <button className={`subTab ${orgTab === "create" ? "subTabActive" : ""}`} onClick={() => setOrgTab("create")}>
-          Criar Organização
-        </button>
-        <button className={`subTab ${orgTab === "manage" ? "subTabActive" : ""}`} onClick={() => setOrgTab("manage")}>
-          Gerenciar Organizações
-        </button>
-      </div>
+      {!isMobile ? (
+        <div className="tabsRail tabsRailSection tabsRailCompact">
+          <button className={`subTab ${orgTab === "create" ? "subTabActive" : ""}`} onClick={() => setOrgTab("create")}>
+            Criar Organização
+          </button>
+          <button className={`subTab ${orgTab === "manage" ? "subTabActive" : ""}`} onClick={() => setOrgTab("manage")}>
+            Gerenciar Organizações
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gap: 6,
+            padding: "10px 12px",
+            borderRadius: 16,
+            border: "1px solid rgba(10,40,75,0.08)",
+            background: "rgba(255,255,255,0.88)",
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>MODO</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              { key: "create" as const, label: "Criar Organização" },
+              { key: "manage" as const, label: "Gerenciar Organizações" },
+            ].map((option) => {
+              const active = orgTab === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setOrgTab(option.key)}
+                  style={{
+                    padding: "7px 12px",
+                    borderRadius: 999,
+                    border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
+                    background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
+                    color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {orgTab === "create" && (
         <div
@@ -741,7 +784,7 @@ export function AdminOrganizationsPanel({
                           color: "rgba(15,23,42,0.88)",
                           cursor: "pointer",
                           display: "grid",
-                          gap: 2,
+                          gap: 0,
                         }}
                       >
                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -772,9 +815,6 @@ export function AdminOrganizationsPanel({
                           )}
                           <span style={{ fontSize: isMobile ? 12.5 : 12, fontWeight: 900 }}>{feature.name}</span>
                         </span>
-                        {isMobile && feature.description && (
-                          <span style={{ fontSize: 10, opacity: 0.72 }}>{feature.description}</span>
-                        )}
                       </button>
                     );
                   })}
@@ -790,8 +830,8 @@ export function AdminOrganizationsPanel({
               style={{
                 padding: "10px 12px",
                 borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.12)",
-                background: "rgba(0,0,0,0.86)",
+                border: "1px solid rgba(10,40,75,0.18)",
+                background: "rgba(10,40,75,0.92)",
                 color: "#fff",
                 cursor: saving ? "not-allowed" : "pointer",
                 fontWeight: 900,
@@ -806,11 +846,11 @@ export function AdminOrganizationsPanel({
               style={{
                 padding: "10px 12px",
                 borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.12)",
-                background: "rgba(255,255,255,0.90)",
+                border: "1px solid rgba(10,40,75,0.82)",
+                background: "rgba(255,255,255,0.96)",
                 cursor: "pointer",
                 fontWeight: 900,
-                color: "rgba(0,0,0,0.85)",
+                color: "#0a284b",
               }}
             >
               Limpar
@@ -856,10 +896,10 @@ export function AdminOrganizationsPanel({
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.12)",
-                background: "rgba(255,255,255,0.90)",
+                border: "1px solid rgba(10,40,75,0.82)",
+                background: "rgba(255,255,255,0.96)",
                 cursor: "pointer",
-                color: "rgba(0,0,0,0.78)",
+                color: "#0a284b",
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -995,10 +1035,11 @@ export function AdminOrganizationsPanel({
                   style={{
                     padding: "8px 10px",
                     borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(255,255,255,0.90)",
+                    border: "1px solid rgba(10,40,75,0.82)",
+                    background: "rgba(255,255,255,0.96)",
                     cursor: "pointer",
                     fontWeight: 900,
+                    color: "#0a284b",
                     flex: "0 0 auto",
                   }}
                 >
