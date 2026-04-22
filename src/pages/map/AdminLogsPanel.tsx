@@ -121,6 +121,7 @@ export function AdminLogsPanel({
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
                 {l.created_at ? new Date(l.created_at).toLocaleString("pt-BR") : "-"}
                 {l.entity_type ? ` • ${l.entity_type}` : ""}
+                {l.target?.id_ponto_coleta ? ` • ${l.target.id_ponto_coleta}` : ""}
                 {l.target?.code ? ` • ${l.target.code}` : ""}
                 {l.target?.codcet ? ` • ${l.target.codcet}` : ""}
                 {l.target?.email ? ` • ${l.target.email}` : ""}

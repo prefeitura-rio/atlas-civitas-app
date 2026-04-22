@@ -38,6 +38,14 @@ import { AdminOrganizationsPanel } from "./map/AdminOrganizationsPanel";
 import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
 import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
+import {
+  cleanString,
+  firstNonEmptyString,
+  getPointCollectionCode,
+  getPointCollectionIdentifiers,
+  getPointCollectionKey,
+  getPointCollectionTitle,
+} from "./map/shared";
 
 
 type TabKey = "map" | "profile" | "civitas" | "admin";
@@ -180,7 +188,7 @@ function getLprNeighborhood(value: any) {
 }
 
 function isEntityActive(value: any) {
-  const raw = value?.is_active;
+  const raw = value?.status_ativo ?? value?.is_active;
 
   if (typeof raw === "boolean") return raw;
   if (typeof raw === "number") return raw !== 0;
@@ -190,8 +198,9 @@ function isEntityActive(value: any) {
     if (["1", "true", "t", "on", "ativo", "active", "ligado"].includes(normalized)) return true;
   }
 
-  const status = String(value?.status || "").trim().toLowerCase();
+  const status = cleanString(value?.status).toLowerCase();
   if (status.includes("inativo") || status.includes("deslig")) return false;
+  if (status.includes("ativo") || status.includes("active") || status.includes("ligado")) return true;
 
   return true;
 }
@@ -308,7 +317,7 @@ function buildGeometrySelectionIds(
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     if (!inBbox(lng, lat)) continue;
     if (!pointInGeometry([lng, lat], geom)) continue;
-    const idOrCode = String((c as any).id || c.code || "").trim();
+    const idOrCode = getPointCollectionKey(c);
     if (idOrCode) camerasIds.push(idOrCode);
   }
 
@@ -318,7 +327,7 @@ function buildGeometrySelectionIds(
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     if (!inBbox(lng, lat)) continue;
     if (!pointInGeometry([lng, lat], geom)) continue;
-    const idOrCode = String((c as any).id || c.code || "").trim();
+    const idOrCode = getPointCollectionKey(c);
     if (idOrCode) superCameraIds.push(idOrCode);
   }
 
@@ -328,7 +337,7 @@ function buildGeometrySelectionIds(
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     if (!inBbox(lng, lat)) continue;
     if (!pointInGeometry([lng, lat], geom)) continue;
-    const idOrCode = String((c as any).id || c.code || "").trim();
+    const idOrCode = getPointCollectionKey(c);
     if (idOrCode) lprIds.push(idOrCode);
   }
 
@@ -338,7 +347,7 @@ function buildGeometrySelectionIds(
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     if (!inBbox(lng, lat)) continue;
     if (!pointInGeometry([lng, lat], geom)) continue;
-    const idOrCodcet = String((r as any).id || r.codcet || "").trim();
+    const idOrCodcet = getPointCollectionKey(r);
     if (idOrCodcet) radarIds.push(idOrCodcet);
   }
 
@@ -606,43 +615,64 @@ function camerasIntelToFeatures(list: CameraIntel[]): Feature<Point, any>[] {
 }
 
 function camerasLprToFeatures(list: CameraLpr[]): Feature<Point, any>[] {
-  return list.map((c) => ({
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [c.lng, c.lat] },
-    properties: {
-      kind: "camera_lpr",
-      code: c.code,
-      name: c.name,
-      neighborhood: getLprNeighborhood(c),
-      direction: c.direction ?? "",
-      is_active: c.is_active ? 1 : 0,
-    },
-  }));
+  return list.map((c) => {
+    const title = getPointCollectionTitle(c) || c.name;
+    const neighborhood = firstNonEmptyString((c as any).bairro, c.neighborhood, getLprNeighborhood(c));
+    const direction = firstNonEmptyString((c as any).sentido, c.direction);
+    const lat = Number(c.lat);
+    const lng = Number(c.lng);
+
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lng, lat] },
+      properties: {
+        kind: "camera_lpr",
+        id_ponto_coleta: c.id_ponto_coleta ?? "",
+        origem_equipamento: c.origem_equipamento ?? "",
+        local: (c as any).local ?? title ?? "",
+        code: c.code,
+        name: c.name,
+        bairro: neighborhood,
+        neighborhood,
+        direction,
+        sentido: direction,
+        latitude: lat,
+        longitude: lng,
+        status_ativo: c.status_ativo ?? c.is_active ?? null,
+        is_active: c.is_active ? 1 : 0,
+      },
+    };
+  });
 }
 
 function radaresToFeatures(list: Radar[]): Feature<Point, any>[] {
   const features: Feature<Point, any>[] = [];
 
   for (const r of list) {
-    const lat = Number(r.lat);
-    const lng = Number(r.lng);
+    const lat = Number(r.lat ?? r.latitude);
+    const lng = Number(r.lng ?? r.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
 
     const active = r.is_active !== false;
+    const title = getPointCollectionTitle(r) || r.logradouro || r.localidade || "Radar";
 
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [lng, lat] },
       properties: {
         kind: "radar",
+        id_ponto_coleta: r.id_ponto_coleta ?? "",
+        origem_equipamento: r.origem_equipamento ?? "",
         codcet: r.codcet,
+        local: (r as any).local ?? title ?? "",
         bairro: r.bairro ?? "",
-        logradouro: (r.logradouro ?? r.localidade ?? "") || "",
+        logradouro: (r.logradouro ?? r.localidade ?? (r as any).local ?? "") || "",
+        localidade: r.localidade ?? "",
         sentido: r.sentido ?? "",
-        empresa: r.empresa ?? "",
-        velofisc: r.velofisc ?? null,
-        numero_equipamento: r.numero_equipamento ?? "",
         status: r.status ?? (active ? "ATIVO" : "INATIVO"),
+        status_ativo: r.status_ativo ?? active,
+        latitude: lat,
+        longitude: lng,
         is_active: active ? 1 : 0,
       },
     });
@@ -2362,16 +2392,23 @@ export default function MapPage() {
       if (kind === "camera_lpr") {
         return {
           kind,
-          title: (p.name || "Câmera LPR").toString(),
-          meta: `Direção: ${(p.direction || "-").toString()}`,
+          title: (getPointCollectionTitle(p) || p.name || "Câmera LPR").toString(),
+          meta: `Bairro: ${firstNonEmptyString(p.bairro, p.neighborhood, "-")} • Sentido: ${firstNonEmptyString(
+            p.sentido,
+            p.direction,
+            "-"
+          )}`,
           streamingUrl: "",
         };
       }
       if (kind === "radar") {
         return {
           kind,
-          title: (p.logradouro || "Radar sem logradouro").toString(),
-          meta: `Sentido: ${(p.sentido || "-").toString()}`,
+          title: (getPointCollectionTitle(p) || p.logradouro || "Radar sem logradouro").toString(),
+          meta: `Bairro: ${firstNonEmptyString(p.bairro, "-")} • Sentido: ${firstNonEmptyString(
+            p.sentido,
+            "-"
+          )}`,
           streamingUrl: "",
         };
       }
@@ -2420,8 +2457,8 @@ export default function MapPage() {
         const aWeight = aKind ? POI_KIND_ORDER.indexOf(aKind) : 999;
         const bWeight = bKind ? POI_KIND_ORDER.indexOf(bKind) : 999;
         if (aWeight !== bWeight) return aWeight - bWeight;
-        const aCode = (aKind === "radar" ? a.properties?.codcet : a.properties?.code) || "";
-        const bCode = (bKind === "radar" ? b.properties?.codcet : b.properties?.code) || "";
+        const aCode = getPointCollectionCode(a.properties) || "";
+        const bCode = getPointCollectionCode(b.properties) || "";
         return String(aCode).localeCompare(String(bCode), "pt-BR", { numeric: true });
       });
 
@@ -2450,7 +2487,7 @@ export default function MapPage() {
           const info = getPoiInfo(feature);
           if (!info || !info.kind) return "";
           const p = feature.properties || {};
-          const code = info.kind === "radar" ? p.codcet || p.numero_equipamento || "-" : p.code || "-";
+          const code = getPointCollectionCode(p) || "-";
           const streamLink =
             hasStreamingAccessRef.current && info.streamingUrl
               ? `<a class="cameraPopupStreamLink stackPopupStreamLink" href="${escapeHtml(info.streamingUrl)}" target="_blank" rel="noreferrer">Streaming</a>`
@@ -2900,19 +2937,27 @@ export default function MapPage() {
                   <img src="${cameraLprIcon}" alt="" class="cameraPopupIcon" />
                   <div class="cameraPopupKicker">Câmera LPR</div>
                 </div>
-                <div class="cameraPopupTitle">${escapeHtml(p.name || "Câmera LPR")}</div>
+                <div class="cameraPopupTitle">${escapeHtml(p.local || p.name || "Câmera LPR")}</div>
               </div>
-              <span class="cameraPopupCode">${escapeHtml(p.code || "-")}</span>
+              <span class="cameraPopupCode">${escapeHtml(getPointCollectionCode(p) || "-")}</span>
             </div>
 
             <div class="cameraPopupInfoGrid">
               <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">Bairro</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(getLprNeighborhood(p) || "-")}</span>
+                <span class="cameraPopupInfoLabel">Local</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.local || p.name || "-")}</span>
               </div>
               <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">Direção</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(p.direction || "-")}</span>
+                <span class="cameraPopupInfoLabel">Bairro</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.bairro || p.neighborhood || getLprNeighborhood(p) || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Sentido</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.sentido || p.direction || "-")}</span>
+              </div>
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Origem</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.origem_equipamento || "-")}</span>
               </div>
             </div>
           </div>
@@ -2931,7 +2976,7 @@ export default function MapPage() {
       setSelectionRing(coords[0], coords[1]);
       if (openStackedPopupIfNeeded(coords)) return;
 
-      setSelectedRadar(p.codcet || null);
+      setSelectedRadar(getPointCollectionKey(p) || p.codcet || null);
       setSelectedCode(null);
       setPanelOpen(false);
 
@@ -2946,12 +2991,16 @@ export default function MapPage() {
                   <img src="${radarIcon}" alt="" class="cameraPopupIcon" />
                   <div class="cameraPopupKicker">Radar</div>
                 </div>
-                <div class="cameraPopupTitle">${escapeHtml(p.logradouro || "Radar sem logradouro")}</div>
+                <div class="cameraPopupTitle">${escapeHtml(p.local || p.logradouro || p.localidade || "Radar")}</div>
               </div>
-              <span class="cameraPopupCode">${escapeHtml(p.codcet || "-")}</span>
+              <span class="cameraPopupCode">${escapeHtml(getPointCollectionCode(p) || "-")}</span>
             </div>
 
             <div class="cameraPopupInfoGrid">
+              <div class="cameraPopupInfoItem">
+                <span class="cameraPopupInfoLabel">Local</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.local || p.logradouro || p.localidade || "-")}</span>
+              </div>
               <div class="cameraPopupInfoItem">
                 <span class="cameraPopupInfoLabel">Bairro</span>
                 <span class="cameraPopupInfoValue">${escapeHtml(p.bairro || "-")}</span>
@@ -2961,16 +3010,8 @@ export default function MapPage() {
                 <span class="cameraPopupInfoValue">${escapeHtml(p.sentido || "-")}</span>
               </div>
               <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">Empresa</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(p.empresa || "-")}</span>
-              </div>
-              <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">Vel</span>
-                <span class="cameraPopupInfoValue">${p.velofisc ?? "-"}</span>
-              </div>
-              <div class="cameraPopupInfoItem">
-                <span class="cameraPopupInfoLabel">Equip</span>
-                <span class="cameraPopupInfoValue">${escapeHtml(p.numero_equipamento || "-")}</span>
+                <span class="cameraPopupInfoLabel">Origem</span>
+                <span class="cameraPopupInfoValue">${escapeHtml(p.origem_equipamento || "-")}</span>
               </div>
             </div>
           </div>
@@ -3486,7 +3527,7 @@ export default function MapPage() {
 
     setLoadingCamerasLpr(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/cameras-lpr`, {
+      const data = await fetchJson<any>(`${API_BASE}/cameras-lpr?only_active=true`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -3528,7 +3569,7 @@ export default function MapPage() {
 
     setLoadingRadares(true);
     try {
-      const data = await fetchJson<any>(`${API_BASE}/radares`, {
+      const data = await fetchJson<any>(`${API_BASE}/radares?only_active=true`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -3538,11 +3579,15 @@ export default function MapPage() {
       const list: Radar[] = Array.isArray(data) ? data : [];
 
       const normalized = list
-        .map((r) => ({
-          ...r,
-          lat: r.lat === undefined || r.lat === null ? null : Number(r.lat),
-          lng: r.lng === undefined || r.lng === null ? null : Number(r.lng),
-        }))
+        .map((r) => {
+          const lat = getLat(r);
+          const lng = getLng(r);
+          return {
+            ...r,
+            lat: lat ?? NaN,
+            lng: lng ?? NaN,
+          };
+        })
         .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any))
         .filter((r) => isEntityActive(r));
 
@@ -4705,16 +4750,18 @@ export default function MapPage() {
     if (listMode === "lpr") {
       if (!q) return camerasLpr;
       return camerasLpr.filter((c) => {
-        const hay = `${c.name} ${c.code} ${getLprNeighborhood(c)} ${c.direction ?? ""}`.toLowerCase();
+        const hay = `${getPointCollectionCode(c)} ${c.name} ${(c as any).local ?? ""} ${c.bairro ?? ""} ${
+          c.neighborhood ?? ""
+        } ${(c as any).sentido ?? ""} ${c.direction ?? ""} ${c.origem_equipamento ?? ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
 
     if (!q) return radares;
     return radares.filter((r) => {
-      const hay = `${r.codcet} ${r.empresa ?? ""} ${r.bairro ?? ""} ${r.logradouro ?? ""} ${
+      const hay = `${getPointCollectionCode(r)} ${r.bairro ?? ""} ${r.local ?? ""} ${r.logradouro ?? ""} ${
         r.localidade ?? ""
-      } ${r.sentido ?? ""} ${r.numero_equipamento ?? ""} ${r.status ?? ""}`.toLowerCase();
+      } ${r.sentido ?? ""} ${r.origem_equipamento ?? ""} ${r.status ?? ""}`.toLowerCase();
       return hay.includes(q);
     });
   }, [cameras, camerasIntel, camerasLpr, radares, query, listMode]);
@@ -4857,12 +4904,12 @@ export default function MapPage() {
 
   useMemo(() => {
     if (!selectedCode) return null;
-    return cameras.find((c) => c.code === selectedCode) || null;
+    return cameras.find((c) => getPointCollectionIdentifiers(c).includes(selectedCode)) || null;
   }, [selectedCode, cameras]);
 
   useMemo(() => {
     if (!selectedRadar) return null;
-    return radares.find((r) => r.codcet === selectedRadar) || null;
+    return radares.find((r) => getPointCollectionIdentifiers(r).includes(selectedRadar)) || null;
   }, [selectedRadar, radares]);
 
   useEffect(() => {
@@ -5948,15 +5995,15 @@ export default function MapPage() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder={
-                    listMode === "cameras"
-                      ? "Buscar por nome, código, cidade, endereço..."
-                      : listMode === "inteligentes"
-                      ? "Buscar por nome, código, IP, direção (super)..."
-                      : listMode === "lpr"
-                      ? "Buscar por nome, código, IP, direção..."
-                      : "Buscar por CODCET, bairro, logradouro, sentido..."
-                  }
+                    placeholder={
+                      listMode === "cameras"
+                        ? "Buscar por nome, código, cidade, endereço..."
+                        : listMode === "inteligentes"
+                        ? "Buscar por nome, código, IP, direção (super)..."
+                        : listMode === "lpr"
+                        ? "Buscar por nome, código, IP, direção..."
+                        : "Buscar por código, bairro, local e sentido..."
+                    }
                   style={inputStyle()}
                 />
                 <button
@@ -6159,7 +6206,7 @@ export default function MapPage() {
                 {listMode === "lpr" &&
                   (listItems as CameraLpr[]).map((c) => (
                     <div
-                      key={c.code}
+                      key={getPointCollectionKey(c) || c.code}
                       className="listItem"
                       onClick={() => {
                         setSelectedCode(null);
@@ -6194,7 +6241,7 @@ export default function MapPage() {
                                 wordBreak: "break-word",
                               }}
                             >
-                              {c.name}
+                              {getPointCollectionTitle(c) || c.name}
                             </div>
                             <span
                               style={{
@@ -6209,15 +6256,18 @@ export default function MapPage() {
                                 color: "#166534",
                               }}
                             >
-                              {c.code}
+                              {getPointCollectionCode(c)}
                             </span>
                           </div>
                           <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              Bairro: {getLprNeighborhood(c) || "-"}
+                              Local: {getPointCollectionTitle(c) || "-"}
                             </span>
                             <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              Direção: {c.direction || "-"}
+                              Bairro: {c.bairro || c.neighborhood || getLprNeighborhood(c) || "-"}
+                            </span>
+                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                              Sentido: {c.sentido || c.direction || "-"}
                             </span>
                           </div>
                         </div>
@@ -6227,75 +6277,78 @@ export default function MapPage() {
 
                 {listMode === "radares" &&
                   (listItems as Radar[]).map((r) => {
-                    const lat = Number(r.lat);
-                    const lng = Number(r.lng);
+                    const lat = Number(r.lat ?? r.latitude);
+                    const lng = Number(r.lng ?? r.longitude);
                     const ok = Number.isFinite(lat) && Number.isFinite(lng);
                     return (
                       <div
-                        key={r.codcet}
+                        key={getPointCollectionKey(r) || r.codcet}
                         className="listItem"
                         onClick={() => {
                           if (!ok) return;
-                          setSelectedRadar(r.codcet);
+                          setSelectedRadar(getPointCollectionKey(r) || r.codcet);
                           setSelectedCode(null);
                           focusOnDetection(lng, lat);
                         }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div
-                              style={{
-                                width: 18,
-                                height: 18,
-                                borderRadius: 999,
-                                border: "1px solid rgba(234,88,12,0.30)",
-                                background: "rgba(255,237,213,0.92)",
-                                display: "grid",
-                                placeItems: "center",
-                                flex: "0 0 auto",
-                              }}
-                            >
-                              <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: "1px solid rgba(234,88,12,0.30)",
+                              background: "rgba(255,237,213,0.92)",
+                              display: "grid",
+                              placeItems: "center",
+                              flex: "0 0 auto",
+                            }}
+                          >
+                            <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {getPointCollectionTitle(r) || r.logradouro || r.localidade || "Radar"}
+                              </div>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  border: "1px solid rgba(234,88,12,0.30)",
+                                  background: "rgba(255,237,213,0.92)",
+                                  color: "#c2410c",
+                                }}
+                              >
+                                {getPointCollectionCode(r)}
+                              </span>
                             </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-                                <div
-                                  style={{
-                                    fontWeight: 900,
-                                    fontSize: 13,
-                                    whiteSpace: "normal",
-                                    overflow: "visible",
-                                    textOverflow: "clip",
-                                    wordBreak: "break-word",
-                                  }}
-                                >
-                                  {r.logradouro || r.localidade || "Radar"}
-                                </div>
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    borderRadius: 999,
-                                    padding: "2px 8px",
-                                    fontSize: 11,
-                                    fontWeight: 800,
-                                    border: "1px solid rgba(234,88,12,0.30)",
-                                    background: "rgba(255,237,213,0.92)",
-                                    color: "#c2410c",
-                                  }}
-                                >
-                                  {r.codcet}
-                                </span>
-                              </div>
-                              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                                  Bairro: {r.bairro || "-"}
-                                </span>
-                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                                  Sentido: {r.sentido || "-"}
-                                </span>
-                              </div>
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                Local: {r.local || r.logradouro || r.localidade || "-"}
+                              </span>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                Bairro: {r.bairro || "-"}
+                              </span>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                Sentido: {r.sentido || "-"}
+                              </span>
                             </div>
                           </div>
+                        </div>
                       </div>
                     );
                   })}
@@ -7090,7 +7143,7 @@ export default function MapPage() {
                   {listMode === "lpr" &&
                     (listItems as CameraLpr[]).map((c) => (
                       <div
-                        key={c.code}
+                        key={getPointCollectionKey(c) || c.code}
                         className="listItem"
                         onClick={() => {
                           setSelectedCode(null);
@@ -7117,17 +7170,17 @@ export default function MapPage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
                               <div
-                                style={{
-                                  fontWeight: 900,
-                                  fontSize: 12,
-                                  lineHeight: 1.2,
-                                  whiteSpace: "normal",
+                              style={{
+                                fontWeight: 900,
+                                fontSize: 12,
+                                lineHeight: 1.2,
+                                whiteSpace: "normal",
                                   overflow: "visible",
-                                  textOverflow: "clip",
-                                  wordBreak: "break-word",
-                                }}
-                              >
-                                {c.name}
+                                textOverflow: "clip",
+                                wordBreak: "break-word",
+                              }}
+                            >
+                                {getPointCollectionTitle(c) || c.name}
                               </div>
                               <span
                                 style={{
@@ -7142,15 +7195,18 @@ export default function MapPage() {
                                   color: "#166534",
                                 }}
                               >
-                                {c.code}
+                                {getPointCollectionCode(c)}
                               </span>
                             </div>
                             <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                Bairro: {getLprNeighborhood(c) || "-"}
+                                Local: {getPointCollectionTitle(c) || "-"}
                               </span>
                               <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                Direção: {c.direction || "-"}
+                                Bairro: {c.bairro || c.neighborhood || getLprNeighborhood(c) || "-"}
+                              </span>
+                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                Sentido: {c.sentido || c.direction || "-"}
                               </span>
                             </div>
                           </div>
@@ -7160,17 +7216,17 @@ export default function MapPage() {
 
                   {listMode === "radares" &&
                     (listItems as Radar[]).map((r) => {
-                      const lat = Number(r.lat);
-                      const lng = Number(r.lng);
+                      const lat = Number(r.lat ?? r.latitude);
+                      const lng = Number(r.lng ?? r.longitude);
                       const ok = Number.isFinite(lat) && Number.isFinite(lng);
 
                       return (
                         <div
-                          key={r.codcet}
+                          key={getPointCollectionKey(r) || r.codcet}
                           className="listItem"
                           onClick={() => {
                             if (!ok) return;
-                            setSelectedRadar(r.codcet);
+                            setSelectedRadar(getPointCollectionKey(r) || r.codcet);
                             setSelectedCode(null);
                             focusOnDetection(lng, lat);
                             setPanelOpen(false);
@@ -7211,7 +7267,7 @@ export default function MapPage() {
                                     wordBreak: "break-word",
                                   }}
                                 >
-                                  {r.logradouro || r.localidade || "Radar"}
+                                  {getPointCollectionTitle(r) || r.logradouro || r.localidade || "Radar"}
                                 </div>
                                 <span
                                   style={{
@@ -7226,10 +7282,13 @@ export default function MapPage() {
                                     color: "#c2410c",
                                   }}
                                 >
-                                  {r.codcet}
+                                  {getPointCollectionCode(r)}
                                 </span>
                               </div>
                               <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                  Local: {r.local || r.logradouro || r.localidade || "-"}
+                                </span>
                                 <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
                                   Bairro: {r.bairro || "-"}
                                 </span>

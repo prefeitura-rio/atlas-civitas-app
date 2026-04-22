@@ -34,13 +34,21 @@ export type CameraIntel = {
 
 export type CameraLpr = {
   id?: string;
+  id_ponto_coleta?: string | number | null;
+  origem_equipamento?: string | null;
+  local?: string | null;
   code: string;
   name: string;
   lat: number;
   lng: number;
+  latitude?: number | null;
+  longitude?: number | null;
   neighborhood?: string | null;
+  bairro?: string | null;
   direction?: string | null;
+  sentido?: string | null;
   is_active?: boolean;
+  status_ativo?: boolean | number | string | null;
   source_file?: string | null;
   last_seen_at?: string | null;
   created_at?: string | null;
@@ -49,21 +57,22 @@ export type CameraLpr = {
 
 export type Radar = {
   id?: string;
+  id_ponto_coleta?: string | number | null;
+  origem_equipamento?: string | null;
+  local?: string | null;
   codcet: string;
 
   lat?: number | null;
   lng?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 
-  empresa?: string | null;
   bairro?: string | null;
   logradouro?: string | null;
   localidade?: string | null;
   sentido?: string | null;
-
-  velofisc?: number | null;
-  numero_equipamento?: string | null;
-
   status?: string | null;
+  status_ativo?: boolean | number | string | null;
   is_active?: boolean;
 
   updated_at?: string | null;
@@ -141,5 +150,10 @@ export type AdminLog = {
     name?: string;
     code?: string;
     codcet?: string;
+    id_ponto_coleta?: string;
+    local?: string;
+    bairro?: string;
+    sentido?: string;
+    origem_equipamento?: string;
   } | null;
 };

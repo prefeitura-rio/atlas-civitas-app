@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import type { Camera, CameraIntel, CameraLpr } from "./types";
-import { fetchJson } from "./shared";
+import {
+  fetchJson,
+  getPointCollectionCode,
+  getPointCollectionIdentifiers,
+  getPointCollectionKey,
+  getPointCollectionTitle,
+  isEntityActive,
+} from "./shared";
 import Swal from "sweetalert2";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
@@ -127,10 +134,13 @@ export function AdminCamerasPanel({
 
   type CameraScope = "cameras" | "inteligentes" | "lpr";
 
-  function applyStatusFilter<T extends { is_active?: boolean }>(list: T[], filter: StatusFilter) {
+  function applyStatusFilter<T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(
+    list: T[],
+    filter: StatusFilter
+  ) {
     if (filter === "all") return list;
-    if (filter === "active") return list.filter((item) => item.is_active !== false);
-    return list.filter((item) => item.is_active === false);
+    if (filter === "active") return list.filter((item) => isEntityActive(item));
+    return list.filter((item) => !isEntityActive(item));
   }
 
   function renderStatusFilter(value: StatusFilter, onChange: (next: StatusFilter) => void) {
@@ -168,16 +178,21 @@ export function AdminCamerasPanel({
   }
 
   function getCameraKey(item: Camera | CameraIntel | CameraLpr) {
-    return String((item as any).id ?? item.code ?? "");
+    return getPointCollectionKey(item);
   }
 
   function getCameraActive(item: Camera | CameraIntel | CameraLpr) {
-    return (item as any).is_active !== false;
+    return isEntityActive(item);
   }
 
-  function patchLocalStatus(scope: CameraScope, key: string, nextActive: boolean) {
-    const patch = <T extends { id?: string; code: string; is_active?: boolean }>(arr: T[]) =>
-      arr.map((row) => (String((row as any).id ?? row.code ?? "") === key ? { ...row, is_active: nextActive } : row));
+  function patchLocalStatus(scope: CameraScope, item: Camera | CameraIntel | CameraLpr, nextActive: boolean) {
+    const targetIds = new Set(getPointCollectionIdentifiers(item));
+    const patch = <T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(arr: T[]) =>
+      arr.map((row) =>
+        getPointCollectionIdentifiers(row as any).some((candidate) => targetIds.has(candidate))
+          ? { ...row, is_active: nextActive, status_ativo: nextActive }
+          : row
+      );
 
     if (scope === "cameras") {
       setItems((prev) => patch(prev as any) as Camera[]);
@@ -194,43 +209,49 @@ export function AdminCamerasPanel({
   const filteredIntel = applyStatusFilter(intelItems, intelStatusFilter);
   const filteredLpr = applyStatusFilter(lprItems, lprStatusFilter);
 
-  async function saveCameraStatus(scope: CameraScope, key: string, nextActive: boolean) {
+  async function saveCameraStatus(scope: CameraScope, item: Camera | CameraIntel | CameraLpr, nextActive: boolean) {
     const baseUrl = getResourceBase(scope);
-    const encoded = encodeURIComponent(key);
     const authHeaders = { Authorization: `Bearer ${token}` };
     const jsonHeaders = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     };
     const body = JSON.stringify({ is_active: nextActive });
-
-    const attempts = [
-      () =>
-        fetchJson<any>(`${baseUrl}/${encoded}`, {
-          method: "PUT",
-          headers: jsonHeaders,
-          body,
-        }),
-      () =>
-        fetchJson<any>(`${baseUrl}/${encoded}`, {
-          method: "PATCH",
-          headers: jsonHeaders,
-          body,
-        }),
-      () =>
-        fetchJson<any>(`${baseUrl}/${encoded}/${nextActive ? "reactivate" : "deactivate"}`, {
-          method: "POST",
-          headers: authHeaders,
-        }),
-    ];
+    const candidates = getPointCollectionIdentifiers(item);
+    if (!candidates.length) {
+      throw new Error("Não foi possível identificar esta câmera para atualizar o status.");
+    }
 
     let lastErr: any = null;
-    for (const run of attempts) {
-      try {
-        await run();
-        return;
-      } catch (err: any) {
-        lastErr = err;
+    for (const key of candidates) {
+      const encoded = encodeURIComponent(key);
+      const attempts = [
+        () =>
+          fetchJson<any>(`${baseUrl}/${encoded}`, {
+            method: "PUT",
+            headers: jsonHeaders,
+            body,
+          }),
+        () =>
+          fetchJson<any>(`${baseUrl}/${encoded}`, {
+            method: "PATCH",
+            headers: jsonHeaders,
+            body,
+          }),
+        () =>
+          fetchJson<any>(`${baseUrl}/${encoded}/${nextActive ? "reactivate" : "deactivate"}`, {
+            method: "POST",
+            headers: authHeaders,
+          }),
+      ];
+
+      for (const run of attempts) {
+        try {
+          await run();
+          return;
+        } catch (err: any) {
+          lastErr = err;
+        }
       }
     }
     throw lastErr || new Error("Falha ao atualizar status da câmera.");
@@ -242,7 +263,7 @@ export function AdminCamerasPanel({
       setErr("Não foi possível identificar esta câmera para atualizar o status.");
       return;
     }
-    const name = (item as any).name || item.code || "câmera";
+    const name = getPointCollectionTitle(item) || "câmera";
     const isActive = getCameraActive(item);
     const nextActive = !isActive;
 
@@ -267,8 +288,8 @@ export function AdminCamerasPanel({
     setErr(null);
     setStatusLoadingKey(`${scope}:${key}`);
     try {
-      await saveCameraStatus(scope, key, nextActive);
-      patchLocalStatus(scope, key, nextActive);
+      await saveCameraStatus(scope, item, nextActive);
+      patchLocalStatus(scope, item, nextActive);
       onStatusChanged?.();
 
       await Swal.fire({
@@ -344,7 +365,7 @@ export function AdminCamerasPanel({
   async function loadLpr() {
     setLprLoading(true);
     try {
-      const data = await fetchJson<any>(CAMS_LPR_URL, {
+      const data = await fetchJson<any>(`${CAMS_LPR_URL}?only_active=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const list: CameraLpr[] = Array.isArray(data) ? data : [];
@@ -548,7 +569,7 @@ export function AdminCamerasPanel({
                 const loadingStatus = statusLoadingKey === `cameras:${key}`;
                 return (
                   <div
-                    key={c.id || c.code}
+                    key={key || c.id || c.code}
                     className="adminRow"
                     style={{
                       ...cardRowStyle,
@@ -584,17 +605,17 @@ export function AdminCamerasPanel({
                         >
                           {c.name}
                         </div>
-                        <span
-                          style={{
-                            ...chipStyle,
-                            borderColor: "rgba(59,130,246,0.32)",
-                            background: "rgba(219,234,254,0.92)",
-                            color: "#1d4ed8",
-                          }}
-                        >
-                          {c.code}
-                        </span>
-                      </div>
+                      <span
+                        style={{
+                          ...chipStyle,
+                          borderColor: "rgba(59,130,246,0.32)",
+                          background: "rgba(219,234,254,0.92)",
+                          color: "#1d4ed8",
+                        }}
+                      >
+                          {getPointCollectionCode(c)}
+                      </span>
+                    </div>
                       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                         <span style={chipStyle}>
                           {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
@@ -701,7 +722,7 @@ export function AdminCamerasPanel({
               const loadingStatus = statusLoadingKey === `inteligentes:${key}`;
               return (
                 <div
-                  key={c.id || c.code}
+                  key={key || c.id || c.code}
                   className="adminRow"
                   style={{
                     ...cardRowStyle,
@@ -745,7 +766,7 @@ export function AdminCamerasPanel({
                           color: "#c2410c",
                         }}
                       >
-                        {c.code}
+                        {getPointCollectionCode(c)}
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
@@ -849,7 +870,7 @@ export function AdminCamerasPanel({
               const loadingStatus = statusLoadingKey === `lpr:${key}`;
               return (
                 <div
-                  key={c.id || c.code}
+                  key={key || c.id || c.code}
                   className="adminRow"
                   style={{
                     ...cardRowStyle,
@@ -893,12 +914,13 @@ export function AdminCamerasPanel({
                           color: "#166534",
                         }}
                       >
-                        {c.code}
+                        {getPointCollectionCode(c)}
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                      <span style={chipStyle}>Bairro: {c.neighborhood || (c as any).bairro || "-"}</span>
-                      <span style={chipStyle}>Direção: {c.direction || "-"}</span>
+                      <span style={chipStyle}>Local: {getPointCollectionTitle(c) || "-"}</span>
+                      <span style={chipStyle}>Bairro: {c.bairro || c.neighborhood || "-"}</span>
+                      <span style={chipStyle}>Sentido: {c.sentido || c.direction || "-"}</span>
                     </div>
                   </div>
                   <div style={{ display: "grid", justifyItems: "end", gap: 6, flex: "0 0 auto" }}>
