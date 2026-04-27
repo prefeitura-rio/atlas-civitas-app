@@ -275,12 +275,11 @@ export function AdminUsersPanel({
   }
 
   function refreshPasswordSuggestion() {
-    if (id) return;
     setSuggestedPassword(generateStrongPassword());
   }
 
   function applySuggestedPassword() {
-    if (!suggestedPassword || id) return;
+    if (!suggestedPassword) return;
     setPassword(suggestedPassword);
     setPasswordCopied(false);
     setErr(null);
@@ -288,7 +287,6 @@ export function AdminUsersPanel({
   }
 
   async function copyPassword() {
-    if (id) return;
     if (!password) {
       setErr("Digite uma senha para copiar.");
       return;
@@ -344,6 +342,7 @@ export function AdminUsersPanel({
     const roleV = role.trim().toLowerCase();
     const cpfV = normalizeCpf(cpf.trim());
     const matriculaV = matricula.trim();
+    const passwordV = password.trim();
     const orgaoV = orgao.trim();
     const selectedOrg = organizations.find((org) => org.name === orgaoV);
     const unidadeV = (selectedOrg?.organization_type || unidade).trim();
@@ -359,7 +358,9 @@ export function AdminUsersPanel({
 
     if (!id) {
       if (cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
-      if (!password || password.length < 8) return setErr("Senha mínima: 8 caracteres.");
+      if (!passwordV || passwordV.length < 8) return setErr("Senha mínima: 8 caracteres.");
+    } else if (passwordV && passwordV.length < 8) {
+      return setErr("Senha mínima: 8 caracteres.");
     }
 
     const creating = !id;
@@ -379,7 +380,7 @@ export function AdminUsersPanel({
             matricula: matriculaV,
             unidade: unidadeV || null,
             orgao: orgaoV,
-            password,
+            password: passwordV,
             role: roleV,
           }),
         });
@@ -392,6 +393,7 @@ export function AdminUsersPanel({
         if (matriculaV) payload.matricula = matriculaV;
         payload.unidade = unidadeV || null;
         if (orgaoV) payload.orgao = orgaoV;
+        if (passwordV) payload.password = passwordV;
 
         await fetchJson(`${USERS_URL}/${id}`, {
           method: "PUT",
@@ -685,80 +687,81 @@ export function AdminUsersPanel({
                   setPasswordCopied(false);
                 }}
                 onClick={refreshPasswordSuggestion}
-                placeholder={id ? "senha (só na criação)" : "senha (mín 8)"}
+                placeholder={id ? "nova senha (opcional)" : "senha (mín 8)"}
                 type={passwordVisible ? "text" : "password"}
-                disabled={!!id}
+                autoComplete="new-password"
                 style={{
                   ...inputStyle(),
-                  paddingRight: id ? 12 : 70,
-                  opacity: id ? 0.6 : 1,
-                  cursor: id ? "not-allowed" : "text",
+                  paddingRight: 70,
                 }}
               />
-              {!id && (
-                <div
+              <div
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  zIndex: 2,
+                  display: "inline-flex",
+                  gap: 6,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setPasswordVisible((v) => !v)}
                   style={{
-                    position: "absolute",
-                    right: 10,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    zIndex: 2,
+                    width: 26,
+                    height: 26,
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    background: "rgba(255,255,255,0.92)",
+                    color: "rgba(0,0,0,0.78)",
                     display: "inline-flex",
-                    gap: 6,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 8,
+                    padding: 0,
+                    cursor: "pointer",
                   }}
+                  title={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
+                  aria-label={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setPasswordVisible((v) => !v)}
-                    style={{
-                      width: 26,
-                      height: 26,
-                      border: "1px solid rgba(0,0,0,0.12)",
-                      background: "rgba(255,255,255,0.92)",
-                      color: "rgba(0,0,0,0.78)",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 8,
-                      padding: 0,
-                      cursor: "pointer",
-                    }}
-                    title={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
-                    aria-label={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
-                  >
-                    {passwordVisible ? (
-                      <EyeOff size={14} strokeWidth={2.2} aria-hidden="true" />
-                    ) : (
-                      <Eye size={14} strokeWidth={2.2} aria-hidden="true" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={copyPassword}
-                    disabled={!password}
-                    style={{
-                      width: 26,
-                      height: 26,
-                      border: "1px solid rgba(0,0,0,0.12)",
-                      background: "rgba(255,255,255,0.92)",
-                      color: passwordCopied ? "#15803d" : "rgba(0,0,0,0.78)",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 8,
-                      padding: 0,
-                      cursor: password ? "pointer" : "not-allowed",
-                      opacity: password ? 1 : 0.7,
-                    }}
-                    title={password ? "Copiar senha" : "Digite uma senha para copiar"}
-                    aria-label={password ? "Copiar senha" : "Digite uma senha para copiar"}
-                  >
-                    <Copy size={14} strokeWidth={2.2} aria-hidden="true" />
-                  </button>
-                </div>
-              )}
+                  {passwordVisible ? (
+                    <EyeOff size={14} strokeWidth={2.2} aria-hidden="true" />
+                  ) : (
+                    <Eye size={14} strokeWidth={2.2} aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={copyPassword}
+                  disabled={!password}
+                  style={{
+                    width: 26,
+                    height: 26,
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    background: "rgba(255,255,255,0.92)",
+                    color: passwordCopied ? "#15803d" : "rgba(0,0,0,0.78)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 8,
+                    padding: 0,
+                    cursor: password ? "pointer" : "not-allowed",
+                    opacity: password ? 1 : 0.7,
+                  }}
+                  title={password ? "Copiar senha" : "Digite uma senha para copiar"}
+                  aria-label={password ? "Copiar senha" : "Digite uma senha para copiar"}
+                >
+                  <Copy size={14} strokeWidth={2.2} aria-hidden="true" />
+                </button>
+              </div>
             </div>
-            {!id && suggestedPassword && (
+            {id && (
+              <div style={{ paddingLeft: 2, fontSize: 11, fontWeight: 700, color: "rgba(15,23,42,0.58)" }}>
+                Deixe em branco para manter a senha atual.
+              </div>
+            )}
+            {suggestedPassword && (
               <button
                 type="button"
                 onClick={applySuggestedPassword}
