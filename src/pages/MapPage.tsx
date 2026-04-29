@@ -31,7 +31,7 @@ import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 import cameraLprIconSatellite from "@/assets/camera-lpr-icon-satellite.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
 import civitasLogo from "@/assets/civitas_icon.png";
-import civitasMailIcon from "@/assets/icons/civitas/mail.svg";
+import civitasWhatsappIcon from "@/assets/icons/civitas/whatsapp.svg";
 import civitasDownloadIcon from "@/assets/icons/civitas/Icon-1.svg";
 import civitasInfoIcon from "@/assets/icons/civitas/Icon.svg";
 import civitasDetectionIcon from "@/assets/icons/civitas/motion_sensor_active.svg";
@@ -1280,10 +1280,11 @@ export default function MapPage() {
     },
   ] as const;
   const civitasTabLabel = "ACIONAR A CIVITAS";
+  const developmentTabLabel = "ADMINISTRADOR";
   const civitasPanelTitle = "Ferramentas da CIVITAS e como solicitar informações";
   const civitasPanelSubtitle = "Acesse os recursos disponíveis e saiba como fazer solicitações formais";
-  const civitasContactEmail = "civitas@dados.rio";
-  const civitasContactHref = `mailto:${civitasContactEmail}`;
+  const civitasContactPhone = "+55 21 989091247";
+  const civitasContactHref = "https://wa.me/5521989091247";
   const civitasModelPdfHref = "/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf";
   useEffect(() => {
     gpsOnRef.current = gpsOn;
@@ -5104,6 +5105,7 @@ export default function MapPage() {
 
   const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1120 : 560;
   const panelSideInset = 16;
+  const panelShiftRight = panel === "civitas" ? 190 : 0;
   const panelMaxHeight =
     panel === "admin"
       ? adminTab === "organizations"
@@ -5316,7 +5318,7 @@ export default function MapPage() {
             <div className="civitasHeroActions">
               <a href={civitasContactHref} className="civitasActionBtn civitasActionBtnGhost">
                 <span className="civitasActionBtnIcon">
-                  <img src={civitasMailIcon} alt="" className="civitasActionBtnIconImg" />
+                  <img src={civitasWhatsappIcon} alt="" className="civitasActionBtnIconImg" />
                 </span>
                 Entrar em contato
               </a>
@@ -5425,9 +5427,9 @@ export default function MapPage() {
                   autoridade competente do órgão.
                 </li>
                 <li>
-                  Enviar ao endereço:{" "}
+                  Enviar pelo WhatsApp:{" "}
                   <a href={civitasContactHref} style={{ fontWeight: 800 }}>
-                    {civitasContactEmail}
+                    {civitasContactPhone}
                   </a>
                   .
                 </li>
@@ -6111,27 +6113,28 @@ export default function MapPage() {
             PERFIL
           </button>
 
-          <button
-            className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
-            onClick={() => togglePanel("civitas")}
-            title="Clique de novo pra fechar"
-          >
-            {civitasTabLabel}
-          </button>
-
           {isAdmin && (
             <button
               className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
               onClick={() => togglePanel("admin")}
               title="Clique de novo pra fechar"
             >
-              ADMINISTRADOR
+              {developmentTabLabel}
             </button>
           )}
 
           <div style={{ flex: 1 }} />
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            className="civitasSearchBtn"
+            onClick={() => togglePanel("civitas")}
+            title={panel === "civitas" ? "Fechar CIVITAS" : "Abrir CIVITAS"}
+          >
+            {civitasTabLabel}
+          </button>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -6139,7 +6142,7 @@ export default function MapPage() {
                 if (e.key === "Enter") handleSearch();
               }}
               placeholder="Buscar rua ou coordenadas no RJ"
-              style={{ ...inputStyle(), maxWidth: 320, padding: "8px 10px" }}
+              style={{ ...inputStyle(), flex: "1 1 240px", minWidth: 240, maxWidth: 320, padding: "8px 10px" }}
             />
             <button className="btnGhost" onClick={handleSearch} title="Buscar">
               BUSCAR
@@ -6184,7 +6187,7 @@ export default function MapPage() {
           style={{
             position: "absolute",
             top: 90,
-            left: panelSideInset,
+            left: panelSideInset + panelShiftRight,
             width: panelWidth,
             maxWidth: `calc(100vw - ${panelSideInset * 2}px)`,
             zIndex: 20,
@@ -7085,21 +7088,21 @@ export default function MapPage() {
               </button>
 
               {isAdmin && (
-                <button
-                  className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
-                  style={{
-                    minHeight: 42,
-                    display: "flex",
+                  <button
+                    className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
+                    style={{
+                      minHeight: 42,
+                      display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     whiteSpace: "normal",
                     lineHeight: 1.15,
-                  }}
-                  onClick={() => toggleMobilePanel("admin")}
-                >
-                  ADMINISTRADOR
-                </button>
-              )}
+                    }}
+                    onClick={() => toggleMobilePanel("admin")}
+                  >
+                    {developmentTabLabel}
+                  </button>
+                )}
             </div>
 
             {panel === "map" && (
