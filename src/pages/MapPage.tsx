@@ -8,7 +8,9 @@ import {
   Building2,
   Eye,
   EyeOff,
+  MapPinned,
   PenTool,
+  Satellite,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -20,9 +22,13 @@ import { canAccessStreaming, isAdminRole, normalizeRole } from "./map/roles";
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
+import cameraIconSatellite from "@/assets/camera-icon-satellite.png";
 import radarIcon from "@/assets/radar-icon.png";
+import radarIconSatellite from "@/assets/radar-icon-satellite.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
+import cameraIntelIconSatellite from "@/assets/cameras-inteligentes-icon-satellite.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
+import cameraLprIconSatellite from "@/assets/camera-lpr-icon-satellite.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
 import civitasLogo from "@/assets/civitas_icon.png";
 import civitasMailIcon from "@/assets/icons/civitas/mail.svg";
@@ -84,8 +90,19 @@ const API_BASE =
 
 const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN?.toString() || "";
 
-// só dark streets
+type MapBaseStyle = "streets" | "satellite";
+type CameraMarkerKind = "camera" | "camera_intel";
+const CAMERA_MARKER_ICON_SIZE = 0.9;
+const CAMERA_INTEL_MARKER_ICON_SIZE = 0.9;
+const CAMERA_LPR_MARKER_ICON_SIZE = 1.1;
+const RADAR_MARKER_ICON_SIZE = 1;
+const GPS_CONE_LENGTH_METERS = 60;
+const GPS_CONE_HALF_ANGLE_DEG = 30;
+const GPS_CONE_SEGMENTS = 12;
+
+// base atual + satélite
 const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11" as const;
+const MAP_STYLE_SATELLITE = "mapbox://styles/mapbox/satellite-streets-v12" as const;
 const PAGE_SIZE = 50;
 
 // IDs fixos
@@ -108,6 +125,7 @@ const LAYERS = {
   cameras_intel_points: "lyr-cameras-intel-points",
   cameras_lpr_points: "lyr-cameras-lpr-points",
   radares_points: "lyr-radares-points",
+  gps_cone: "lyr-gps-cone",
   gps_point: "lyr-gps-point",
   gps_accuracy: "lyr-gps-accuracy",
   gps_pulse: "lyr-gps-pulse",
@@ -138,16 +156,120 @@ const LAYERS = {
 } as const;
 
 const IMAGES = {
-  camera: "camera_icon",
   radar: "radar_icon",
-  camera_intel: "camera_intel_icon",
   camera_lpr: "camera_lpr_icon",
   search_pin: "search_pin_icon",
 } as const;
 
+const CAMERA_MARKER_IMAGE_IDS: Record<MapBaseStyle, Record<CameraMarkerKind, string>> = {
+  streets: {
+    camera: "camera_icon_streets",
+    camera_intel: "camera_intel_icon_streets",
+  },
+  satellite: {
+    camera: "camera_icon_satellite",
+    camera_intel: "camera_intel_icon_satellite",
+  },
+} as const;
+
+const CAMERA_MARKER_IMAGE_SOURCES: Record<MapBaseStyle, Record<CameraMarkerKind, string>> = {
+  streets: {
+    camera: cameraIcon,
+    camera_intel: cameraIntelIcon,
+  },
+  satellite: {
+    camera: cameraIcon,
+    camera_intel: cameraIntelIcon,
+  },
+} as const;
+
+function getCameraMarkerImageId(style: MapBaseStyle, kind: CameraMarkerKind) {
+  return CAMERA_MARKER_IMAGE_IDS[style][kind];
+}
+
+function getCameraMarkerImageSource(style: MapBaseStyle, kind: CameraMarkerKind) {
+  return CAMERA_MARKER_IMAGE_SOURCES[style][kind];
+}
+
+const POI_MARKER_IMAGE_SOURCES: Record<MapBaseStyle, { radar: string; camera_lpr: string }> = {
+  streets: {
+    radar: radarIconSatellite,
+    camera_lpr: cameraLprIconSatellite,
+  },
+  satellite: {
+    radar: radarIconSatellite,
+    camera_lpr: cameraLprIconSatellite,
+  },
+} as const;
+
+function getRadarMarkerImageSource(style: MapBaseStyle) {
+  return POI_MARKER_IMAGE_SOURCES[style].radar;
+}
+
+function getCameraLprMarkerImageSource(style: MapBaseStyle) {
+  return POI_MARKER_IMAGE_SOURCES[style].camera_lpr;
+}
+
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function normalizeBearingDegrees(bearing: number) {
+  return ((bearing % 360) + 360) % 360;
+}
+
+function destinationPoint(lng: number, lat: number, bearingDeg: number, distanceMeters: number): [number, number] {
+  const earthRadiusMeters = 6371000;
+  const angularDistance = distanceMeters / earthRadiusMeters;
+  const bearingRad = (bearingDeg * Math.PI) / 180;
+  const lat1 = (lat * Math.PI) / 180;
+  const lon1 = (lng * Math.PI) / 180;
+
+  const sinLat1 = Math.sin(lat1);
+  const cosLat1 = Math.cos(lat1);
+  const sinAngularDistance = Math.sin(angularDistance);
+  const cosAngularDistance = Math.cos(angularDistance);
+
+  const lat2 = Math.asin(
+    clamp(
+      sinLat1 * cosAngularDistance + cosLat1 * sinAngularDistance * Math.cos(bearingRad),
+      -1,
+      1
+    )
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(bearingRad) * sinAngularDistance * cosLat1,
+      cosAngularDistance - sinLat1 * Math.sin(lat2)
+    );
+
+  const lonDeg = (((lon2 * 180) / Math.PI + 540) % 360) - 180;
+  return [lonDeg, (lat2 * 180) / Math.PI];
+}
+
+function buildGpsConePolygon(
+  lng: number,
+  lat: number,
+  headingDeg: number,
+  distanceMeters = GPS_CONE_LENGTH_METERS,
+  halfAngleDeg = GPS_CONE_HALF_ANGLE_DEG,
+  segments = GPS_CONE_SEGMENTS
+): Polygon {
+  const heading = normalizeBearingDegrees(headingDeg);
+  const startBearing = heading - halfAngleDeg;
+  const endBearing = heading + halfAngleDeg;
+  const ring: [number, number][] = [[lng, lat]];
+
+  for (let i = 0; i <= segments; i += 1) {
+    const ratio = i / segments;
+    const bearing = startBearing + (endBearing - startBearing) * ratio;
+    ring.push(destinationPoint(lng, lat, bearing, distanceMeters));
+  }
+
+  ring.push([lng, lat]);
+  return { type: "Polygon", coordinates: [ring] };
 }
 
 function coerceCoord(value: unknown) {
@@ -916,15 +1038,34 @@ export default function MapPage() {
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   const handlersBoundRef = useRef(false);
-  const iconsLoadedRef = useRef(false);
   const selectionRingTimerRef = useRef<number | null>(null);
+  const syncMapStyleStateRef = useRef<(map: mapboxgl.Map) => void | Promise<void>>(() => {});
 
   const [panel, setPanel] = useState<PanelKey>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mapBaseStyle, setMapBaseStyle] = useState<MapBaseStyle>(() => {
+    if (typeof window === "undefined") return "streets";
+    try {
+      return window.localStorage.getItem("map_base_style") === "satellite" ? "satellite" : "streets";
+    } catch {
+      return "streets";
+    }
+  });
+  const mapBaseStyleRef = useRef<MapBaseStyle>(mapBaseStyle);
   const isMobileRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("map_base_style", mapBaseStyle);
+    } catch {}
+  }, [mapBaseStyle]);
+
+  useEffect(() => {
+    mapBaseStyleRef.current = mapBaseStyle;
+  }, [mapBaseStyle]);
 
   const [loadingCameras, setLoadingCameras] = useState(false);
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -1084,6 +1225,14 @@ export default function MapPage() {
     speed?: number | null;
     ts?: number;
   } | null>(null);
+
+  const gpsDebugHeading = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const raw = new URLSearchParams(window.location.search).get("gpsHeading");
+    if (raw === null) return null;
+    const parsed = Number(raw.trim().replace(",", "."));
+    return Number.isFinite(parsed) ? normalizeBearingDegrees(parsed) : null;
+  }, []);
 
   const gpsRef = useRef<typeof gps>(null);
   useEffect(() => {
@@ -1505,8 +1654,9 @@ export default function MapPage() {
     flyToPoint(lng, lat, zoom);
   }
 
-  function ensureSourcesAndLayers(map: mapboxgl.Map) {
-    const hasIcons = map.hasImage(IMAGES.camera) && map.hasImage(IMAGES.radar);
+  function ensureSourcesAndLayers(map: mapboxgl.Map, style: MapBaseStyle = mapBaseStyleRef.current) {
+    const cameraImageId = getCameraMarkerImageId(style, "camera");
+    const cameraIntelImageId = getCameraMarkerImageId(style, "camera_intel");
 
     if (!map.getSource(SOURCES.pois)) {
       map.addSource(SOURCES.pois, {
@@ -1590,6 +1740,19 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getLayer(LAYERS.gps_cone)) {
+      map.addLayer({
+        id: LAYERS.gps_cone,
+        type: "fill",
+        source: SOURCES.gps,
+        filter: ["==", ["get", "kind"], "gps_cone"],
+        paint: {
+          "fill-color": "rgba(34,197,94,0.18)",
+          "fill-outline-color": "rgba(34,197,94,0.38)",
+        },
+      });
+    }
+
     if (!map.getLayer(LAYERS.cluster_count)) {
       map.addLayer({
         id: LAYERS.cluster_count,
@@ -1605,15 +1768,15 @@ export default function MapPage() {
       });
     }
 
-    if (hasIcons && !map.getLayer(LAYERS.cameras_points)) {
+    if (!map.getLayer(LAYERS.cameras_points)) {
       map.addLayer({
         id: LAYERS.cameras_points,
         type: "symbol",
         source: SOURCES.pois,
         filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "camera"]],
         layout: {
-          "icon-image": IMAGES.camera,
-          "icon-size": 0.8,
+          "icon-image": cameraImageId,
+          "icon-size": CAMERA_MARKER_ICON_SIZE,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
@@ -1623,15 +1786,15 @@ export default function MapPage() {
       });
     }
 
-    if (map.hasImage(IMAGES.camera_intel) && !map.getLayer(LAYERS.cameras_intel_points)) {
+    if (!map.getLayer(LAYERS.cameras_intel_points)) {
       map.addLayer({
         id: LAYERS.cameras_intel_points,
         type: "symbol",
         source: SOURCES.pois,
         filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "camera_intel"]],
         layout: {
-          "icon-image": IMAGES.camera_intel,
-          "icon-size": 0.1,
+          "icon-image": cameraIntelImageId,
+          "icon-size": CAMERA_INTEL_MARKER_ICON_SIZE,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
@@ -1641,7 +1804,7 @@ export default function MapPage() {
       });
     }
 
-    if (map.hasImage(IMAGES.camera_lpr) && !map.getLayer(LAYERS.cameras_lpr_points)) {
+    if (!map.getLayer(LAYERS.cameras_lpr_points)) {
       map.addLayer({
         id: LAYERS.cameras_lpr_points,
         type: "symbol",
@@ -1649,7 +1812,7 @@ export default function MapPage() {
         filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "camera_lpr"]],
         layout: {
           "icon-image": IMAGES.camera_lpr,
-          "icon-size": 0.2,
+          "icon-size": CAMERA_LPR_MARKER_ICON_SIZE,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
@@ -1659,7 +1822,7 @@ export default function MapPage() {
       });
     }
 
-    if (hasIcons && !map.getLayer(LAYERS.radares_points)) {
+    if (!map.getLayer(LAYERS.radares_points)) {
       map.addLayer({
         id: LAYERS.radares_points,
         type: "symbol",
@@ -1667,7 +1830,7 @@ export default function MapPage() {
         filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "kind"], "radar"]],
         layout: {
           "icon-image": IMAGES.radar,
-          "icon-size": 1.0,
+          "icon-size": RADAR_MARKER_ICON_SIZE,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
@@ -2082,7 +2245,7 @@ export default function MapPage() {
 
     applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
 
-    // Garante que pontos (câmeras/radares) fiquem acima dos bairros
+    // Garante que pontos e o cone do GPS fiquem acima dos bairros
     const aboveBairros = [
       LAYERS.clusters,
       LAYERS.cluster_count,
@@ -2095,6 +2258,7 @@ export default function MapPage() {
       LAYERS.area_draw_fill,
       LAYERS.area_draw_line,
       LAYERS.area_draw_points,
+      LAYERS.gps_cone,
       LAYERS.gps_accuracy,
       LAYERS.gps_pulse,
       LAYERS.gps_point,
@@ -2220,6 +2384,84 @@ export default function MapPage() {
     }
   }
 
+  async function syncMapStyleState(map: mapboxgl.Map) {
+    const currentStyle = mapBaseStyleRef.current;
+    try {
+      const cameraImageId = getCameraMarkerImageId(currentStyle, "camera");
+      const cameraIntelImageId = getCameraMarkerImageId(currentStyle, "camera_intel");
+      const cameraImageSrc = getCameraMarkerImageSource(currentStyle, "camera");
+      const cameraIntelImageSrc = getCameraMarkerImageSource(currentStyle, "camera_intel");
+      const radarImageSrc = getRadarMarkerImageSource(currentStyle);
+      const cameraLprImageSrc = getCameraLprMarkerImageSource(currentStyle);
+      await Promise.all([
+        addImageOnce(map, cameraImageId, cameraImageSrc),
+        addImageOnce(map, cameraIntelImageId, cameraIntelImageSrc),
+        addImageOnce(map, IMAGES.radar, radarImageSrc),
+        addImageOnce(map, IMAGES.camera_lpr, cameraLprImageSrc),
+        addImageOnce(map, IMAGES.search_pin, mapPinRed),
+      ]);
+    } catch (e) {
+      console.warn("Falha ao carregar ícones do mapa:", e);
+    }
+
+    ensureSourcesAndLayers(map, currentStyle);
+    bindInteractionsOnce(map);
+
+    updatePoisData(map, poisGeo);
+    if (bairrosGeo) updateBairrosData(map, bairrosGeo);
+    if (rispGeo) updateRispData(map, rispGeo);
+    if (aispGeo) updateAispData(map, aispGeo);
+    if (cispGeo) updateCispData(map, cispGeo);
+
+    applyBairrosVisibility(map, showBairros, selectedBairro);
+    applyCodeVisibility(
+      map,
+      showRisp,
+      LAYERS.risp_fill,
+      LAYERS.risp_line,
+      LAYERS.risp_label,
+      LAYERS.risp_selected_fill,
+      LAYERS.risp_selected_line,
+      selectedSecurityArea?.kind === "risp" ? selectedSecurityArea.code : ""
+    );
+    applyCodeVisibility(
+      map,
+      showAisp,
+      LAYERS.aisp_fill,
+      LAYERS.aisp_line,
+      LAYERS.aisp_label,
+      LAYERS.aisp_selected_fill,
+      LAYERS.aisp_selected_line,
+      selectedSecurityArea?.kind === "aisp" ? selectedSecurityArea.code : ""
+    );
+    applyCodeVisibility(
+      map,
+      showCisp,
+      LAYERS.cisp_fill,
+      LAYERS.cisp_line,
+      LAYERS.cisp_label,
+      LAYERS.cisp_selected_fill,
+      LAYERS.cisp_selected_line,
+      selectedSecurityArea?.kind === "cisp" ? selectedSecurityArea.code : ""
+    );
+
+    updateGpsData(map, gps, gpsOnRef.current);
+    updateSearchPin(map, searchPin);
+    updateAreaDrawData(map, areaDrawPoints);
+    applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
+  }
+
+  syncMapStyleStateRef.current = syncMapStyleState;
+
+  function switchMapBaseStyle(next: MapBaseStyle) {
+    if (mapBaseStyleRef.current === next) return;
+    mapBaseStyleRef.current = next;
+    setMapBaseStyle(next);
+    const map = mapRef.current;
+    if (!map) return;
+    map.setStyle(next === "satellite" ? MAP_STYLE_SATELLITE : MAP_STYLE_DARK);
+  }
+
   function metersToPixelsAtLat(meters: number, lat: number, zoom: number) {
     const metersPerPixel =
       (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
@@ -2244,7 +2486,18 @@ export default function MapPage() {
     const acc = Number(gpsData.accuracy ?? 0);
     const rPx = acc > 0 ? metersToPixelsAtLat(acc, gpsData.lat, zoom) : 0;
 
-    const features: Feature<Point, any>[] = [];
+    const features: Array<Feature<Point | Polygon, any>> = [];
+
+    const headingValue = gpsDebugHeading ?? gpsData.heading;
+    const heading = typeof headingValue === "number" && Number.isFinite(headingValue) ? headingValue : null;
+
+    if (heading !== null) {
+      features.push({
+        type: "Feature",
+        geometry: buildGpsConePolygon(gpsData.lng, gpsData.lat, heading),
+        properties: { kind: "gps_cone" },
+      });
+    }
 
     if (rPx > 0) {
       features.push({
@@ -2826,7 +3079,7 @@ export default function MapPage() {
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
-                  <img src="${cameraIcon}" alt="" class="cameraPopupIcon" />
+                  <img src="${getCameraMarkerImageSource(mapBaseStyleRef.current, "camera")}" alt="" class="cameraPopupIcon" />
                   <div class="cameraPopupKicker">Câmera</div>
                 </div>
                 <div class="cameraPopupTitle">${escapeHtml(p.name || "Câmera sem nome")}</div>
@@ -2881,7 +3134,7 @@ export default function MapPage() {
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
-                  <img src="${cameraIntelIcon}" alt="" class="cameraPopupIcon" />
+                  <img src="${getCameraMarkerImageSource(mapBaseStyleRef.current, "camera_intel")}" alt="" class="cameraPopupIcon" />
                   <div class="cameraPopupKicker">Super Câmera Inteligente</div>
                 </div>
                 <div class="cameraPopupTitle">${escapeHtml(p.name || "Super Câmera Inteligente")}</div>
@@ -3330,7 +3583,7 @@ export default function MapPage() {
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: MAP_STYLE_DARK,
+      style: mapBaseStyle === "satellite" ? MAP_STYLE_SATELLITE : MAP_STYLE_DARK,
       center: [-43.2096, -22.9035],
       zoom: 11,
       pitch: 0,
@@ -3343,83 +3596,14 @@ export default function MapPage() {
 
     mapRef.current = map;
 
-    map.on("load", async () => {
-      try {
-        if (!iconsLoadedRef.current) {
-          await addImageOnce(map, IMAGES.camera, cameraIcon);
-          await addImageOnce(map, IMAGES.radar, radarIcon);
-          await addImageOnce(map, IMAGES.camera_intel, cameraIntelIcon);
-          await addImageOnce(map, IMAGES.camera_lpr, cameraLprIcon);
-          await addImageOnce(map, IMAGES.search_pin, mapPinRed);
-          iconsLoadedRef.current = true;
-        }
-      } catch (e) {
-        console.warn("Falha ao carregar ícones:", e);
-      }
-
-      ensureSourcesAndLayers(map);
-      bindInteractionsOnce(map);
-
-      const poisGeoInit = makePoisGeoJSON(
-        cameras,
-        camerasIntel,
-        camerasLpr,
-        radares,
-        showCameras,
-        showCamerasIntel,
-        showCamerasLpr,
-        showRadares
-      );
-      updatePoisData(map, poisGeoInit);
-      if (bairrosGeo) {
-        updateBairrosData(map, bairrosGeo);
-      }
-      if (rispGeo) {
-        updateRispData(map, rispGeo);
-      }
-      if (aispGeo) {
-        updateAispData(map, aispGeo);
-      }
-      if (cispGeo) {
-        updateCispData(map, cispGeo);
-      }
-      applyBairrosVisibility(map, showBairros, selectedBairro);
-      applyCodeVisibility(
-        map,
-        showRisp,
-        LAYERS.risp_fill,
-        LAYERS.risp_line,
-        LAYERS.risp_label,
-        LAYERS.risp_selected_fill,
-        LAYERS.risp_selected_line,
-        selectedSecurityArea?.kind === "risp" ? selectedSecurityArea.code : ""
-      );
-      applyCodeVisibility(
-        map,
-        showAisp,
-        LAYERS.aisp_fill,
-        LAYERS.aisp_line,
-        LAYERS.aisp_label,
-        LAYERS.aisp_selected_fill,
-        LAYERS.aisp_selected_line,
-        selectedSecurityArea?.kind === "aisp" ? selectedSecurityArea.code : ""
-      );
-      applyCodeVisibility(
-        map,
-        showCisp,
-        LAYERS.cisp_fill,
-        LAYERS.cisp_line,
-        LAYERS.cisp_label,
-        LAYERS.cisp_selected_fill,
-        LAYERS.cisp_selected_line,
-        selectedSecurityArea?.kind === "cisp" ? selectedSecurityArea.code : ""
-      );
-      updateGpsData(map, gps, gpsOnRef.current);
-      updateSearchPin(map, searchPin);
-      updateAreaDrawData(map, areaDrawPoints);
-    });
+    const handleStyleLoad = () => {
+      void syncMapStyleStateRef.current(map);
+    };
+    map.on("style.load", handleStyleLoad);
+    if (map.isStyleLoaded()) handleStyleLoad();
 
     return () => {
+      map.off("style.load", handleStyleLoad);
       popupRef.current?.remove();
       popupRef.current = null;
       searchMarkerRef.current?.remove();
@@ -3956,7 +4140,7 @@ export default function MapPage() {
           lng: pos.coords.longitude,
           lat: pos.coords.latitude,
           accuracy: pos.coords.accuracy,
-          heading: pos.coords.heading,
+          heading: gpsDebugHeading ?? pos.coords.heading,
           speed: pos.coords.speed,
           ts: pos.timestamp,
         });
@@ -5376,6 +5560,41 @@ export default function MapPage() {
         {dockOpen && (
           <>
             <div className="dock">
+              <div className="dockSectionLabel">Base do mapa</div>
+              <div className="dockBase">
+                <div className="dockBaseToggle">
+                  <button
+                    type="button"
+                    className={`dockBaseOption ${mapBaseStyle === "streets" ? "dockBaseOptionActive" : ""}`}
+                    onClick={() => switchMapBaseStyle("streets")}
+                    aria-pressed={mapBaseStyle === "streets"}
+                  >
+                    <span className="dockBaseIcon" aria-hidden="true">
+                      <MapPinned size={15} strokeWidth={2.1} />
+                    </span>
+                    <span className="dockBaseText">
+                      <span className="dockBaseTextMain">Mapa</span>
+                      <span className="dockBaseTextSub">Visual escuro</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`dockBaseOption ${mapBaseStyle === "satellite" ? "dockBaseOptionActive" : ""}`}
+                    onClick={() => switchMapBaseStyle("satellite")}
+                    aria-pressed={mapBaseStyle === "satellite"}
+                  >
+                    <span className="dockBaseIcon" aria-hidden="true">
+                      <Satellite size={15} strokeWidth={2.1} />
+                    </span>
+                    <span className="dockBaseText">
+                      <span className="dockBaseTextMain">Satélite</span>
+                      <span className="dockBaseTextSub">Imagem aérea</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="dockDivider" />
               <div className="dockTitle">Camadas</div>
 
             {canViewCameras && (
@@ -5389,7 +5608,7 @@ export default function MapPage() {
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
-                    <img src={cameraIcon} alt="" />
+                    <img src={cameraIconSatellite} alt="" />
                   </span>
                   <span className="chipText">
                     <span>Câmeras</span>
@@ -5412,7 +5631,7 @@ export default function MapPage() {
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
-                    <img src={cameraIntelIcon} alt="" />
+                    <img src={cameraIntelIconSatellite} alt="" />
                   </span>
                   <span className="chipText">
                     <span>Super Câmeras Inteligentes</span>
@@ -6062,7 +6281,11 @@ export default function MapPage() {
                               flex: "0 0 auto",
                             }}
                           >
-                            <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                            <img
+                              src={cameraIconSatellite}
+                              alt=""
+                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                            />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
@@ -6153,7 +6376,11 @@ export default function MapPage() {
                             flex: "0 0 auto",
                           }}
                         >
-                          <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          <img
+                            src={cameraIntelIconSatellite}
+                            alt=""
+                            style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                          />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
@@ -6227,7 +6454,11 @@ export default function MapPage() {
                             flex: "0 0 auto",
                           }}
                         >
-                          <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                          <img
+                            src={cameraLprIcon}
+                            alt=""
+                            style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                          />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
@@ -6304,7 +6535,11 @@ export default function MapPage() {
                               flex: "0 0 auto",
                             }}
                           >
-                            <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                            <img
+                              src={radarIcon}
+                              alt=""
+                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                            />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
@@ -6994,7 +7229,11 @@ export default function MapPage() {
                                 flex: "0 0 auto",
                               }}
                             >
-                              <img src={cameraIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                              <img
+                                src={cameraIconSatellite}
+                                alt=""
+                                style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                              />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
@@ -7087,7 +7326,11 @@ export default function MapPage() {
                               flex: "0 0 auto",
                             }}
                           >
-                            <img src={cameraIntelIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                            <img
+                              src={cameraIntelIconSatellite}
+                              alt=""
+                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                            />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
@@ -7163,7 +7406,11 @@ export default function MapPage() {
                               flex: "0 0 auto",
                             }}
                           >
-                            <img src={cameraLprIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                            <img
+                              src={cameraLprIcon}
+                              alt=""
+                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                            />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
@@ -7243,7 +7490,11 @@ export default function MapPage() {
                                 flex: "0 0 auto",
                               }}
                             >
-                              <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                              <img
+                                src={radarIcon}
+                                alt=""
+                                style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
+                              />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div

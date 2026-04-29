@@ -791,7 +791,7 @@ export function AdminOrganizationsPanel({
                                 <img
                                   src={icon.src}
                                   alt=""
-                                  style={{ width: 11, height: 11, objectFit: "contain", opacity: 0.9 }}
+                                  style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
                                 />
                               ) : (
                                 <icon.Icon size={11} strokeWidth={2.1} />

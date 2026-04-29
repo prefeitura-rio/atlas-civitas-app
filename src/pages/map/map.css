@@ -870,6 +870,36 @@
     max-height: calc(var(--vvh, 100dvh) - 140px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     border-radius: 16px;
   }
+  .dockSectionLabel {
+    font-size: 9px;
+  }
+  .dockBase {
+    gap: 6px;
+    padding: 7px;
+    border-radius: 12px;
+  }
+  .dockBaseToggle {
+    gap: 5px;
+  }
+  .dockBaseOption {
+    padding: 8px 8px 8px 7px;
+    border-radius: 11px;
+    gap: 7px;
+  }
+  .dockBaseIcon {
+    width: 28px;
+    height: 28px;
+  }
+  .dockBaseText {
+    gap: 1px;
+  }
+  .dockBaseTextMain {
+    font-size: 11px;
+  }
+  .dockBaseTextSub {
+    font-size: 9px;
+    line-height: 1.1;
+  }
   .dockTitle {
     font-size: 11px;
   }
@@ -1481,6 +1511,94 @@
   letter-spacing: 0.02em;
   text-transform: uppercase;
   margin-bottom: 4px;
+}
+.dockSectionLabel {
+  font-size: 10px;
+  font-weight: 900;
+  color: rgba(0, 0, 0, 0.56);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.dockBase {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.96));
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.dockBaseToggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.dockBaseOption {
+  appearance: none;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 12px;
+  padding: 10px 10px 10px 9px;
+  cursor: pointer;
+  color: rgba(15, 23, 42, 0.82);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-family: inherit;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease,
+    color 0.12s ease;
+}
+.dockBaseOption:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(10, 40, 75, 0.18);
+}
+.dockBaseOption:focus-visible {
+  outline: 2px solid rgba(0, 192, 243, 0.4);
+  outline-offset: 2px;
+}
+.dockBaseOptionActive {
+  background: linear-gradient(180deg, #123865 0%, #0a284b 100%);
+  border-color: rgba(10, 40, 75, 0.18);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(10, 40, 75, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.dockBaseOptionActive:hover {
+  background: linear-gradient(180deg, #163f70 0%, #0c3156 100%);
+  border-color: rgba(10, 40, 75, 0.22);
+}
+.dockBaseIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(10, 40, 75, 0.08);
+  color: #0a284b;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.dockBaseOptionActive .dockBaseIcon {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.dockBaseText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+  line-height: 1.08;
+}
+.dockBaseTextMain {
+  font-size: 12px;
+  font-weight: 900;
+}
+.dockBaseTextSub {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.6);
+}
+.dockBaseOptionActive .dockBaseTextSub {
+  color: rgba(255, 255, 255, 0.74);
 }
 .dockChip {
   width: 100%;
