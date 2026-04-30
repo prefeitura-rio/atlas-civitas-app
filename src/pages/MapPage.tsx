@@ -16,7 +16,7 @@ import {
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Radar } from "./map/types";
-import { canAccessStreaming, isAdminRole, normalizeRole, roleLabel } from "./map/roles";
+import { canAccessStreaming, isAdminRole, normalizeRole } from "./map/roles";
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
@@ -6370,8 +6370,6 @@ export default function MapPage() {
                   <div style={{ fontSize: 13, color: "#0f172a" }}>{me?.full_name || "-"}</div>
                   <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Email</div>
                   <div style={{ fontSize: 13, color: "rgba(15,23,42,0.72)" }}>{me?.email || "-"}</div>
-                  <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Perfil de acesso</div>
-                  <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>{roleLabel(role)}</div>
                   <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Organização</div>
                   <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>{auth.organizationName || "-"}</div>
                 </div>
@@ -7310,14 +7308,10 @@ export default function MapPage() {
                     <div style={{ fontSize: 13, color: "#0f172a" }}>{me?.full_name || "-"}</div>
                     <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Email</div>
                     <div style={{ fontSize: 13, color: "rgba(15,23,42,0.72)" }}>{me?.email || "-"}</div>
-	                  <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Perfil de acesso</div>
-	                  <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>
-	                    {roleLabel(role)}
-	                  </div>
-	                  <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Organização</div>
-	                  <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>{auth.organizationName || "-"}</div>
-	                </div>
-	              </div>
+                    <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Organização</div>
+                    <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>{auth.organizationName || "-"}</div>
+                  </div>
+                </div>
 
                 <div
                   style={{
