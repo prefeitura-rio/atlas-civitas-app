@@ -6222,6 +6222,14 @@ export default function MapPage() {
             PERFIL
           </button>
 
+          <button
+            className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
+            onClick={() => togglePanel("civitas")}
+            title="Clique de novo pra fechar"
+          >
+            {civitasTabLabel}
+          </button>
+
           {isAdmin && (
             <button
               className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
