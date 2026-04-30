@@ -5846,7 +5846,7 @@ export default function MapPage() {
           </button>
 
           <button
-            className={`tabBtn tabBtnCivitas ${panel === "civitas" ? "tabBtnActive" : ""}`}
+            className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
             onClick={() => togglePanel("civitas")}
             title="Clique de novo pra fechar"
           >
@@ -6782,7 +6782,7 @@ export default function MapPage() {
               </button>
 
               <button
-                className={`tabBtn tabBtnCivitas ${panel === "civitas" ? "tabBtnActive" : ""}`}
+                className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
                 style={{
                   minHeight: 42,
                   display: "flex",

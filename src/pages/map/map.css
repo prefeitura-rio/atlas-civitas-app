@@ -129,46 +129,6 @@
   border: 1px solid rgba(0, 0, 0, 0.1);
   color: rgba(0, 0, 0, 0.92);
 }
-.tabBtnCivitas {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border: 1px solid rgba(10, 40, 75, 0.14);
-  background: linear-gradient(180deg, #123865 0%, #0a284b 100%);
-  color: #fff;
-  box-shadow:
-    0 10px 20px rgba(10, 40, 75, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, color 0.12s ease,
-    border-color 0.12s ease;
-}
-.tabBtnCivitas::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: linear-gradient(180deg, #00c0f3 0%, #8beaff 100%);
-  pointer-events: none;
-  z-index: 0;
-}
-.tabBtnCivitas:hover {
-  background: linear-gradient(180deg, #163f70 0%, #0c3156 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(10, 40, 75, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-.tabBtnCivitas:focus-visible {
-  outline: 2px solid rgba(0, 192, 243, 0.38);
-  outline-offset: 2px;
-}
-.tabBtnCivitas.tabBtnActive {
-  background: linear-gradient(180deg, #1a4a82 0%, #0e355f 100%);
-  border-color: rgba(0, 192, 243, 0.16);
-  color: #fff;
-  box-shadow: 0 14px 28px rgba(10, 40, 75, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  transform: translateY(-1px);
-}
 .subTab {
   appearance: none;
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -769,15 +729,6 @@
   .tabBtn {
     padding: 8px 10px;
     font-size: 12px;
-  }
-  .tabBtnCivitas {
-    padding: 9px 15px 9px 18px;
-    font-size: 12px;
-    box-shadow: 0 10px 20px rgba(10, 40, 75, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-  .tabBtnCivitas:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 22px rgba(10, 40, 75, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
   .subTab {
     padding: 7px 9px;
