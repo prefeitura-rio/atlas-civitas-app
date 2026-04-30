@@ -387,30 +387,30 @@ export function AdminUsersPanel({
     setErr(null);
     setSuccess(null);
 
-    const emailV = email.trim();
-    const fullNameV = fullName.trim();
-    const roleV = role.trim().toLowerCase();
-    const cpfInput = cpf.trim();
-    const cpfV = normalizeCpf(cpfInput);
-    const matriculaV = normalizeNullableText(matricula);
-    const orgaoV = orgao.trim();
-    const selectedOrg =
-      organizations.find((org) => org.id === organizationId) ||
-      organizations.find((org) => org.name === orgaoV);
-    const unidadeV = normalizeNullableText(selectedOrg?.organization_type || unidade);
-    const organizationIdV = selectedOrg?.id || normalizeIdLike(organizationId);
-    const organizationNameV = orgaoV || selectedOrg?.name || "";
+    const trimmedEmail = email.trim();
+    const trimmedFullName = fullName.trim();
+    const normalizedRole = role.trim().toLowerCase();
+    const normalizedCpf = normalizeCpf(cpf.trim());
+    const trimmedMatricula = matricula.trim();
+    const trimmedPassword = password.trim();
+    const trimmedOrgao = orgao.trim();
+    const selectedOrganization = organizations.find((org) => org.name === trimmedOrgao);
+    const organizationType = (selectedOrganization?.organization_type || unidade).trim();
 
-    if (!emailV) return setErr("Email é obrigatório.");
-    if (!fullNameV || fullNameV.length < 3) return setErr("Nome completo inválido.");
-    if (!roleV) return setErr("Role é obrigatório (admin/user/user_stream).");
-    if (!isUserRole(roleV)) return setErr("Role deve ser admin, user ou user_stream.");
-    if (!organizationIdV && !orgaoV) return setErr("Órgão é obrigatório.");
-    if (!cpfInput && !matriculaV) return setErr("Informe cpf ou matrícula.");
-    if (cpfInput && cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
+    if (!trimmedEmail) return setErr("Email é obrigatório.");
+    if (!trimmedFullName || trimmedFullName.length < 3) return setErr("Nome completo inválido.");
+    if (!normalizedRole) return setErr("Role é obrigatório (admin/user).");
+    if (!isUserRole(normalizedRole)) return setErr("Role deve ser admin ou user.");
+    if (!trimmedMatricula) return setErr("Matrícula é obrigatória.");
+    if (!trimmedOrgao) return setErr("Órgão é obrigatório.");
+    if (!selectedOrganization) return setErr("Selecione um órgão válido da lista.");
+    if (!organizationType) return setErr("Tipo da organização é obrigatório.");
 
     if (!id) {
-      if (!password || password.length < 8) return setErr("Senha mínima: 8 caracteres.");
+      if (normalizedCpf.length !== 11) return setErr("CPF deve ter 11 dígitos.");
+      if (!trimmedPassword || trimmedPassword.length < 8) return setErr("Senha mínima: 8 caracteres.");
+    } else if (trimmedPassword && trimmedPassword.length < 8) {
+      return setErr("Senha mínima: 8 caracteres.");
     }
 
     const creating = !id;
@@ -442,14 +442,27 @@ export function AdminUsersPanel({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            email: trimmedEmail,
+            full_name: trimmedFullName,
+            cpf: normalizedCpf,
+            matricula: trimmedMatricula,
+            unidade: organizationType || null,
+            orgao: trimmedOrgao,
+            password: trimmedPassword,
+            role: normalizedRole,
+          }),
         });
       } else {
-        const payload: Partial<UserPayload> & { is_active?: boolean } = {
-          is_active: isActive,
-          ...commonPayload,
-          role: roleV as UserRole,
-        };
+        const payload: any = { is_active: isActive };
+        if (trimmedEmail) payload.email = trimmedEmail;
+        if (trimmedFullName) payload.full_name = trimmedFullName;
+        if (normalizedRole) payload.role = normalizedRole;
+        if (normalizedCpf) payload.cpf = normalizedCpf;
+        if (trimmedMatricula) payload.matricula = trimmedMatricula;
+        payload.unidade = organizationType || null;
+        if (trimmedOrgao) payload.orgao = trimmedOrgao;
+        if (trimmedPassword) payload.password = trimmedPassword;
 
         await fetchJson(`${USERS_URL}/${id}`, {
           method: "PUT",
