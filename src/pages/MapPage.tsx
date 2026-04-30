@@ -1,5 +1,5 @@
 // src/pages/MapPage.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon, GeometryCollection } from "geojson";
@@ -682,9 +682,11 @@ function applyCodeColors(
   if (map.getLayer(LAYERS.cisp_line)) map.setPaintProperty(LAYERS.cisp_line, "line-color", cispExpr);
 }
 
-async function addImageOnce(map: mapboxgl.Map, id: string, url: string) {
-  if (map.hasImage(id)) return;
+async function upsertMapImage(map: mapboxgl.Map, id: string, url: string) {
   const image = await loadImagePromise(map, url);
+  if (map.hasImage(id)) {
+    map.removeImage(id);
+  }
   map.addImage(id, image as any, { pixelRatio: 2 });
 }
 
@@ -830,6 +832,95 @@ function asPoiKind(value: unknown): PoiKind | null {
     return value;
   }
   return null;
+}
+
+const POI_KIND_VISUALS: Record<
+  PoiKind,
+  {
+    accent: string;
+    border: string;
+    soft: string;
+    softStrong: string;
+    text: string;
+  }
+> = {
+  camera: {
+    accent: "#004881",
+    border: "rgba(0, 72, 129, 0.35)",
+    soft: "rgba(0, 72, 129, 0.14)",
+    softStrong: "rgba(0, 72, 129, 0.18)",
+    text: "#004881",
+  },
+  camera_intel: {
+    accent: "#ff00ff",
+    border: "rgba(255, 0, 255, 0.35)",
+    soft: "rgba(255, 0, 255, 0.14)",
+    softStrong: "rgba(255, 0, 255, 0.18)",
+    text: "#ff00ff",
+  },
+  camera_lpr: {
+    accent: "#6115f9",
+    border: "rgba(97, 21, 249, 0.35)",
+    soft: "rgba(97, 21, 249, 0.14)",
+    softStrong: "rgba(97, 21, 249, 0.18)",
+    text: "#6115f9",
+  },
+  radar: {
+    accent: "#f97316",
+    border: "rgba(249, 115, 22, 0.35)",
+    soft: "rgba(249, 115, 22, 0.14)",
+    softStrong: "rgba(249, 115, 22, 0.18)",
+    text: "#f97316",
+  },
+} as const;
+
+function getPoiVisual(kind: PoiKind) {
+  return POI_KIND_VISUALS[kind];
+}
+
+function getPoiIconSource(style: MapBaseStyle, kind: PoiKind) {
+  if (kind === "camera") return getCameraMarkerImageSource(style, "camera");
+  if (kind === "camera_intel") return getCameraMarkerImageSource(style, "camera_intel");
+  if (kind === "camera_lpr") return getCameraLprMarkerImageSource(style);
+  return getRadarMarkerImageSource(style);
+}
+
+function getPoiListIconBubbleStyle(kind: PoiKind): CSSProperties {
+  const visual = getPoiVisual(kind);
+  return {
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    border: `1px solid ${visual.border}`,
+    background: visual.soft,
+    display: "grid",
+    placeItems: "center",
+    flex: "0 0 auto",
+  };
+}
+
+function getPoiListIconStyle(): CSSProperties {
+  return {
+    width: 10,
+    height: 10,
+    objectFit: "contain",
+    opacity: 1,
+  };
+}
+
+function getPoiCodePillStyle(kind: PoiKind, compact = false): CSSProperties {
+  const visual = getPoiVisual(kind);
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    padding: compact ? "1px 7px" : "2px 8px",
+    fontSize: compact ? 10 : 11,
+    fontWeight: 800,
+    border: `1px solid ${visual.border}`,
+    background: visual.softStrong,
+    color: visual.text,
+  };
 }
 
 function poiCoordKey(lng: number, lat: number) {
@@ -2395,11 +2486,11 @@ export default function MapPage() {
       const radarImageSrc = getRadarMarkerImageSource(currentStyle);
       const cameraLprImageSrc = getCameraLprMarkerImageSource(currentStyle);
       await Promise.all([
-        addImageOnce(map, cameraImageId, cameraImageSrc),
-        addImageOnce(map, cameraIntelImageId, cameraIntelImageSrc),
-        addImageOnce(map, IMAGES.radar, radarImageSrc),
-        addImageOnce(map, IMAGES.camera_lpr, cameraLprImageSrc),
-        addImageOnce(map, IMAGES.search_pin, mapPinRed),
+        upsertMapImage(map, cameraImageId, cameraImageSrc),
+        upsertMapImage(map, cameraIntelImageId, cameraIntelImageSrc),
+        upsertMapImage(map, IMAGES.radar, radarImageSrc),
+        upsertMapImage(map, IMAGES.camera_lpr, cameraLprImageSrc),
+        upsertMapImage(map, IMAGES.search_pin, mapPinRed),
       ]);
     } catch (e) {
       console.warn("Falha ao carregar ícones do mapa:", e);
@@ -2742,6 +2833,8 @@ export default function MapPage() {
           if (!info || !info.kind) return "";
           const p = feature.properties || {};
           const code = getPointCollectionCode(p) || "-";
+          const visual = getPoiVisual(info.kind);
+          const iconSrc = getPoiIconSource(mapBaseStyleRef.current, info.kind);
           const streamLink =
             hasStreamingAccessRef.current && info.streamingUrl
               ? `<a class="cameraPopupStreamLink stackPopupStreamLink" href="${escapeHtml(info.streamingUrl)}" target="_blank" rel="noreferrer">Streaming</a>`
@@ -2750,7 +2843,15 @@ export default function MapPage() {
           return `
             <div class="stackPopupItem ${kindItemCardClass[info.kind]}">
               <div class="stackPopupItemHead">
-                <span class="stackPopupTag ${kindItemClass[info.kind]}">${escapeHtml(kindLabel[info.kind])}</span>
+                <div class="stackPopupItemHeadLeft">
+                  <span
+                    class="stackPopupItemIcon"
+                    style="border-color:${escapeHtml(visual.border)};background:${escapeHtml(visual.soft)};"
+                  >
+                    <img src="${escapeHtml(iconSrc)}" alt="" class="stackPopupItemIconImg" />
+                  </span>
+                  <span class="stackPopupTag ${kindItemClass[info.kind]}">${escapeHtml(kindLabel[info.kind])}</span>
+                </div>
                 <span class="stackPopupCode ${kindCodeClass[info.kind]}">${escapeHtml(String(code || "-"))}</span>
               </div>
               <div class="stackPopupTitle">${escapeHtml(info.title)}</div>
@@ -3080,7 +3181,9 @@ export default function MapPage() {
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
-                  <img src="${getCameraMarkerImageSource(mapBaseStyleRef.current, "camera")}" alt="" class="cameraPopupIcon" />
+                  <span class="cameraPopupIconBubble">
+                  <img src="${getPoiIconSource(mapBaseStyleRef.current, "camera")}" alt="" class="cameraPopupIcon" />
+                  </span>
                   <div class="cameraPopupKicker">Câmera</div>
                 </div>
                 <div class="cameraPopupTitle">${escapeHtml(p.name || "Câmera sem nome")}</div>
@@ -3135,7 +3238,9 @@ export default function MapPage() {
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
-                  <img src="${getCameraMarkerImageSource(mapBaseStyleRef.current, "camera_intel")}" alt="" class="cameraPopupIcon" />
+                  <span class="cameraPopupIconBubble">
+                    <img src="${getPoiIconSource(mapBaseStyleRef.current, "camera_intel")}" alt="" class="cameraPopupIcon" />
+                  </span>
                   <div class="cameraPopupKicker">Super Câmera Inteligente</div>
                 </div>
                 <div class="cameraPopupTitle">${escapeHtml(p.name || "Super Câmera Inteligente")}</div>
@@ -3188,7 +3293,9 @@ export default function MapPage() {
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
-                  <img src="${cameraLprIcon}" alt="" class="cameraPopupIcon" />
+                  <span class="cameraPopupIconBubble">
+                    <img src="${getPoiIconSource(mapBaseStyleRef.current, "camera_lpr")}" alt="" class="cameraPopupIcon" />
+                  </span>
                   <div class="cameraPopupKicker">Câmera LPR</div>
                 </div>
                 <div class="cameraPopupTitle">${escapeHtml(p.local || p.name || "Câmera LPR")}</div>
@@ -3242,7 +3349,9 @@ export default function MapPage() {
             <div class="cameraPopupHead">
               <div class="cameraPopupTitleWrap">
                 <div class="cameraPopupKickerRow">
-                  <img src="${radarIcon}" alt="" class="cameraPopupIcon" />
+                  <span class="cameraPopupIconBubble">
+                    <img src="${getPoiIconSource(mapBaseStyleRef.current, "radar")}" alt="" class="cameraPopupIcon" />
+                  </span>
                   <div class="cameraPopupKicker">Radar</div>
                 </div>
                 <div class="cameraPopupTitle">${escapeHtml(p.local || p.logradouro || p.localidade || "Radar")}</div>
@@ -6260,6 +6369,7 @@ export default function MapPage() {
               >
                 {listMode === "cameras" &&
                   (listItems as Camera[]).map((c) => {
+                    const iconSrc = getPoiIconSource(mapBaseStyle, "camera");
                     const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
                     return (
                       <div
@@ -6272,23 +6382,8 @@ export default function MapPage() {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div
-                            style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 999,
-                              border: "1px solid rgba(59,130,246,0.30)",
-                              background: "rgba(219,234,254,0.90)",
-                              display: "grid",
-                              placeItems: "center",
-                              flex: "0 0 auto",
-                            }}
-                          >
-                            <img
-                              src={cameraIconSatellite}
-                              alt=""
-                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                            />
+                          <div style={getPoiListIconBubbleStyle("camera")}>
+                            <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
@@ -6305,17 +6400,7 @@ export default function MapPage() {
                                 {c.name}
                               </div>
                               <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  borderRadius: 999,
-                                  padding: "2px 8px",
-                                  fontSize: 11,
-                                  fontWeight: 800,
-                                  border: "1px solid rgba(59,130,246,0.32)",
-                                  background: "rgba(219,234,254,0.92)",
-                                  color: "#1d4ed8",
-                                }}
+                                style={getPoiCodePillStyle("camera")}
                               >
                                 {c.code}
                               </span>
@@ -6356,164 +6441,121 @@ export default function MapPage() {
                   })}
 
                 {listMode === "inteligentes" &&
-                  (listItems as CameraIntel[]).map((c) => (
-                    <div
-                      key={c.code}
-                      className="listItem"
-                      onClick={() => {
-                        setSelectedCode(null);
-                        setSelectedRadar(null);
-                        focusOnDetection(c.lng, c.lat);
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: 999,
-                            border: "1px solid rgba(234,88,12,0.30)",
-                            background: "rgba(255,237,213,0.92)",
-                            display: "grid",
-                            placeItems: "center",
-                            flex: "0 0 auto",
-                          }}
-                        >
-                          <img
-                            src={cameraIntelIconSatellite}
-                            alt=""
-                            style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                          />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "normal",
-                                overflow: "visible",
-                                textOverflow: "clip",
-                                wordBreak: "break-word",
-                              }}
-                            >
-                              {c.name}
-                            </div>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                borderRadius: 999,
-                                padding: "2px 8px",
-                                fontSize: 11,
-                                fontWeight: 800,
-                                border: "1px solid rgba(234,88,12,0.30)",
-                                background: "rgba(255,237,213,0.92)",
-                                color: "#c2410c",
-                              }}
-                            >
-                              {c.code}
-                            </span>
+                  (listItems as CameraIntel[]).map((c) => {
+                    const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
+                    return (
+                      <div
+                        key={c.code}
+                        className="listItem"
+                        onClick={() => {
+                          setSelectedCode(null);
+                          setSelectedRadar(null);
+                          focusOnDetection(c.lng, c.lat);
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={getPoiListIconBubbleStyle("camera_intel")}>
+                            <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                           </div>
-                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                            <span
-                              style={{
-                                fontSize: 11,
-                                opacity: 0.8,
-                                border: "1px solid rgba(15,23,42,0.14)",
-                                borderRadius: 999,
-                                padding: "2px 8px",
-                              }}
-                            >
-                              Responsável: {c.responsavel || (c as any).responsavel || "-"}
-                            </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {c.name}
+                              </div>
+                              <span style={getPoiCodePillStyle("camera_intel")}>{c.code}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  opacity: 0.8,
+                                  border: "1px solid rgba(15,23,42,0.14)",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                }}
+                              >
+                                Responsável: {c.responsavel || (c as any).responsavel || "-"}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                 {listMode === "lpr" &&
-                  (listItems as CameraLpr[]).map((c) => (
-                    <div
-                      key={getPointCollectionKey(c) || c.code}
-                      className="listItem"
-                      onClick={() => {
-                        setSelectedCode(null);
-                        setSelectedRadar(null);
-                        focusOnDetection(c.lng, c.lat);
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: 999,
-                            border: "1px solid rgba(22,163,74,0.30)",
-                            background: "rgba(220,252,231,0.92)",
-                            display: "grid",
-                            placeItems: "center",
-                            flex: "0 0 auto",
-                          }}
-                        >
-                          <img
-                            src={cameraLprIcon}
-                            alt=""
-                            style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                          />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 13,
-                                whiteSpace: "normal",
-                                overflow: "visible",
-                                textOverflow: "clip",
-                                wordBreak: "break-word",
-                              }}
-                            >
-                              {getPointCollectionTitle(c) || c.name}
-                            </div>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                borderRadius: 999,
-                                padding: "2px 8px",
-                                fontSize: 11,
-                                fontWeight: 800,
-                                border: "1px solid rgba(22,163,74,0.30)",
-                                background: "rgba(220,252,231,0.92)",
-                                color: "#166534",
-                              }}
-                            >
-                              {getPointCollectionCode(c)}
-                            </span>
+                  (listItems as CameraLpr[]).map((c) => {
+                    const iconSrc = getPoiIconSource(mapBaseStyle, "camera_lpr");
+                    return (
+                      <div
+                        key={getPointCollectionKey(c) || c.code}
+                        className="listItem"
+                        onClick={() => {
+                          setSelectedCode(null);
+                          setSelectedRadar(null);
+                          focusOnDetection(c.lng, c.lat);
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={getPoiListIconBubbleStyle("camera_lpr")}>
+                            <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                           </div>
-                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              Local: {getPointCollectionTitle(c) || "-"}
-                            </span>
-                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              Bairro: {c.bairro || c.neighborhood || getLprNeighborhood(c) || "-"}
-                            </span>
-                            <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
-                              Sentido: {c.sentido || c.direction || "-"}
-                            </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  whiteSpace: "normal",
+                                  overflow: "visible",
+                                  textOverflow: "clip",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {getPointCollectionTitle(c) || c.name}
+                              </div>
+                              <span style={getPoiCodePillStyle("camera_lpr")}>{getPointCollectionCode(c)}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  opacity: 0.8,
+                                  border: "1px solid rgba(15,23,42,0.14)",
+                                  borderRadius: 999,
+                                  padding: "2px 8px",
+                                }}
+                              >
+                                Local: {getPointCollectionTitle(c) || "-"}
+                              </span>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                Bairro: {c.bairro || c.neighborhood || getLprNeighborhood(c) || "-"}
+                              </span>
+                              <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
+                                Sentido: {c.sentido || c.direction || "-"}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                 {listMode === "radares" &&
                   (listItems as Radar[]).map((r) => {
                     const lat = Number(r.lat ?? r.latitude);
                     const lng = Number(r.lng ?? r.longitude);
                     const ok = Number.isFinite(lat) && Number.isFinite(lng);
+                    const iconSrc = getPoiIconSource(mapBaseStyle, "radar");
                     return (
                       <div
                         key={getPointCollectionKey(r) || r.codcet}
@@ -6526,23 +6568,8 @@ export default function MapPage() {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div
-                            style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 999,
-                              border: "1px solid rgba(234,88,12,0.30)",
-                              background: "rgba(255,237,213,0.92)",
-                              display: "grid",
-                              placeItems: "center",
-                              flex: "0 0 auto",
-                            }}
-                          >
-                            <img
-                              src={radarIcon}
-                              alt=""
-                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                            />
+                          <div style={getPoiListIconBubbleStyle("radar")}>
+                            <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
@@ -6558,21 +6585,7 @@ export default function MapPage() {
                               >
                                 {getPointCollectionTitle(r) || r.logradouro || r.localidade || "Radar"}
                               </div>
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  borderRadius: 999,
-                                  padding: "2px 8px",
-                                  fontSize: 11,
-                                  fontWeight: 800,
-                                  border: "1px solid rgba(234,88,12,0.30)",
-                                  background: "rgba(255,237,213,0.92)",
-                                  color: "#c2410c",
-                                }}
-                              >
-                                {getPointCollectionCode(r)}
-                              </span>
+                              <span style={getPoiCodePillStyle("radar")}>{getPointCollectionCode(r)}</span>
                             </div>
                             <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                               <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>
@@ -7207,6 +7220,7 @@ export default function MapPage() {
                 >
                   {listMode === "cameras" &&
                     (listItems as Camera[]).map((c) => {
+                      const iconSrc = getPoiIconSource(mapBaseStyle, "camera");
                       const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
                       return (
                         <div
@@ -7220,23 +7234,8 @@ export default function MapPage() {
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                            <div
-                              style={{
-                                width: 18,
-                                height: 18,
-                                borderRadius: 999,
-                                border: "1px solid rgba(59,130,246,0.30)",
-                                background: "rgba(219,234,254,0.90)",
-                                display: "grid",
-                                placeItems: "center",
-                                flex: "0 0 auto",
-                              }}
-                            >
-                              <img
-                                src={cameraIconSatellite}
-                                alt=""
-                                style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                              />
+                            <div style={getPoiListIconBubbleStyle("camera")}>
+                              <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
@@ -7253,21 +7252,7 @@ export default function MapPage() {
                                 >
                                   {c.name}
                                 </div>
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    borderRadius: 999,
-                                    padding: "1px 7px",
-                                    fontSize: 10,
-                                    fontWeight: 800,
-                                    border: "1px solid rgba(59,130,246,0.32)",
-                                    background: "rgba(219,234,254,0.92)",
-                                    color: "#1d4ed8",
-                                  }}
-                                >
-                                  {c.code}
-                                </span>
+                                <span style={getPoiCodePillStyle("camera", true)}>{c.code}</span>
                               </div>
                               <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                                 <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
@@ -7304,169 +7289,118 @@ export default function MapPage() {
                       );
                     })}
 
-                  {listMode === "inteligentes" &&
-                    (listItems as CameraIntel[]).map((c) => (
-                      <div
-                        key={c.code}
-                        className="listItem"
-                        onClick={() => {
-                          setSelectedCode(null);
-                          setSelectedRadar(null);
-                          focusOnDetection(c.lng, c.lat);
-                          setPanelOpen(false);
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                          <div
-                            style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 999,
-                              border: "1px solid rgba(234,88,12,0.30)",
-                              background: "rgba(255,237,213,0.92)",
-                              display: "grid",
-                              placeItems: "center",
-                              flex: "0 0 auto",
-                            }}
-                          >
-                            <img
-                              src={cameraIntelIconSatellite}
-                              alt=""
-                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                            />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
-                              <div
-                                style={{
-                                  fontWeight: 900,
-                                  fontSize: 12,
-                                  lineHeight: 1.2,
-                                  whiteSpace: "normal",
-                                  overflow: "visible",
-                                  textOverflow: "clip",
-                                  wordBreak: "break-word",
-                                }}
-                              >
-                                {c.name}
-                              </div>
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  borderRadius: 999,
-                                  padding: "1px 7px",
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  border: "1px solid rgba(234,88,12,0.30)",
-                                  background: "rgba(255,237,213,0.92)",
-                                  color: "#c2410c",
-                                }}
-                              >
-                                {c.code}
-                              </span>
+                {listMode === "inteligentes" &&
+                    (listItems as CameraIntel[]).map((c) => {
+                      const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
+                      return (
+                        <div
+                          key={c.code}
+                          className="listItem"
+                          onClick={() => {
+                            setSelectedCode(null);
+                            setSelectedRadar(null);
+                            focusOnDetection(c.lng, c.lat);
+                            setPanelOpen(false);
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                            <div style={getPoiListIconBubbleStyle("camera_intel")}>
+                              <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                             </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  opacity: 0.8,
-                                  border: "1px solid rgba(15,23,42,0.14)",
-                                  borderRadius: 999,
-                                  padding: "1px 7px",
-                                }}
-                              >
-                                Responsável: {c.responsavel || (c as any).responsavel || "-"}
-                              </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 12,
+                                    lineHeight: 1.2,
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                    textOverflow: "clip",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {c.name}
+                                </div>
+                                <span style={getPoiCodePillStyle("camera_intel", true)}>{c.code}</span>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    opacity: 0.8,
+                                    border: "1px solid rgba(15,23,42,0.14)",
+                                    borderRadius: 999,
+                                    padding: "1px 7px",
+                                  }}
+                                >
+                                  Responsável: {c.responsavel || (c as any).responsavel || "-"}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
-                  {listMode === "lpr" &&
-                    (listItems as CameraLpr[]).map((c) => (
-                      <div
-                        key={getPointCollectionKey(c) || c.code}
-                        className="listItem"
-                        onClick={() => {
-                          setSelectedCode(null);
-                          setSelectedRadar(null);
-                          focusOnDetection(c.lng, c.lat);
-                          setPanelOpen(false);
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                          <div
-                            style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 999,
-                              border: "1px solid rgba(22,163,74,0.30)",
-                              background: "rgba(220,252,231,0.92)",
-                              display: "grid",
-                              placeItems: "center",
-                              flex: "0 0 auto",
-                            }}
-                          >
-                            <img
-                              src={cameraLprIcon}
-                              alt=""
-                              style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                            />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
-                              <div
-                              style={{
-                                fontWeight: 900,
-                                fontSize: 12,
-                                lineHeight: 1.2,
-                                whiteSpace: "normal",
-                                  overflow: "visible",
-                                textOverflow: "clip",
-                                wordBreak: "break-word",
-                              }}
-                            >
-                                {getPointCollectionTitle(c) || c.name}
-                              </div>
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  borderRadius: 999,
-                                  padding: "1px 7px",
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  border: "1px solid rgba(22,163,74,0.30)",
-                                  background: "rgba(220,252,231,0.92)",
-                                  color: "#166534",
-                                }}
-                              >
-                                {getPointCollectionCode(c)}
-                              </span>
+                {listMode === "lpr" &&
+                    (listItems as CameraLpr[]).map((c) => {
+                      const iconSrc = getPoiIconSource(mapBaseStyle, "camera_lpr");
+                      return (
+                        <div
+                          key={getPointCollectionKey(c) || c.code}
+                          className="listItem"
+                          onClick={() => {
+                            setSelectedCode(null);
+                            setSelectedRadar(null);
+                            focusOnDetection(c.lng, c.lat);
+                            setPanelOpen(false);
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                            <div style={getPoiListIconBubbleStyle("camera_lpr")}>
+                              <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                             </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                Local: {getPointCollectionTitle(c) || "-"}
-                              </span>
-                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                Bairro: {c.bairro || c.neighborhood || getLprNeighborhood(c) || "-"}
-                              </span>
-                              <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
-                                Sentido: {c.sentido || c.direction || "-"}
-                              </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+                                <div
+                                  style={{
+                                    fontWeight: 900,
+                                    fontSize: 12,
+                                    lineHeight: 1.2,
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                    textOverflow: "clip",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {getPointCollectionTitle(c) || c.name}
+                                </div>
+                                <span style={getPoiCodePillStyle("camera_lpr", true)}>{getPointCollectionCode(c)}</span>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                  Local: {getPointCollectionTitle(c) || "-"}
+                                </span>
+                                <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                  Bairro: {c.bairro || c.neighborhood || getLprNeighborhood(c) || "-"}
+                                </span>
+                                <span style={{ fontSize: 10, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "1px 7px" }}>
+                                  Sentido: {c.sentido || c.direction || "-"}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
-                  {listMode === "radares" &&
+                {listMode === "radares" &&
                     (listItems as Radar[]).map((r) => {
                       const lat = Number(r.lat ?? r.latitude);
                       const lng = Number(r.lng ?? r.longitude);
                       const ok = Number.isFinite(lat) && Number.isFinite(lng);
+                      const iconSrc = getPoiIconSource(mapBaseStyle, "radar");
 
                       return (
                         <div
@@ -7481,23 +7415,8 @@ export default function MapPage() {
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div
-                              style={{
-                                width: 18,
-                                height: 18,
-                                borderRadius: 999,
-                                border: "1px solid rgba(234,88,12,0.30)",
-                                background: "rgba(255,237,213,0.92)",
-                                display: "grid",
-                                placeItems: "center",
-                                flex: "0 0 auto",
-                              }}
-                            >
-                              <img
-                                src={radarIcon}
-                                alt=""
-                                style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
-                              />
+                            <div style={getPoiListIconBubbleStyle("radar")}>
+                              <img src={iconSrc} alt="" style={getPoiListIconStyle()} />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div
@@ -7521,21 +7440,7 @@ export default function MapPage() {
                                 >
                                   {getPointCollectionTitle(r) || r.logradouro || r.localidade || "Radar"}
                                 </div>
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    borderRadius: 999,
-                                    padding: "2px 8px",
-                                    fontSize: 11,
-                                    fontWeight: 800,
-                                    border: "1px solid rgba(234,88,12,0.30)",
-                                    background: "rgba(255,237,213,0.92)",
-                                    color: "#c2410c",
-                                  }}
-                                >
-                                  {getPointCollectionCode(r)}
-                                </span>
+                                <span style={getPoiCodePillStyle("radar", true)}>{getPointCollectionCode(r)}</span>
                               </div>
                               <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                                 <span style={{ fontSize: 11, opacity: 0.8, border: "1px solid rgba(15,23,42,0.14)", borderRadius: 999, padding: "2px 8px" }}>

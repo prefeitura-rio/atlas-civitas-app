@@ -1029,6 +1029,11 @@
 }
 
 .cameraPopup {
+  --popup-accent: #004881;
+  --popup-accent-soft: rgba(0, 72, 129, 0.12);
+  --popup-accent-soft-strong: rgba(0, 72, 129, 0.18);
+  --popup-accent-border: rgba(0, 72, 129, 0.36);
+  --popup-accent-text: #004881;
   display: grid;
   gap: 10px;
   width: 100%;
@@ -1037,6 +1042,30 @@
   color: #0f172a;
   box-sizing: border-box;
   position: relative;
+}
+
+.cameraPopup--intel {
+  --popup-accent: #ff00ff;
+  --popup-accent-soft: rgba(255, 0, 255, 0.12);
+  --popup-accent-soft-strong: rgba(255, 0, 255, 0.18);
+  --popup-accent-border: rgba(255, 0, 255, 0.36);
+  --popup-accent-text: #ff00ff;
+}
+
+.cameraPopup--lpr {
+  --popup-accent: #6115f9;
+  --popup-accent-soft: rgba(97, 21, 249, 0.12);
+  --popup-accent-soft-strong: rgba(97, 21, 249, 0.18);
+  --popup-accent-border: rgba(97, 21, 249, 0.36);
+  --popup-accent-text: #6115f9;
+}
+
+.cameraPopup--radar {
+  --popup-accent: #f97316;
+  --popup-accent-soft: rgba(249, 115, 22, 0.12);
+  --popup-accent-soft-strong: rgba(249, 115, 22, 0.18);
+  --popup-accent-border: rgba(249, 115, 22, 0.36);
+  --popup-accent-text: #f97316;
 }
 
 .cameraPopupCloseBtn {
@@ -1099,7 +1128,20 @@
   width: 13px;
   height: 13px;
   object-fit: contain;
-  opacity: 0.78;
+  opacity: 1;
+}
+
+.cameraPopupIconBubble {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--popup-accent-border);
+  background: var(--popup-accent-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .cameraPopupKicker {
@@ -1125,43 +1167,13 @@
   padding: 2px 7px;
   font-size: 11px;
   font-weight: 800;
-  color: #1d4ed8;
-  border: 1px solid rgba(59, 130, 246, 0.32);
-  background: rgba(219, 234, 254, 0.92);
+  color: var(--popup-accent-text);
+  border: 1px solid var(--popup-accent-border);
+  background: var(--popup-accent-soft-strong);
   max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cameraPopup--intel .cameraPopupCode {
-  border-color: rgba(234, 88, 12, 0.25);
-  background: rgba(255, 237, 213, 0.9);
-  color: #9a3412;
-}
-
-.cameraPopup--lpr .cameraPopupCode {
-  border-color: rgba(22, 163, 74, 0.28);
-  background: rgba(220, 252, 231, 0.9);
-  color: #166534;
-}
-
-.cameraPopup--radar .cameraPopupCode {
-  border-color: rgba(234, 88, 12, 0.3);
-  background: rgba(255, 237, 213, 0.92);
-  color: #c2410c;
-}
-
-.cameraPopup--intel .cameraPopupIcon {
-  opacity: 0.9;
-}
-
-.cameraPopup--lpr .cameraPopupIcon {
-  opacity: 0.9;
-}
-
-.cameraPopup--radar .cameraPopupIcon {
-  opacity: 0.9;
 }
 
 .cameraPopupInfoGrid {
@@ -1321,27 +1333,27 @@
 }
 
 .stackPopupChip--camera {
-  background: rgba(219, 234, 254, 0.95);
-  color: #1d4ed8;
-  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(0, 72, 129, 0.14);
+  color: #004881;
+  border-color: rgba(0, 72, 129, 0.35);
 }
 
 .stackPopupChip--intel {
-  background: rgba(255, 237, 213, 0.9);
-  color: #9a3412;
-  border-color: rgba(234, 88, 12, 0.3);
+  background: rgba(255, 0, 255, 0.14);
+  color: #ff00ff;
+  border-color: rgba(255, 0, 255, 0.35);
 }
 
 .stackPopupChip--lpr {
-  background: rgba(220, 252, 231, 0.98);
-  color: #15803d;
-  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(97, 21, 249, 0.14);
+  color: #6115f9;
+  border-color: rgba(97, 21, 249, 0.35);
 }
 
 .stackPopupChip--radar {
-  background: rgba(255, 237, 213, 0.95);
-  color: #c2410c;
-  border-color: rgba(234, 88, 12, 0.32);
+  background: rgba(249, 115, 22, 0.14);
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.35);
 }
 
 .stackPopupList {
@@ -1363,19 +1375,19 @@
 }
 
 .stackPopupItem--camera {
-  border-left: 3px solid rgba(59, 130, 246, 0.85);
+  border-left: 3px solid #004881;
 }
 
 .stackPopupItem--intel {
-  border-left: 3px solid rgba(234, 88, 12, 0.8);
+  border-left: 3px solid #ff00ff;
 }
 
 .stackPopupItem--lpr {
-  border-left: 3px solid rgba(34, 197, 94, 0.92);
+  border-left: 3px solid #6115f9;
 }
 
 .stackPopupItem--radar {
-  border-left: 3px solid rgba(234, 88, 12, 0.72);
+  border-left: 3px solid #f97316;
 }
 
 .stackPopupItemHead {
@@ -1383,6 +1395,33 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.stackPopupItemHeadLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.stackPopupItemIcon {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+}
+
+.stackPopupItemIconImg {
+  width: 10px;
+  height: 10px;
+  object-fit: contain;
+  display: block;
+  opacity: 1;
 }
 
 .stackPopupTag {
@@ -1395,27 +1434,27 @@
 }
 
 .stackPopupTag--camera {
-  background: rgba(219, 234, 254, 0.94);
-  color: #1d4ed8;
-  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(0, 72, 129, 0.14);
+  color: #004881;
+  border-color: rgba(0, 72, 129, 0.35);
 }
 
 .stackPopupTag--intel {
-  background: rgba(255, 237, 213, 0.9);
-  color: #9a3412;
-  border-color: rgba(234, 88, 12, 0.3);
+  background: rgba(255, 0, 255, 0.14);
+  color: #ff00ff;
+  border-color: rgba(255, 0, 255, 0.35);
 }
 
 .stackPopupTag--lpr {
-  background: rgba(220, 252, 231, 0.98);
-  color: #15803d;
-  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(97, 21, 249, 0.14);
+  color: #6115f9;
+  border-color: rgba(97, 21, 249, 0.35);
 }
 
 .stackPopupTag--radar {
-  background: rgba(255, 237, 213, 0.95);
-  color: #c2410c;
-  border-color: rgba(234, 88, 12, 0.32);
+  background: rgba(249, 115, 22, 0.14);
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.35);
 }
 
 .stackPopupCode {
@@ -1430,29 +1469,28 @@
   box-shadow: none;
 }
 
-.stackPopupCode--camera,
-.stackPopupCode--intel {
-  border-color: rgba(59, 130, 246, 0.45);
-  background: linear-gradient(135deg, rgba(219, 234, 254, 0.98), rgba(191, 219, 254, 0.96));
-  color: #1d4ed8;
+.stackPopupCode--camera {
+  border-color: rgba(0, 72, 129, 0.36);
+  background: rgba(0, 72, 129, 0.12);
+  color: #004881;
 }
 
 .stackPopupCode--intel {
-  border-color: rgba(234, 88, 12, 0.45);
-  background: linear-gradient(135deg, rgba(255, 237, 213, 0.98), rgba(254, 215, 170, 0.96));
-  color: #b45309;
+  border-color: rgba(255, 0, 255, 0.36);
+  background: rgba(255, 0, 255, 0.12);
+  color: #ff00ff;
 }
 
 .stackPopupCode--lpr {
-  border-color: rgba(34, 197, 94, 0.45);
-  background: linear-gradient(135deg, rgba(220, 252, 231, 0.99), rgba(187, 247, 208, 0.98));
-  color: #15803d;
+  border-color: rgba(97, 21, 249, 0.36);
+  background: rgba(97, 21, 249, 0.12);
+  color: #6115f9;
 }
 
 .stackPopupCode--radar {
-  border-color: rgba(234, 88, 12, 0.32);
-  background: rgba(255, 237, 213, 0.95);
-  color: #c2410c;
+  border-color: rgba(249, 115, 22, 0.36);
+  background: rgba(249, 115, 22, 0.12);
+  color: #f97316;
 }
 
 .stackPopupTitle {

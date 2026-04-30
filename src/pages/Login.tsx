@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../app/auth";
 
-import civitasLogo from "@/assets/civitas_icon2.png";
+import civitasLogo from "@/assets/logo_civitasrio.png";
 import prefeituraLogo from "@/assets/prefeitura_icon.png";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -208,7 +208,7 @@ export default function Login() {
             src={prefeituraLogo}
             alt="Prefeitura do Rio"
             className="loginLogo"
-            style={{ height: 34, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
+            style={{ height: 44, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
 
@@ -217,7 +217,7 @@ export default function Login() {
             src={civitasLogo}
             alt="Civitas Rio"
             className="loginLogo"
-            style={{ height: 34, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
+            style={{ height: 44, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
         
