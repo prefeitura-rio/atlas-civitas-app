@@ -102,6 +102,8 @@ export type AdminUser = {
   cpf?: string | null;
   matricula?: string | null;
   unidade?: string | null;
+  organization_id?: string | null;
+  organization_name?: string | null;
   orgao?: string | null;
   is_active: boolean;
   created_at?: string;

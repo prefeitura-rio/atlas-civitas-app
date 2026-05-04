@@ -10,9 +10,22 @@ const LOWER = "abcdefghijklmnopqrstuvwxyz";
 const PASSWORD_CHARS = `${UPPER}${LOWER}`;
 const SUGGESTED_PASSWORD_SIZE = 10;
 type OrganizationOption = {
+  id: string;
   name: string;
   organization_type: string;
   jurisdiction_level: string;
+};
+
+type UserPayload = {
+  full_name: string;
+  email: string;
+  password?: string;
+  role?: UserRole;
+  organization_id?: string;
+  orgao?: string;
+  unidade?: string | null;
+  cpf?: string | null;
+  matricula?: string | null;
 };
 
 function normalizeNullableText(value: unknown) {
@@ -20,8 +33,10 @@ function normalizeNullableText(value: unknown) {
   return normalized || null;
 }
 
-function isPrivateOrganization(value: unknown) {
-  return typeof value === "string" && value.trim().toLowerCase() === "privada";
+function normalizeIdLike(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const normalized = typeof value === "string" ? value.trim() : String(value).trim();
+  return normalized || null;
 }
 
 function formatMatriculaLabel(value: unknown) {
@@ -140,9 +155,9 @@ export function AdminUsersPanel({
   const [fullName, setFullName] = useState("");
   const [cpf, setCpf] = useState("");
   const [matricula, setMatricula] = useState("");
-  const [matriculaTouched, setMatriculaTouched] = useState(false);
   const [unidade, setUnidade] = useState("");
   const [orgao, setOrgao] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
   const [password, setPassword] = useState("");
   const [suggestedPassword, setSuggestedPassword] = useState("");
   const [passwordCopied, setPasswordCopied] = useState(false);
@@ -167,9 +182,9 @@ export function AdminUsersPanel({
     setFullName("");
     setCpf("");
     setMatricula("");
-    setMatriculaTouched(false);
     setUnidade("");
     setOrgao("");
+    setOrganizationId("");
     setPassword("");
     setSuggestedPassword("");
     setPasswordCopied(false);
@@ -191,7 +206,11 @@ export function AdminUsersPanel({
 
       const list: AdminUser[] = (Array.isArray(data) ? data : []).map((raw: any) => ({
         ...raw,
+        cpf: normalizeNullableText(raw?.cpf),
         matricula: normalizeNullableText(raw?.matricula),
+        orgao: normalizeNullableText(raw?.orgao || raw?.organization_name || raw?.organization?.name),
+        organization_id: normalizeIdLike(raw?.organization_id || raw?.organization?.id || raw?.org_id),
+        organization_name: normalizeNullableText(raw?.organization_name || raw?.organization?.name),
       }));
 
       setItems(list);
@@ -219,13 +238,14 @@ export function AdminUsersPanel({
 
       const normalized: OrganizationOption[] = list
         .map((raw: any) => ({
+          id: normalizeIdLike(raw?.id || raw?.organization_id || raw?.uuid) || "",
           name: (raw?.name ?? "").toString().trim(),
           organization_type: (raw?.organization_type ?? "").toString().trim(),
           jurisdiction_level: (raw?.jurisdiction_level ?? "").toString().trim(),
         }))
-        .filter((org: OrganizationOption) => org.name);
+        .filter((org: OrganizationOption) => org.id && org.name);
       const dedup = Array.from(
-        new Map<string, OrganizationOption>(normalized.map((org) => [org.name, org])).values()
+        new Map<string, OrganizationOption>(normalized.map((org) => [org.id, org])).values()
       ).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
       setOrganizations(dedup);
     } catch {
@@ -286,10 +306,13 @@ export function AdminUsersPanel({
     setFullName(u.full_name || "");
     setCpf(formatCpf(u.cpf || ""));
     setMatricula(u.matricula || "");
-    setMatriculaTouched(false);
-    const nextOrgao = (u.orgao || "").toString();
-    const matchedOrg = organizations.find((org) => org.name === nextOrgao);
-    setOrgao(nextOrgao);
+    const nextOrganizationId = normalizeIdLike(u.organization_id);
+    const nextOrgao = (u.orgao || u.organization_name || "").toString().trim();
+    const matchedOrg =
+      organizations.find((org) => nextOrganizationId && org.id === nextOrganizationId) ||
+      organizations.find((org) => nextOrgao && org.name === nextOrgao);
+    setOrganizationId(nextOrganizationId || matchedOrg?.id || "");
+    setOrgao(nextOrgao || matchedOrg?.name || "");
     setUnidade((u.unidade || matchedOrg?.organization_type || "").toString());
     setPassword("");
     setSuggestedPassword("");
@@ -367,61 +390,66 @@ export function AdminUsersPanel({
     const emailV = email.trim();
     const fullNameV = fullName.trim();
     const roleV = role.trim().toLowerCase();
-    const cpfV = normalizeCpf(cpf.trim());
+    const cpfInput = cpf.trim();
+    const cpfV = normalizeCpf(cpfInput);
     const matriculaV = normalizeNullableText(matricula);
     const orgaoV = orgao.trim();
-    const selectedOrg = organizations.find((org) => org.name === orgaoV);
-    const unidadeV = (selectedOrg?.organization_type || unidade).trim();
-    const requiresMatricula = !isPrivateOrganization(selectedOrg?.jurisdiction_level);
+    const selectedOrg =
+      organizations.find((org) => org.id === organizationId) ||
+      organizations.find((org) => org.name === orgaoV);
+    const unidadeV = normalizeNullableText(selectedOrg?.organization_type || unidade);
+    const organizationIdV = selectedOrg?.id || normalizeIdLike(organizationId);
+    const organizationNameV = orgaoV || selectedOrg?.name || "";
 
     if (!emailV) return setErr("Email é obrigatório.");
     if (!fullNameV || fullNameV.length < 3) return setErr("Nome completo inválido.");
     if (!roleV) return setErr("Role é obrigatório (admin/user/user_stream).");
     if (!isUserRole(roleV)) return setErr("Role deve ser admin, user ou user_stream.");
-    if (!orgaoV) return setErr("Órgão é obrigatório.");
-    if (!selectedOrg) return setErr("Selecione um órgão válido da lista.");
-    if (!unidadeV) return setErr("Tipo da organização é obrigatório.");
-    if (requiresMatricula && !matriculaV) {
-      return setErr("Matrícula é obrigatória para organizações públicas.");
-    }
+    if (!organizationIdV && !orgaoV) return setErr("Órgão é obrigatório.");
+    if (!cpfInput && !matriculaV) return setErr("Informe cpf ou matrícula.");
+    if (cpfInput && cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
 
     if (!id) {
-      if (cpfV.length !== 11) return setErr("CPF deve ter 11 dígitos.");
       if (!password || password.length < 8) return setErr("Senha mínima: 8 caracteres.");
     }
 
     const creating = !id;
+    const organizationPayload = organizationIdV
+      ? { organization_id: organizationIdV }
+      : organizationNameV
+      ? { orgao: organizationNameV }
+      : {};
+    const commonPayload = {
+      email: emailV,
+      full_name: fullNameV,
+      cpf: cpfV || null,
+      matricula: matriculaV || null,
+      unidade: unidadeV || null,
+      ...organizationPayload,
+    };
 
     try {
       if (creating) {
+        const payload: UserPayload = {
+          ...commonPayload,
+          password,
+          role: roleV as UserRole,
+        };
+
         await fetchJson(USERS_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            email: emailV,
-            full_name: fullNameV,
-            cpf: cpfV,
-            matricula: requiresMatricula ? matriculaV : matriculaV || null,
-            unidade: unidadeV || null,
-            orgao: orgaoV,
-            password,
-            role: roleV,
-          }),
+          body: JSON.stringify(payload),
         });
       } else {
-        const payload: any = { is_active: isActive };
-        if (emailV) payload.email = emailV;
-        if (fullNameV) payload.full_name = fullNameV;
-        if (roleV) payload.role = roleV;
-        if (cpfV) payload.cpf = cpfV;
-        if (matriculaTouched) {
-          payload.matricula = matriculaV;
-        }
-        payload.unidade = unidadeV || null;
-        if (orgaoV) payload.orgao = orgaoV;
+        const payload: Partial<UserPayload> & { is_active?: boolean } = {
+          is_active: isActive,
+          ...commonPayload,
+          role: roleV as UserRole,
+        };
 
         await fetchJson(`${USERS_URL}/${id}`, {
           method: "PUT",
@@ -484,15 +512,23 @@ export function AdminUsersPanel({
     });
   }, [organizations, orgSearch]);
   const shouldShowFiveOrgRows = filteredOrganizations.length >= 5;
-  const selectedOrganization = organizations.find((org) => org.name === orgao);
+  const selectedOrganization =
+    organizations.find((org) => org.id === organizationId) ||
+    organizations.find((org) => org.name === orgao);
   const selectedOrganizationType = selectedOrganization?.organization_type || "";
-  const selectedJurisdictionLevel = selectedOrganization?.jurisdiction_level || "";
-  const requiresMatricula = !isPrivateOrganization(selectedJurisdictionLevel);
+  const cpfMatriculaError = err === "Informe cpf ou matrícula.";
   const filteredItems = items.filter((u) => {
     if (!normalizedManageFilter) return true;
     const name = (u.full_name || "").toLowerCase();
+    const org = (u.orgao || u.organization_name || "").toLowerCase();
     const cpfDigits = (u.cpf || "").replace(/\D/g, "");
-    return name.includes(normalizedManageFilter) || (normalizedManageFilterCpf && cpfDigits.includes(normalizedManageFilterCpf));
+    const matriculaText = (u.matricula || "").toLowerCase();
+    return (
+      name.includes(normalizedManageFilter) ||
+      org.includes(normalizedManageFilter) ||
+      matriculaText.includes(normalizedManageFilter) ||
+      (normalizedManageFilterCpf && cpfDigits.includes(normalizedManageFilterCpf))
+    );
   });
 
   return (
@@ -549,15 +585,15 @@ export function AdminUsersPanel({
         </div>
       )}
       {userTab === "create" && (
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
+        <div
+          className="adminCard"
+          style={{
+            padding: 12,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.90)",
+            border: "1px solid rgba(0,0,0,0.10)",
+          }}
+        >
         <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>
           {id ? "Editar usuário" : "Criar usuário"}
         </div>
@@ -574,34 +610,40 @@ export function AdminUsersPanel({
             style={inputStyle()}
           />
 
-          <input
-            value={cpf}
-            onChange={(e) => setCpf(formatCpf(e.target.value))}
-            placeholder="cpf (11 dígitos)"
-            style={inputStyle()}
-          />
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <input
-              value={matricula}
-              onChange={(e) => {
-                setMatricula(e.target.value);
-                setMatriculaTouched(true);
-              }}
-              placeholder={requiresMatricula ? "matrícula" : "matrícula (opcional para organização privada)"}
-              style={inputStyle()}
-            />
+          <div
+            style={{
+              gridColumn: isMobile ? "1 / span 1" : "1 / span 2",
+              display: "grid",
+              gap: 10,
+              padding: 12,
+              borderRadius: 16,
+              border: cpfMatriculaError ? "1px solid rgba(220,38,38,0.24)" : "1px solid rgba(15,23,42,0.08)",
+              background: cpfMatriculaError ? "rgba(254,242,242,0.96)" : "rgba(248,250,252,0.92)",
+            }}
+          >
             <div
-              style={{
-                paddingLeft: 2,
-                fontSize: 11,
-                fontWeight: 700,
-                color: requiresMatricula ? "#0a284b" : "rgba(15,23,42,0.58)",
-              }}
+              className="adminGrid2"
+              style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" }}
             >
-              {requiresMatricula
-                ? "Obrigatória para organizações públicas."
-                : "Opcional para organização privada."}
+              <input
+                value={cpf}
+                onChange={(e) => setCpf(formatCpf(e.target.value))}
+                placeholder="CPF"
+                inputMode="numeric"
+                maxLength={14}
+                aria-invalid={cpfMatriculaError}
+                style={inputStyle()}
+              />
+
+              <input
+                value={matricula}
+                onChange={(e) => {
+                  setMatricula(e.target.value);
+                }}
+                placeholder="Matrícula"
+                aria-invalid={cpfMatriculaError}
+                style={inputStyle()}
+              />
             </div>
           </div>
           <div className="customSelect" ref={orgWrapRef}>
@@ -623,7 +665,7 @@ export function AdminUsersPanel({
                   : { fontWeight: 500 }
               }
             >
-              <span>{orgao || (loadingOrgs ? "Carregando organizações..." : "órgão (nome da organização)")}</span>
+              <span>{orgao || (loadingOrgs ? "Carregando organizações..." : "órgão / organização")}</span>
               <span className="customSelectChevron" />
             </button>
             {orgOpen && !loadingOrgs && (
@@ -663,44 +705,45 @@ export function AdminUsersPanel({
                     gap: 4,
                   }}
                 >
-                {filteredOrganizations.map((org) => (
-                  <button
-                    key={`${org.name}-${org.organization_type}`}
-                    type="button"
-                    className={`customSelectItem ${orgao === org.name ? "customSelectItemActive" : ""}`}
-                    onClick={() => {
-                      setOrgao(org.name);
-                      setUnidade(org.organization_type || "");
-                      setOrgOpen(false);
-                    }}
-                    style={{
-                      display: "grid",
-                      gap: 2,
-                      alignItems: "start",
-                      textAlign: "left",
-                      borderRadius: 12,
-                      padding: "9px 10px",
-                      fontWeight: 500,
-                    }}
-                  >
-                    <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(0,0,0,0.86)" }}>{org.name}</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(15,23,42,0.62)" }}>
-                      {org.organization_type || "Tipo não informado"}
-                    </span>
-                  </button>
-                ))}
-                {!filteredOrganizations.length && (
-                  <div
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      fontSize: 12,
-                      color: "rgba(0,0,0,0.62)",
-                    }}
-                  >
-                    Nenhuma organização encontrada para esse filtro.
-                  </div>
-                )}
+                  {filteredOrganizations.map((org) => (
+                    <button
+                      key={org.id}
+                      type="button"
+                      className={`customSelectItem ${organizationId === org.id || orgao === org.name ? "customSelectItemActive" : ""}`}
+                      onClick={() => {
+                        setOrganizationId(org.id);
+                        setOrgao(org.name);
+                        setUnidade(org.organization_type || "");
+                        setOrgOpen(false);
+                      }}
+                      style={{
+                        display: "grid",
+                        gap: 2,
+                        alignItems: "start",
+                        textAlign: "left",
+                        borderRadius: 12,
+                        padding: "9px 10px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(0,0,0,0.86)" }}>{org.name}</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(15,23,42,0.62)" }}>
+                        {org.organization_type || "Tipo não informado"}
+                      </span>
+                    </button>
+                  ))}
+                  {!filteredOrganizations.length && (
+                    <div
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        fontSize: 12,
+                        color: "rgba(0,0,0,0.62)",
+                      }}
+                    >
+                      Nenhuma organização encontrada para esse filtro.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -716,10 +759,10 @@ export function AdminUsersPanel({
                 opacity: orgao ? 1 : 0.75,
                 fontWeight: 500,
               }}
-              title={orgao ? "Tipo vinculado à organização selecionada" : "Selecione primeiro uma organização"}
+              title={orgao ? "Unidade opcional vinculada à organização selecionada" : "Unidade opcional"}
             >
               <span>
-                {selectedOrganizationType || unidade || (loadingOrgs ? "Carregando tipos..." : "tipo da organização")}
+                {selectedOrganizationType || unidade || (loadingOrgs ? "Carregando unidade..." : "unidade (opcional)")}
               </span>
             </button>
           </div>
@@ -936,15 +979,15 @@ export function AdminUsersPanel({
       )}
 
       {userTab === "manage" && (
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
+        <div
+          className="adminCard"
+          style={{
+            padding: 12,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.90)",
+            border: "1px solid rgba(0,0,0,0.10)",
+          }}
+        >
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 13 }}>Usuários</div>
           <div style={{ fontSize: 12, opacity: 0.75 }}>
@@ -956,7 +999,7 @@ export function AdminUsersPanel({
           <input
             value={manageFilter}
             onChange={(e) => setManageFilter(e.target.value)}
-            placeholder="Filtrar por nome ou CPF"
+            placeholder="Filtrar por nome, CPF, matrícula ou órgão"
             style={{ ...inputStyle(), flex: 1, minWidth: 0 }}
           />
           <button
@@ -1063,7 +1106,7 @@ export function AdminUsersPanel({
                     {u.is_active ? "ATIVO" : "INATIVO"}
                     {u.cpf ? ` • CPF: ${u.cpf}` : ""}
                     {` • Matrícula: ${formatMatriculaLabel(u.matricula)}`}
-                    {u.orgao ? ` • ${u.orgao}` : ""}
+                    {u.orgao || u.organization_name ? ` • ${u.orgao || u.organization_name}` : ""}
                     {u.unidade ? ` • ${u.unidade}` : ""}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
