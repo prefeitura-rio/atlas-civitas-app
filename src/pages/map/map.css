@@ -49,7 +49,7 @@
   font-weight: 900;
   font-family: inherit;
   cursor: pointer;
-  background: linear-gradient(90deg, #00c0f3, #0a284b);
+  background: linear-gradient(90deg, #3f8fb0, #0a284b);
   box-shadow: 0 12px 30px rgba(0, 24, 48, 0.35);
   outline: none;
   transition: transform 0.15s ease, opacity 0.15s ease;

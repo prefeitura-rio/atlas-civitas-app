@@ -1374,8 +1374,9 @@ export default function MapPage() {
   const developmentTabLabel = "ADMINISTRADOR";
   const civitasPanelTitle = "Ferramentas da CIVITAS e como solicitar informações";
   const civitasPanelSubtitle = "Acesse os recursos disponíveis e saiba como fazer solicitações formais";
-  const civitasContactPhone = "+55 21 989091247";
-  const civitasContactHref = "https://wa.me/5521989091247";
+  const civitasContactWhatsappHref = "https://wa.me/5521989091247";
+  const civitasContactEmail = "civitas@dados.rio";
+  const civitasContactEmailHref = `mailto:${civitasContactEmail}`;
   const civitasModelPdfHref = "/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf";
   useEffect(() => {
     gpsOnRef.current = gpsOn;
@@ -5425,7 +5426,7 @@ export default function MapPage() {
               <div className="civitasHeroSubtitle">{civitasPanelSubtitle}</div>
             </div>
             <div className="civitasHeroActions">
-              <a href={civitasContactHref} className="civitasActionBtn civitasActionBtnGhost">
+              <a href={civitasContactWhatsappHref} className="civitasActionBtn civitasActionBtnGhost">
                 <span className="civitasActionBtnIcon">
                   <img src={civitasWhatsappIcon} alt="" className="civitasActionBtnIconImg" />
                 </span>
@@ -5536,9 +5537,9 @@ export default function MapPage() {
                   autoridade competente do órgão.
                 </li>
                 <li>
-                  Enviar pelo WhatsApp:{" "}
-                  <a href={civitasContactHref} style={{ fontWeight: 800 }}>
-                    {civitasContactPhone}
+                Enviar ao endereço:{" "}
+                  <a href={civitasContactEmailHref} style={{ fontWeight: 800 }}>
+                    {civitasContactEmail}
                   </a>
                   .
                 </li>
@@ -5936,18 +5937,10 @@ export default function MapPage() {
                   gap: 6,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.8)" }}>
                     Relatório por Área Desenhada
                   </div>
-                  <button
-                    className="btnGhost"
-                    onClick={() => setAreaToolsOpen(false)}
-                    style={{ width: 28, height: 28, padding: 0, borderRadius: 999, lineHeight: 1 }}
-                    title="Fechar"
-                  >
-                    ✕
-                  </button>
                 </div>
                 <div className="dockNote" style={{ margin: 0 }}>
                   Pontos da área: {areaDrawPoints.length}
@@ -6220,14 +6213,6 @@ export default function MapPage() {
             title="Clique de novo pra fechar"
           >
             PERFIL
-          </button>
-
-          <button
-            className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
-            onClick={() => togglePanel("civitas")}
-            title="Clique de novo pra fechar"
-          >
-            {civitasTabLabel}
           </button>
 
           {isAdmin && (
@@ -6993,14 +6978,16 @@ export default function MapPage() {
                 }}
               >
                 <button
-                  className="btnGhost"
+                  className="civitasSearchBtn"
                   onClick={() => {
-                    setMobileSearchOpen(true);
+                    setMobileSearchOpen(false);
                     setMobileMenuOpen(false);
+                    setPanel("civitas");
+                    setPanelOpen(true);
                   }}
                   style={{ width: "100%", borderRadius: 10 }}
                 >
-                  BUSCAR LOCAL
+                  {civitasTabLabel}
                 </button>
                 <button
                   className="btnGhost"
@@ -7015,6 +7002,16 @@ export default function MapPage() {
                 <button
                   className="btnGhost"
                   onClick={() => {
+                    setMobileSearchOpen(true);
+                    setMobileMenuOpen(false);
+                  }}
+                  style={{ width: "100%", borderRadius: 10 }}
+                >
+                  BUSCAR LOCAL
+                </button>
+                <button
+                  className="btnGhost"
+                  onClick={() => {
                     setMobileMenuOpen(false);
                     auth?.logout?.();
                     try {
@@ -7023,7 +7020,13 @@ export default function MapPage() {
                       window.location.href = "/login";
                     }
                   }}
-                  style={{ width: "100%", borderRadius: 10 }}
+                  style={{
+                    width: "100%",
+                    borderRadius: 10,
+                    borderColor: "rgba(220,38,38,0.22)",
+                    background: "rgba(254,242,242,0.98)",
+                    color: "#b91c1c",
+                  }}
                 >
                   SAIR
                 </button>
@@ -7091,21 +7094,6 @@ export default function MapPage() {
                 onClick={() => toggleMobilePanel("profile")}
               >
                 PERFIL
-              </button>
-
-              <button
-                className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
-                style={{
-                  minHeight: 42,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  whiteSpace: "normal",
-                  lineHeight: 1.15,
-                }}
-                onClick={() => toggleMobilePanel("civitas")}
-              >
-                {civitasTabLabel}
               </button>
 
               {isAdmin && (
