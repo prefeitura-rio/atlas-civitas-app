@@ -4,21 +4,32 @@ import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon, GeometryCollection } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
+import Swal from "sweetalert2";
 import {
   Building2,
+  ChevronRight,
   Eye,
   EyeOff,
   MapPinned,
+  LogOut,
+  Menu,
   PenTool,
+  Search,
   Satellite,
   Shield,
   ShieldAlert,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
-import type { Camera, CameraIntel, CameraLpr, Radar } from "./map/types";
-import { canAccessStreaming, isAdminRole, normalizeRole } from "./map/roles";
+import type { Camera, CameraIntel, CameraLpr, Radar, SmartCameraSessionResponse } from "./map/types";
+import {
+  canAccessAdminBackoffice,
+  canAccessSmartCameraStreaming,
+  canAccessStreaming,
+  normalizeRole,
+} from "./map/roles";
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
@@ -104,6 +115,8 @@ const GPS_CONE_SEGMENTS = 12;
 const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11" as const;
 const MAP_STYLE_SATELLITE = "mapbox://styles/mapbox/satellite-streets-v12" as const;
 const PAGE_SIZE = 50;
+const SMART_CAMERA_PREVIEW_DURATION_SECONDS = 60;
+const SMART_CAMERA_STREAM_DURATION_SECONDS = 480;
 
 // IDs fixos
 const SOURCES = {
@@ -341,6 +354,22 @@ function normalizeExternalUrl(value: unknown) {
   const raw = value.trim();
   if (!raw) return "";
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
+function normalizeSessionUrl(value: unknown) {
+  if (typeof value !== "string") return "";
+  const raw = value.trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return raw.startsWith("/") ? `${API_BASE}${raw}` : raw;
+}
+
+function getSmartCameraId(value: any) {
+  return cleanString(value?.id);
+}
+
+function getSmartCameraExternalId(value: any) {
+  return cleanString(value?.external_camera_id);
 }
 
 function loadImagePromise(map: mapboxgl.Map, url: string) {
@@ -718,20 +747,20 @@ function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
 
 function camerasIntelToFeatures(list: CameraIntel[]): Feature<Point, any>[] {
   return list.map((c) => {
-    const rawStreamingUrl = (c.streaming_url ?? "").toString().trim();
-    const streamingUrl = normalizeExternalUrl(rawStreamingUrl);
+    const smartId = getSmartCameraId(c);
+    const externalCameraId = getSmartCameraExternalId(c);
 
     return {
       type: "Feature",
       geometry: { type: "Point", coordinates: [c.lng, c.lat] },
       properties: {
         kind: "camera_intel",
+        id: smartId,
         code: c.code,
         name: c.name,
         responsavel: c.responsavel ?? (c as any).responsavel ?? "",
         direction: c.direction ?? "",
-        streaming_url: streamingUrl,
-        streaming_url_raw: rawStreamingUrl,
+        external_camera_id: externalCameraId,
         is_active: c.is_active ? 1 : 0,
       },
     };
@@ -1119,10 +1148,13 @@ export default function MapPage() {
   const aispGeoRef = useRef<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const cispGeoRef = useRef<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const hasStreamingAccessRef = useRef(false);
+  const hasSmartCameraStreamingAccessRef = useRef(false);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
   const hoverPreviewTimerRef = useRef<number | null>(null);
+  const hoverPreviewCloseTimerRef = useRef<number | null>(null);
+  const hoverPreviewGenerationRef = useRef(0);
   const poiCoordIndexRef = useRef<Map<string, Feature<Point, any>[]>>(new Map());
   const suppressHoverHideRef = useRef(false);
   const suppressHoverHideTimerRef = useRef<number | null>(null);
@@ -1555,6 +1587,10 @@ export default function MapPage() {
       if (hoverPreviewTimerRef.current) {
         window.clearTimeout(hoverPreviewTimerRef.current);
       }
+      if (hoverPreviewCloseTimerRef.current) {
+        window.clearTimeout(hoverPreviewCloseTimerRef.current);
+        hoverPreviewCloseTimerRef.current = null;
+      }
       if (suppressHoverHideTimerRef.current) {
         window.clearTimeout(suppressHoverHideTimerRef.current);
         suppressHoverHideTimerRef.current = null;
@@ -1582,8 +1618,18 @@ export default function MapPage() {
   }, [dockOpen]);
 
   const role = normalizeRole(me?.role ?? me?.roles?.[0]);
-  const isAdmin = isAdminRole(role);
+  const canAccessAdmin = canAccessAdminBackoffice(role);
   const hasStreamingAccess = canAccessStreaming(role);
+  const hasSmartCameraStreamingAccess = canAccessSmartCameraStreaming(role);
+  const adminTabOptions = useMemo(() => {
+    if (role === "manager") {
+      return ADMIN_TAB_OPTIONS.filter((option) => option.key === "users" || option.key === "organizations");
+    }
+    return ADMIN_TAB_OPTIONS;
+  }, [role]);
+  const activeAdminTab = adminTabOptions.some((option) => option.key === adminTab)
+    ? adminTab
+    : adminTabOptions[0]?.key ?? "users";
   const availableListModes = useMemo(
     () => LIST_MODE_OPTIONS.filter(({ feature }) => hasFeature(feature)),
     [hasFeature]
@@ -1592,6 +1638,10 @@ export default function MapPage() {
   useEffect(() => {
     hasStreamingAccessRef.current = hasStreamingAccess;
   }, [hasStreamingAccess]);
+
+  useEffect(() => {
+    hasSmartCameraStreamingAccessRef.current = hasSmartCameraStreamingAccess;
+  }, [hasSmartCameraStreamingAccess]);
 
   useEffect(() => {
     if (!availableListModes.length) return;
@@ -1698,8 +1748,14 @@ export default function MapPage() {
   }
 
   useEffect(() => {
-    if (panel === "admin" && !isAdmin) setPanel(null);
-  }, [panel, isAdmin]);
+    if (panel === "admin" && !canAccessAdmin) setPanel(null);
+  }, [panel, canAccessAdmin]);
+
+  useEffect(() => {
+    if (panel !== "admin") return;
+    if (adminTab === activeAdminTab) return;
+    setAdminTab(activeAdminTab);
+  }, [panel, adminTab, activeAdminTab]);
 
   function flyToPoint(lng: number, lat: number, zoom?: number) {
     const map = mapRef.current;
@@ -2646,9 +2702,17 @@ export default function MapPage() {
       hoverPreviewTimerRef.current = null;
     }
 
+    function clearHoverPreviewCloseTimer() {
+      if (!hoverPreviewCloseTimerRef.current) return;
+      window.clearTimeout(hoverPreviewCloseTimerRef.current);
+      hoverPreviewCloseTimerRef.current = null;
+    }
+
     function hideHoverPreview() {
       if (suppressHoverHideRef.current && hoverPreviewPopupRef.current?.isOpen()) return;
+      hoverPreviewGenerationRef.current += 1;
       clearHoverPreviewTimer();
+      clearHoverPreviewCloseTimer();
       hoverPreviewPopupRef.current?.remove();
     }
 
@@ -2661,6 +2725,27 @@ export default function MapPage() {
         ev.stopPropagation();
         popup.remove();
       };
+    }
+
+    function bindSmartCameraPopupActions() {
+      if (!popup?.isOpen()) return;
+      const popupEl = popup.getElement();
+      if (!popupEl) return;
+
+      popupEl.querySelectorAll<HTMLButtonElement>("[data-smart-camera-stream]").forEach((btn) => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const duration = Number(btn.dataset.smartCameraDuration || SMART_CAMERA_STREAM_DURATION_SECONDS);
+          void openSmartCameraStreamWindow(
+            {
+              id: btn.dataset.smartCameraId || "",
+              external_camera_id: btn.dataset.smartCameraExternalCameraId || "",
+            },
+            Number.isFinite(duration) ? duration : SMART_CAMERA_STREAM_DURATION_SECONDS
+          );
+        };
+      });
     }
 
     function centerMobilePopup(target?: mapboxgl.Popup | null) {
@@ -2732,7 +2817,8 @@ export default function MapPage() {
           kind,
           title: (p.name || "Super Câmera Inteligente").toString(),
           meta: `Responsável: ${(p.responsavel || "-").toString()}`,
-          streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
+          smartId: cleanString(p.id),
+          externalCameraId: cleanString(p.external_camera_id),
         };
       }
       if (kind === "camera_lpr") {
@@ -2837,7 +2923,15 @@ export default function MapPage() {
           const visual = getPoiVisual(info.kind);
           const iconSrc = getPoiIconSource(mapBaseStyleRef.current, info.kind);
           const streamLink =
-            hasStreamingAccessRef.current && info.streamingUrl
+            info.kind === "camera_intel"
+              ? hasSmartCameraStreamingAccessRef.current && info.smartId
+                ? `<button type="button" class="cameraPopupStreamLink stackPopupStreamLink" data-smart-camera-stream data-smart-camera-id="${escapeHtml(
+                    info.smartId
+                  )}" data-smart-camera-external-camera-id="${escapeHtml(
+                    info.externalCameraId || ""
+                  )}" data-smart-camera-duration="480" title="Abrir streaming completo">Abrir streaming</button>`
+                : ""
+              : hasStreamingAccessRef.current && info.streamingUrl
               ? `<a class="cameraPopupStreamLink stackPopupStreamLink" href="${escapeHtml(info.streamingUrl)}" target="_blank" rel="noreferrer">Streaming</a>`
               : "";
 
@@ -2887,6 +2981,7 @@ export default function MapPage() {
         .addTo(map);
 
       bindPopupCloseButton();
+      bindSmartCameraPopupActions();
       centerMobilePopup();
       return true;
     }
@@ -3143,6 +3238,96 @@ export default function MapPage() {
       hideHoverPreview();
     });
 
+    function showSmartCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
+      clearHoverPreviewTimer();
+      clearHoverPreviewCloseTimer();
+      setCursorPointer();
+
+      if (!hasSmartCameraStreamingAccessRef.current) return;
+      const f: any = e.features?.[0];
+      if (!f) return;
+
+      const p = f.properties || {};
+      const smartId = cleanString(p.id);
+      const externalCameraId = cleanString(p.external_camera_id);
+      if (!smartId || !externalCameraId) return;
+
+      const coords = (f.geometry as any).coordinates as [number, number];
+      const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
+      const navSafeTop = 96;
+      const previewHeight = 240;
+      const minTop = navSafeTop + 6;
+      const isNearTop = pointY < minTop + previewHeight;
+      const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
+      const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
+      const requestGeneration = hoverPreviewGenerationRef.current;
+
+      hoverPreviewTimerRef.current = window.setTimeout(async () => {
+        hoverPreviewPopup
+          ?.setLngLat(coords)
+          .setOffset(isNearTop ? [0, offsetY] : 14)
+          .setHTML(`
+            <div style="width:360px;background:#000;">
+              <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:12px;letter-spacing:.02em;">
+                Abrindo preview...
+              </div>
+            </div>
+          `)
+          .addTo(map);
+        centerMobilePopup(hoverPreviewPopup);
+
+        try {
+          const session = await requestSmartCameraSession(smartId, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
+          if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+
+          hoverPreviewPopup
+            ?.setLngLat(coords)
+            .setOffset(isNearTop ? [0, offsetY] : 14)
+            .setHTML(`
+              <div style="width:360px;background:#000;">
+                <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
+                  <iframe
+                    src="${escapeHtml(session.sessionUrl)}"
+                    title="Preview câmera"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                    scrolling="no"
+                    style="position:absolute;top:0;left:0;width:1600px;height:900px;border:0;background:#000;transform:scale(0.225);transform-origin:top left;"
+                  ></iframe>
+                </div>
+                <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
+                  Preview tempor&aacute;rio. Esta sess&atilde;o encerra em 60 segundos.
+                </div>
+              </div>
+            `);
+          centerMobilePopup(hoverPreviewPopup);
+
+          clearHoverPreviewCloseTimer();
+          hoverPreviewCloseTimerRef.current = window.setTimeout(() => {
+            if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+            hoverPreviewPopupRef.current?.remove();
+            clearHoverPreviewCloseTimer();
+          }, SMART_CAMERA_PREVIEW_DURATION_SECONDS * 1000);
+        } catch (error) {
+          if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+          hoverPreviewPopupRef.current?.remove();
+          await Swal.fire({
+            icon: "warning",
+            title: "Preview indisponível",
+            text: getSmartCameraSessionErrorMessage(error, "preview"),
+            confirmButtonText: "Entendi",
+          });
+        }
+      }, 120);
+    }
+
+    map.on("mouseenter", LAYERS.cameras_intel_points, showSmartCameraHoverPreview);
+    map.on("mouseleave", LAYERS.cameras_intel_points, () => {
+      setCursorDefault();
+      hideHoverPreview();
+    });
+
     map.on("click", LAYERS.clusters, (e) => {
       hideHoverPreview();
       const f: any = e.features?.[0];
@@ -3222,8 +3407,8 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
-      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
-      const allowStreaming = hasStreamingAccessRef.current;
+      const smartId = cleanString(p.id);
+      const allowStreaming = hasSmartCameraStreamingAccessRef.current && Boolean(smartId);
       setSelectionRing(coords[0], coords[1]);
       if (openStackedPopupIfNeeded(coords)) return;
 
@@ -3261,15 +3446,26 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${allowStreaming && streamingUrl
-                ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+              ${allowStreaming
+                ? `<button
+                    type="button"
+                    class="cameraPopupStreamLink"
+                    data-smart-camera-stream
+                    data-smart-camera-id="${escapeHtml(smartId)}"
+                    data-smart-camera-external-camera-id="${escapeHtml(
+                      cleanString(p.external_camera_id)
+                    )}"
+                    data-smart-camera-duration="480"
+                    title="Abrir streaming completo"
+                  >Abrir streaming</button>`
                 : ""}
             </div>
           </div>
         `)
         .addTo(map);
       bindPopupCloseButton();
-      if (allowStreaming && streamingUrl) centerMobilePopup();
+      bindSmartCameraPopupActions();
+      if (allowStreaming) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
@@ -3794,7 +3990,13 @@ export default function MapPage() {
         .map((c) => {
           const lat = getLat(c);
           const lng = getLng(c);
-          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
+          return {
+            ...c,
+            id: cleanString(c.id) || undefined,
+            external_camera_id: cleanString(c.external_camera_id) || null,
+            lat: lat ?? NaN,
+            lng: lng ?? NaN,
+          };
         })
         .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
         .filter((c) => isEntityActive(c));
@@ -3810,6 +4012,106 @@ export default function MapPage() {
       alert(e?.message || "Falha ao carregar câmeras inteligentes");
     } finally {
       setLoadingCamerasIntel(false);
+    }
+  }
+
+  type SmartCameraSessionSource = Pick<CameraIntel, "id" | "external_camera_id">;
+
+  function getSmartCameraSessionErrorMessage(error: unknown, action: "preview" | "stream") {
+    const rawMessage = String((error as any)?.message || "").trim();
+    const match = rawMessage.match(/^(\d{3})\s*-\s*(.*)$/);
+    if (match) {
+      const status = Number(match[1]);
+      if (status === 403) {
+        return "Seu perfil não tem permissão para abrir o streaming desta super câmera.";
+      }
+      if (status === 404) {
+        return "A super câmera inteligente não foi encontrada.";
+      }
+      if (status === 409) {
+        return "Esta super câmera ainda não possui integração de streaming.";
+      }
+    }
+
+    if (rawMessage) return rawMessage;
+
+    return action === "preview"
+      ? "Não foi possível abrir o preview da super câmera inteligente."
+      : "Não foi possível abrir o streaming da super câmera inteligente.";
+  }
+
+  async function requestSmartCameraSession(smartId: string, durationSeconds: number) {
+    const trimmedSmartId = cleanString(smartId);
+    if (!trimmedSmartId) {
+      throw new Error("ID da super câmera inteligente indisponível.");
+    }
+
+    const data = await fetchJson<SmartCameraSessionResponse>(`${API_BASE}/cameras-inteligentes/${encodeURIComponent(trimmedSmartId)}/session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ durationSeconds }),
+    });
+
+    const sessionUrl = normalizeSessionUrl(data?.session_url);
+    if (!sessionUrl) {
+      throw new Error("O backend não retornou uma URL de sessão válida.");
+    }
+
+    return {
+      ...data,
+      sessionUrl,
+    };
+  }
+
+  async function openSmartCameraStreamWindow(source: SmartCameraSessionSource, durationSeconds: number) {
+    if (!hasSmartCameraStreamingAccessRef.current) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: "Seu perfil não pode abrir streaming desta super câmera.",
+        confirmButtonText: "Entendi",
+      });
+      return;
+    }
+
+    const smartId = getSmartCameraId(source);
+    if (!smartId) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: "Esta super câmera não possui um ID válido para streaming.",
+        confirmButtonText: "Entendi",
+      });
+      return;
+    }
+
+    const streamWindow = window.open("about:blank", "_blank");
+    if (streamWindow) {
+      try {
+        streamWindow.opener = null;
+      } catch {}
+    }
+
+    try {
+      const session = await requestSmartCameraSession(smartId, durationSeconds);
+      if (streamWindow && !streamWindow.closed) {
+        streamWindow.location.href = session.sessionUrl;
+      } else {
+        window.location.href = session.sessionUrl;
+      }
+    } catch (error) {
+      if (streamWindow) {
+        streamWindow.close();
+      }
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: getSmartCameraSessionErrorMessage(error, "stream"),
+        confirmButtonText: "Entendi",
+      });
     }
   }
 
@@ -5208,19 +5510,19 @@ export default function MapPage() {
   }, [selectedRadar, radares]);
 
   useEffect(() => {
-    if (panel !== "admin" || adminTab !== "users") {
+    if (panel !== "admin" || activeAdminTab !== "users") {
       setAdminUsersOrgOpen(false);
     }
-  }, [panel, adminTab]);
+  }, [panel, activeAdminTab]);
 
   const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1120 : 560;
   const panelSideInset = 16;
   const panelShiftRight = panel === "civitas" ? 190 : 0;
   const panelMaxHeight =
     panel === "admin"
-      ? adminTab === "organizations"
+      ? activeAdminTab === "organizations"
         ? "84vh"
-        : adminTab === "users" && adminUsersOrgOpen
+        : activeAdminTab === "users" && adminUsersOrgOpen
         ? "84vh"
         : "74vh"
       : "56vh";
@@ -6215,7 +6517,7 @@ export default function MapPage() {
             PERFIL
           </button>
 
-          {isAdmin && (
+          {canAccessAdmin && (
             <button
               className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
               onClick={() => togglePanel("admin")}
@@ -6436,9 +6738,11 @@ export default function MapPage() {
                 {listMode === "inteligentes" &&
                   (listItems as CameraIntel[]).map((c) => {
                     const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
+                    const smartId = cleanString(c.id);
+                    const showSmartStreamButton = hasSmartCameraStreamingAccess && Boolean(smartId);
                     return (
                       <div
-                        key={c.code}
+                        key={smartId || c.code}
                         className="listItem"
                         onClick={() => {
                           setSelectedCode(null);
@@ -6466,22 +6770,36 @@ export default function MapPage() {
                               </div>
                               <span style={getPoiCodePillStyle("camera_intel")}>{c.code}</span>
                             </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  opacity: 0.8,
+                              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    opacity: 0.8,
                                   border: "1px solid rgba(15,23,42,0.14)",
                                   borderRadius: 999,
                                   padding: "2px 8px",
                                 }}
-                              >
-                                Responsável: {c.responsavel || (c as any).responsavel || "-"}
-                              </span>
+                                >
+                                  Responsável: {c.responsavel || (c as any).responsavel || "-"}
+                                </span>
+                                {showSmartStreamButton && (
+                                  <button
+                                    type="button"
+                                    className="cameraPopupStreamLink stackPopupStreamLink"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void openSmartCameraStreamWindow(c, SMART_CAMERA_STREAM_DURATION_SECONDS);
+                                    }}
+                                    title="Abrir streaming completo"
+                                  >
+                                    Abrir streaming
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
                     );
                   })}
 
@@ -6810,7 +7128,7 @@ export default function MapPage() {
 
           {panel === "civitas" && renderCivitasPanel()}
 
-          {panel === "admin" && isAdmin && (
+          {panel === "admin" && canAccessAdmin && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                 <div style={{ fontWeight: 900, fontSize: 14 }}>Administrador</div>
@@ -6821,36 +7139,15 @@ export default function MapPage() {
                 <div style={{ flex: 1 }} />
 
                 <div className="tabsRail tabsRailAdmin">
-                  <button
-                    className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("users")}
-                  >
-                    Usuários
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "organizations" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("organizations")}
-                  >
-                    Organizações
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("cameras")}
-                  >
-                    Câmeras
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("radares")}
-                  >
-                    Radares
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("logs")}
-                  >
-                    Logs
-                  </button>
+                  {adminTabOptions.map((option) => (
+                    <button
+                      key={option.key}
+                      className={`subTab ${activeAdminTab === option.key ? "subTabActive" : ""}`}
+                      onClick={() => setAdminTab(option.key)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -6858,21 +7155,22 @@ export default function MapPage() {
                 className="scrollbarHidden"
                 style={{
                   maxHeight: panelMaxHeight,
-                  overflow: adminTab === "users" && adminUsersOrgOpen ? "visible" : "auto",
+                  overflow: activeAdminTab === "users" && adminUsersOrgOpen ? "visible" : "auto",
                 }}
               >
-                {adminTab === "users" && (
+                {activeAdminTab === "users" && (
                   <AdminUsersPanel
                     apiBase={API_BASE}
                     token={accessToken}
+                    viewerRole={role}
                     isMobile={isMobile}
                     onOrgDropdownOpenChange={setAdminUsersOrgOpen}
                   />
                 )}
-                {adminTab === "organizations" && (
+                {activeAdminTab === "organizations" && (
                   <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
                 )}
-                {adminTab === "cameras" && (
+                {activeAdminTab === "cameras" && (
                   <AdminCamerasPanel
                     apiBase={API_BASE}
                     token={accessToken}
@@ -6884,7 +7182,7 @@ export default function MapPage() {
                     isMobile={isMobile}
                   />
                 )}
-                {adminTab === "radares" && (
+                {activeAdminTab === "radares" && (
                   <AdminRadaresPanel
                     apiBase={API_BASE}
                     token={accessToken}
@@ -6894,7 +7192,7 @@ export default function MapPage() {
                     isMobile={isMobile}
                   />
                 )}
-                {adminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
+                {activeAdminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
               </div>
             </>
           )}
@@ -6936,7 +7234,7 @@ export default function MapPage() {
 
           <div style={{ position: "relative" }}>
             <button
-              className="btnGhost"
+              className={`btnGhost mobileMenuTrigger ${mobileMenuOpen ? "mobileMenuTrigger--open" : ""}`}
               onClick={() => {
                 if (panelOpen) {
                   setPanelOpen(false);
@@ -6945,92 +7243,113 @@ export default function MapPage() {
                 }
                 setMobileMenuOpen((v) => !v);
               }}
-              style={{
-                width: 44,
-                height: 36,
-                padding: 0,
-                borderRadius: 10,
-                display: "grid",
-                placeItems: "center",
-              }}
-              aria-label="Abrir menu"
-              title="Menu"
+              type="button"
+              aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-quick-menu"
+              title={mobileMenuOpen ? "Fechar menu" : "Menu"}
             >
-              <span style={{ display: "grid", gap: 3 }}>
-                <span style={{ width: 18, height: 2, background: "rgba(0,0,0,0.85)", borderRadius: 999 }} />
-                <span style={{ width: 18, height: 2, background: "rgba(0,0,0,0.85)", borderRadius: 999 }} />
-                <span style={{ width: 18, height: 2, background: "rgba(0,0,0,0.85)", borderRadius: 999 }} />
-              </span>
+              {mobileMenuOpen ? <X size={18} strokeWidth={2.4} /> : <Menu size={18} strokeWidth={2.4} />}
             </button>
 
             {mobileMenuOpen && (
-              <div
-                className="glassStrong"
-                style={{
-                  position: "absolute",
-                  right: -6,
-                  top: "calc(100% + 14px)",
-                  padding: 8,
-                  display: "grid",
-                  gap: 6,
-                  zIndex: 40,
-                  minWidth: 140,
-                }}
-              >
+              <>
                 <button
-                  className="civitasSearchBtn"
-                  onClick={() => {
-                    setMobileSearchOpen(false);
-                    setMobileMenuOpen(false);
-                    setPanel("civitas");
-                    setPanelOpen(true);
-                  }}
-                  style={{ width: "100%", borderRadius: 10 }}
-                >
-                  {civitasTabLabel}
-                </button>
-                <button
-                  className="btnGhost"
-                  onClick={() => {
-                    setPanelOpen((v) => !v);
-                    setMobileMenuOpen(false);
-                  }}
-                  style={{ width: "100%", borderRadius: 10 }}
-                >
-                  {panelOpen ? "Fechar menu" : "Menu"}
-                </button>
-                <button
-                  className="btnGhost"
-                  onClick={() => {
-                    setMobileSearchOpen(true);
-                    setMobileMenuOpen(false);
-                  }}
-                  style={{ width: "100%", borderRadius: 10 }}
-                >
-                  BUSCAR LOCAL
-                </button>
-                <button
-                  className="btnGhost"
+                  type="button"
+                  className="mobileMenuBackdrop"
+                  aria-label="Fechar menu"
+                  tabIndex={-1}
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    auth?.logout?.();
-                    try {
-                      nav("/login", { replace: true });
-                    } catch {
-                      window.location.href = "/login";
-                    }
                   }}
-                  style={{
-                    width: "100%",
-                    borderRadius: 10,
-                    borderColor: "rgba(220,38,38,0.22)",
-                    background: "rgba(254,242,242,0.98)",
-                    color: "#b91c1c",
-                  }}
-                >
-                  SAIR
-                </button>
-              </div>
+                />
+                <div className="mobileMenuSheet" id="mobile-quick-menu" role="dialog" aria-modal="true" aria-label="Menu rápido">
+                  <div className="mobileMenuHandle" aria-hidden="true" />
+                  <div className="mobileMenuHeader">
+                    <div className="mobileMenuBrandCopy">
+                      <div className="mobileMenuEyebrow">Acesso rápido</div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="civitasSearchBtn mobileMenuPrimaryDesktop"
+                    onClick={() => {
+                      setMobileSearchOpen(false);
+                      setMobileMenuOpen(false);
+                      setPanel("civitas");
+                      setPanelOpen(true);
+                    }}
+                    title={panel === "civitas" ? "Fechar CIVITAS" : "Abrir CIVITAS"}
+                  >
+                    {civitasTabLabel}
+                  </button>
+
+                  <div className="mobileMenuActions">
+                    <button
+                      type="button"
+                      className="mobileMenuAction"
+                      onClick={() => {
+                        setMobileSearchOpen(false);
+                        setMobileMenuOpen(false);
+                        setPanelOpen((v) => !v);
+                      }}
+                    >
+                      <span className="mobileMenuActionIcon">
+                        <MapPinned size={16} strokeWidth={2.4} />
+                      </span>
+                      <span className="mobileMenuActionText">
+                        <span className="mobileMenuActionLabel">{panelOpen ? "Fechar menu" : "Menu"}</span>
+                        <span className="mobileMenuActionSub">Equipamentos e central de controle</span>
+                      </span>
+                      <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="mobileMenuAction"
+                      onClick={() => {
+                        setMobileSearchOpen(true);
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <span className="mobileMenuActionIcon">
+                        <Search size={16} strokeWidth={2.4} />
+                      </span>
+                      <span className="mobileMenuActionText">
+                        <span className="mobileMenuActionLabel">Buscar local</span>
+                        <span className="mobileMenuActionSub">Rua, bairro ou coordenada no mapa</span>
+                      </span>
+                      <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="mobileMenuAction mobileMenuActionDanger"
+                      onClick={() => {
+                        setMobileSearchOpen(false);
+                        setPanelOpen(false);
+                        setMobileMenuOpen(false);
+                        auth?.logout?.();
+                        try {
+                          nav("/login", { replace: true });
+                        } catch {
+                          window.location.href = "/login";
+                        }
+                      }}
+                    >
+                      <span className="mobileMenuActionIcon">
+                        <LogOut size={16} strokeWidth={2.4} />
+                      </span>
+                      <span className="mobileMenuActionText">
+                        <span className="mobileMenuActionLabel">Sair</span>
+                        <span className="mobileMenuActionSub">Encerrar a sessão com segurança</span>
+                      </span>
+                      <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -7096,7 +7415,7 @@ export default function MapPage() {
                 PERFIL
               </button>
 
-              {isAdmin && (
+              {canAccessAdmin && (
                   <button
                     className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
                     style={{
@@ -7288,9 +7607,11 @@ export default function MapPage() {
                 {listMode === "inteligentes" &&
                     (listItems as CameraIntel[]).map((c) => {
                       const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
+                      const smartId = cleanString(c.id);
+                      const showSmartStreamButton = hasSmartCameraStreamingAccess && Boolean(smartId);
                       return (
                         <div
-                          key={c.code}
+                          key={smartId || c.code}
                           className="listItem"
                           onClick={() => {
                             setSelectedCode(null);
@@ -7332,6 +7653,20 @@ export default function MapPage() {
                                 >
                                   Responsável: {c.responsavel || (c as any).responsavel || "-"}
                                 </span>
+                                {showSmartStreamButton && (
+                                  <button
+                                    type="button"
+                                    className="cameraPopupStreamLink stackPopupStreamLink"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void openSmartCameraStreamWindow(c, SMART_CAMERA_STREAM_DURATION_SECONDS);
+                                    }}
+                                    title="Abrir streaming completo"
+                                  >
+                                    Abrir streaming
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -7697,40 +8032,19 @@ export default function MapPage() {
 
             {panel === "civitas" && renderCivitasPanel()}
 
-            {panel === "admin" && isAdmin && (
+            {panel === "admin" && canAccessAdmin && (
               <>
                 {!isMobile ? (
                   <div className="tabsRail tabsRailAdmin tabsRailAdminMobile">
-                    <button
-                      className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
-                      onClick={() => setAdminTab("users")}
-                    >
-                      Usuários
-                    </button>
-                    <button
-                      className={`subTab ${adminTab === "organizations" ? "subTabActive" : ""}`}
-                      onClick={() => setAdminTab("organizations")}
-                    >
-                      Organizações
-                    </button>
-                    <button
-                      className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
-                      onClick={() => setAdminTab("cameras")}
-                    >
-                      Câmeras
-                    </button>
-                    <button
-                      className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
-                      onClick={() => setAdminTab("radares")}
-                    >
-                      Radares
-                    </button>
-                    <button
-                      className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
-                      onClick={() => setAdminTab("logs")}
-                    >
-                      Logs
-                    </button>
+                    {adminTabOptions.map((option) => (
+                      <button
+                        key={option.key}
+                        className={`subTab ${activeAdminTab === option.key ? "subTabActive" : ""}`}
+                        onClick={() => setAdminTab(option.key)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 ) : (
                   <div
@@ -7748,8 +8062,8 @@ export default function MapPage() {
                       SEÇÃO
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {ADMIN_TAB_OPTIONS.map((option) => {
-                        const active = adminTab === option.key;
+                      {adminTabOptions.map((option) => {
+                        const active = activeAdminTab === option.key;
                         return (
                           <button
                             key={option.key}
@@ -7775,18 +8089,19 @@ export default function MapPage() {
                   </div>
                 )}
 
-                {adminTab === "users" && (
+                {activeAdminTab === "users" && (
                   <AdminUsersPanel
                     apiBase={API_BASE}
                     token={accessToken}
+                    viewerRole={role}
                     isMobile={isMobile}
                     onOrgDropdownOpenChange={setAdminUsersOrgOpen}
                   />
                 )}
-                {adminTab === "organizations" && (
+                {activeAdminTab === "organizations" && (
                   <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
                 )}
-                {adminTab === "cameras" && (
+                {activeAdminTab === "cameras" && (
                   <AdminCamerasPanel
                     apiBase={API_BASE}
                     token={accessToken}
@@ -7798,7 +8113,7 @@ export default function MapPage() {
                     isMobile={isMobile}
                   />
                 )}
-                {adminTab === "radares" && (
+                {activeAdminTab === "radares" && (
                   <AdminRadaresPanel
                     apiBase={API_BASE}
                     token={accessToken}
@@ -7808,7 +8123,7 @@ export default function MapPage() {
                     isMobile={isMobile}
                   />
                 )}
-                {adminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
+                {activeAdminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
               </>
             )}
           </div>

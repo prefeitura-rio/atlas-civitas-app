@@ -24,6 +24,7 @@ export type CameraIntel = {
   lng: number;
   responsavel?: string | null;
   direction?: string | null;
+  external_camera_id?: string | null;
   streaming_url?: string | null;
   is_active?: boolean;
   source_file?: string | null;
@@ -129,6 +130,13 @@ export type FeatureCatalogItem = {
   name: string;
   category: string;
   description?: string | null;
+};
+
+export type SmartCameraSessionResponse = {
+  session_url?: string | null;
+  external_camera_id?: string | null;
+  camera_id?: string | null;
+  result?: string | null;
 };
 
 export type AdminLog = {

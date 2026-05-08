@@ -28,6 +28,17 @@ type UserPayload = {
   matricula?: string | null;
 };
 
+const ROLE_SELECT_OPTIONS: Array<{ value: UserRole; label: string }> = [
+  { value: "user", label: "Usuário sem streaming" },
+  { value: "user_stream", label: "Usuário com streaming" },
+  { value: "manager", label: "Gestor" },
+  { value: "admin", label: "Administrador" },
+];
+
+function canManagerTouchRole(nextRole: UserRole) {
+  return nextRole === "user" || nextRole === "user_stream";
+}
+
 function normalizeNullableText(value: unknown) {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || null;
@@ -132,11 +143,13 @@ function getUserExpirationBadge(expiresAt?: string | null) {
 export function AdminUsersPanel({
   apiBase,
   token,
+  viewerRole,
   isMobile,
   onOrgDropdownOpenChange,
 }: {
   apiBase: string;
   token: string;
+  viewerRole: UserRole;
   isMobile: boolean;
   onOrgDropdownOpenChange?: (open: boolean) => void;
 }) {
@@ -163,6 +176,7 @@ export function AdminUsersPanel({
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [role, setRole] = useState<UserRole>("user");
+  const [editingUserRole, setEditingUserRole] = useState<UserRole | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isOrganizationDropdownOpen, setIsOrganizationDropdownOpen] = useState(false);
@@ -175,9 +189,20 @@ export function AdminUsersPanel({
   const [userSearch, setUserSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [visibleMobileUserCount, setVisibleMobileUserCount] = useState(ADMIN_PAGE_SIZE);
+  const isManagerViewer = viewerRole === "manager";
+  const roleSelectOptions = isManagerViewer
+    ? ROLE_SELECT_OPTIONS.filter(({ value }) => value === "user" || value === "user_stream")
+    : ROLE_SELECT_OPTIONS;
+
+  useEffect(() => {
+    if (!isManagerViewer) return;
+    if (canManagerTouchRole(role)) return;
+    setRole("user");
+  }, [isManagerViewer, role]);
 
   function resetUserForm() {
     setEditingUserId(null);
+    setEditingUserRole(null);
     setEmail("");
     setFullName("");
     setCpf("");
@@ -300,8 +325,16 @@ export function AdminUsersPanel({
   }, [onOrgDropdownOpenChange]);
 
   function editUser(user: AdminUser) {
+    const nextRole = (user.role || "user").toLowerCase();
+    if (isManagerViewer && !canManagerTouchRole(isUserRole(nextRole) ? nextRole : "user")) {
+      setErr("Gestor não pode editar admin ou outro gestor.");
+      setSuccess(null);
+      return;
+    }
+
     setUserTab("create");
     setEditingUserId(user.id);
+    setEditingUserRole(isUserRole(nextRole) ? nextRole : "user");
     setEmail(user.email || "");
     setFullName(user.full_name || "");
     setCpf(formatCpf(user.cpf || ""));
@@ -318,7 +351,6 @@ export function AdminUsersPanel({
     setPassword("");
     setSuggestedPassword("");
     setPasswordCopied(false);
-    const nextRole = (user.role || "user").toLowerCase();
     setRole(isUserRole(nextRole) ? nextRole : "user");
     setIsActive(!!user.is_active);
   }
@@ -406,8 +438,14 @@ export function AdminUsersPanel({
 
     if (!trimmedEmail) return setErr("Email é obrigatório.");
     if (!trimmedFullName || trimmedFullName.length < 3) return setErr("Nome completo inválido.");
-    if (!normalizedRole) return setErr("Role é obrigatório (admin/user/user_stream).");
-    if (!isUserRole(normalizedRole)) return setErr("Role deve ser admin, user ou user_stream.");
+    if (!normalizedRole) return setErr("Role é obrigatório (admin/manager/user/user_stream).");
+    if (!isUserRole(normalizedRole)) return setErr("Role deve ser admin, manager, user ou user_stream.");
+    if (isManagerViewer && editingUserRole && !canManagerTouchRole(editingUserRole)) {
+      return setErr("Gestor não pode criar ou editar admin ou outro gestor.");
+    }
+    if (isManagerViewer && !canManagerTouchRole(normalizedRole as UserRole)) {
+      return setErr("Gestor não pode criar ou editar admin ou outro gestor.");
+    }
     if (!resolvedOrganizationId && !resolvedOrganizationName) return setErr("Órgão é obrigatório.");
     if (!cpfForPayload && !matriculaForPayload) return setErr("Informe cpf ou matrícula.");
     if (cpfForPayload && cpfForPayload.length !== 11) return setErr("CPF deve ter 11 dígitos.");
@@ -892,36 +930,19 @@ export function AdminUsersPanel({
             </button>
             {isRoleDropdownOpen && (
               <div className="customSelectMenu">
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "user" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("user");
-                    setIsRoleDropdownOpen(false);
-                  }}
-                >
-                  Usuário sem streaming
-                </button>
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "admin" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("admin");
-                    setIsRoleDropdownOpen(false);
-                  }}
-                >
-                  Administrador
-                </button>
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "user_stream" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("user_stream");
-                    setIsRoleDropdownOpen(false);
-                  }}
-                >
-                  Usuário com streaming
-                </button>
+                {roleSelectOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`customSelectItem ${role === option.value ? "customSelectItemActive" : ""}`}
+                    onClick={() => {
+                      setRole(option.value);
+                      setIsRoleDropdownOpen(false);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -1182,55 +1203,59 @@ export function AdminUsersPanel({
                   </div>
                 </div>
 
-              <button
-                onClick={() => editUser(user)}
-                className="adminRowBtn"
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(10,40,75,0.82)",
-                  background: "rgba(255,255,255,0.96)",
-                  cursor: "pointer",
-                  fontWeight: 900,
-                  color: "#0a284b",
-                }}
-              >
-                Editar
-              </button>
+              {!isManagerViewer || canManagerTouchRole(user.role) ? (
+                <>
+                  <button
+                    onClick={() => editUser(user)}
+                    className="adminRowBtn"
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(10,40,75,0.82)",
+                      background: "rgba(255,255,255,0.96)",
+                      cursor: "pointer",
+                      fontWeight: 900,
+                      color: "#0a284b",
+                    }}
+                  >
+                    Editar
+                  </button>
 
-              {user.is_active && !isExpired ? (
-                <button
-                  onClick={() => deactivate(user.id)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(10,40,75,0.18)",
-                    background: "rgba(10,40,75,0.92)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                  }}
-                >
-                  Desativar
-                </button>
-              ) : (
-                <button
-                  onClick={() => reactivate(user.id)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(34,197,94,.14)",
-                    color: "#15803d",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                  }}
-                >
-                  Reativar
-                </button>
-              )}
+                  {user.is_active && !isExpired ? (
+                    <button
+                      onClick={() => deactivate(user.id)}
+                      className="adminRowBtn"
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(10,40,75,0.18)",
+                        background: "rgba(10,40,75,0.92)",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Desativar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => reactivate(user.id)}
+                      className="adminRowBtn"
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(0,0,0,0.12)",
+                        background: "rgba(34,197,94,.14)",
+                        color: "#15803d",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Reativar
+                    </button>
+                  )}
+                </>
+              ) : null}
               </div>
             );
           })}
