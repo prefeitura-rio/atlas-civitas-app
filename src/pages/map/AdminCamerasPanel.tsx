@@ -395,27 +395,113 @@ export function AdminCamerasPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div className="tabsRail tabsRailSection">
-        <button className={`subTab ${camTab === "cameras" ? "subTabActive" : ""}`} onClick={() => setCamTab("cameras")}>
-          Câmeras
-        </button>
-        <button className={`subTab ${camTab === "civitas" ? "subTabActive" : ""}`} onClick={() => setCamTab("civitas")}>
-          Câmeras Civitas
-        </button>
-      </div>
-
-      {camTab === "civitas" && (
-        <div className="tabsRail tabsRailSection tabsRailCompact">
-          <button
-            className={`subTab ${civitasTab === "inteligentes" ? "subTabActive" : ""}`}
-            onClick={() => setCivitasTab("inteligentes")}
-          >
-            Inteligentes
+      {!isMobile ? (
+        <div className="tabsRail tabsRailSection">
+          <button className={`subTab ${camTab === "cameras" ? "subTabActive" : ""}`} onClick={() => setCamTab("cameras")}>
+            Câmeras
           </button>
-          <button className={`subTab ${civitasTab === "lpr" ? "subTabActive" : ""}`} onClick={() => setCivitasTab("lpr")}>
-            LPR
+          <button className={`subTab ${camTab === "civitas" ? "subTabActive" : ""}`} onClick={() => setCamTab("civitas")}>
+            Câmeras Civitas
           </button>
         </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gap: 6,
+            padding: "10px 12px",
+            borderRadius: 16,
+            border: "1px solid rgba(10,40,75,0.08)",
+            background: "rgba(255,255,255,0.88)",
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>ORIGEM</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              { key: "cameras" as const, label: "Câmeras" },
+              { key: "civitas" as const, label: "Câmeras Civitas" },
+            ].map((option) => {
+              const active = camTab === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setCamTab(option.key)}
+                  style={{
+                    padding: "7px 12px",
+                    borderRadius: 999,
+                    border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
+                    background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
+                    color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {camTab === "civitas" && (
+        !isMobile ? (
+          <div className="tabsRail tabsRailSection tabsRailCompact">
+            <button
+              className={`subTab ${civitasTab === "inteligentes" ? "subTabActive" : ""}`}
+              onClick={() => setCivitasTab("inteligentes")}
+            >
+              Inteligentes
+            </button>
+            <button className={`subTab ${civitasTab === "lpr" ? "subTabActive" : ""}`} onClick={() => setCivitasTab("lpr")}>
+              LPR
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gap: 6,
+              padding: "10px 12px",
+              borderRadius: 16,
+              border: "1px solid rgba(10,40,75,0.08)",
+              background: "rgba(255,255,255,0.88)",
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>TIPO</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                { key: "inteligentes" as const, label: "Inteligentes" },
+                { key: "lpr" as const, label: "LPR" },
+              ].map((option) => {
+                const active = civitasTab === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setCivitasTab(option.key)}
+                    style={{
+                      padding: "7px 12px",
+                      borderRadius: 999,
+                      border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
+                      background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
+                      color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      whiteSpace: "nowrap",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )
       )}
 
       {err && (

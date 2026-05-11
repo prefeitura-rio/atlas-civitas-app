@@ -16,7 +16,7 @@ import {
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Radar } from "./map/types";
-import { canAccessStreaming, isAdminRole, normalizeRole, roleLabel } from "./map/roles";
+import { canAccessStreaming, isAdminRole, normalizeRole } from "./map/roles";
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
@@ -46,6 +46,14 @@ type PanelKey = TabKey | null;
 type AdminTab = "users" | "organizations" | "logs" | "cameras" | "radares";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
+
+const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
+  { key: "users", label: "Usuários" },
+  { key: "organizations", label: "Organizações" },
+  { key: "cameras", label: "Câmeras" },
+  { key: "radares", label: "Radares" },
+  { key: "logs", label: "Logs" },
+];
 
 const REPORT_LAYER_RULES = [
   { feature: "cameras", layer: "cameras" },
@@ -1407,6 +1415,14 @@ export default function MapPage() {
 
   function togglePanel(next: TabKey) {
     setPanel((cur) => (cur === next ? null : next));
+  }
+
+  function toggleMobilePanel(next: TabKey) {
+    setPanel((cur) => {
+      const target = cur === next ? null : next;
+      if (target === null) setPanelOpen(false);
+      return target;
+    });
   }
 
   useEffect(() => {
@@ -6328,27 +6344,36 @@ export default function MapPage() {
 
           {panel === "profile" && (
             <>
-              <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>Perfil</div>
-
               <div
                 style={{
                   padding: 12,
                   borderRadius: 16,
-                  background: "rgba(255,255,255,0.90)",
-                  border: "1px solid rgba(0,0,0,0.10)",
+                  background: "rgba(255,255,255,0.88)",
+                  border: "1px solid rgba(10,40,75,0.08)",
                   marginBottom: 12,
                 }}
               >
-                <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>Dados do usuário</div>
-	                <div style={{ display: "grid", gap: 8 }}>
-	                  <div style={{ fontSize: 12,fontWeight: 900}}>Nome</div>
-	                  <div style={{ fontSize: 13,  }}>{me?.full_name || "-"}</div>
-	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
-	                  <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
-	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Organização</div>
-	                  <div style={{ fontSize: 13, opacity: 0.85 }}>{auth.organizationName || "-"}</div>
-	                </div>
-	              </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: "0.08em",
+                    color: "rgba(10,40,75,0.58)",
+                    marginBottom: 6,
+                  }}
+                >
+                  PERFIL
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8, color: "#0f172a" }}>Dados do usuário</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: "rgba(10,40,75,0.58)" }}>Nome</div>
+                  <div style={{ fontSize: 13, color: "#0f172a" }}>{me?.full_name || "-"}</div>
+                  <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Email</div>
+                  <div style={{ fontSize: 13, color: "rgba(15,23,42,0.72)" }}>{me?.email || "-"}</div>
+                  <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Organização</div>
+                  <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>{auth.organizationName || "-"}</div>
+                </div>
+              </div>
 
                 <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
                 <div style={{ fontSize: 13, fontWeight: 900 }}>Trocar senha</div>
@@ -6458,8 +6483,8 @@ export default function MapPage() {
                   style={{
                     padding: "10px 12px",
                     borderRadius: 14,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(0,0,0,0.86)",
+                    border: "1px solid rgba(10,40,75,0.18)",
+                    background: "rgba(10,40,75,0.92)",
                     color: "#fff",
                     cursor: "pointer",
                     fontWeight: 900,
@@ -6718,42 +6743,55 @@ export default function MapPage() {
               }
             }}
           >
-            <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+                marginBottom: 12,
+              }}
+            >
               <button
                 className={`tabBtn ${panel === "map" ? "tabBtnActive" : ""}`}
-                onClick={() => {
-                  setPanel((cur) => {
-                    const next = cur === "map" ? null : "map";
-                    if (next === null) setPanelOpen(false);
-                    return next;
-                  });
+                style={{
+                  minHeight: 42,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  whiteSpace: "normal",
+                  lineHeight: 1.15,
                 }}
+                onClick={() => toggleMobilePanel("map")}
               >
                 CENTRAL
               </button>
 
               <button
                 className={`tabBtn ${panel === "profile" ? "tabBtnActive" : ""}`}
-                onClick={() => {
-                  setPanel((cur) => {
-                    const next = cur === "profile" ? null : "profile";
-                    if (next === null) setPanelOpen(false);
-                    return next;
-                  });
+                style={{
+                  minHeight: 42,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  whiteSpace: "normal",
+                  lineHeight: 1.15,
                 }}
+                onClick={() => toggleMobilePanel("profile")}
               >
                 PERFIL
               </button>
 
               <button
                 className={`tabBtn ${panel === "civitas" ? "tabBtnActive" : ""}`}
-                onClick={() => {
-                  setPanel((cur) => {
-                    const next = cur === "civitas" ? null : "civitas";
-                    if (next === null) setPanelOpen(false);
-                    return next;
-                  });
+                style={{
+                  minHeight: 42,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  whiteSpace: "normal",
+                  lineHeight: 1.15,
                 }}
+                onClick={() => toggleMobilePanel("civitas")}
               >
                 {civitasTabLabel}
               </button>
@@ -6761,35 +6799,70 @@ export default function MapPage() {
               {isAdmin && (
                 <button
                   className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
-                  onClick={() => {
-                    setPanel((cur) => {
-                      const next = cur === "admin" ? null : "admin";
-                      if (next === null) setPanelOpen(false);
-                      return next;
-                    });
+                  style={{
+                    minHeight: 42,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    whiteSpace: "normal",
+                    lineHeight: 1.15,
                   }}
+                  onClick={() => toggleMobilePanel("admin")}
                 >
                   ADMINISTRADOR
                 </button>
               )}
-
-              <div style={{ flex: 1 }} />
             </div>
 
             {panel === "map" && (
               <>
                 <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
-                  <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
-                    {availableListModes.map((option) => (
-                      <button
-                        key={option.mode}
-                        className={`subTab ${listMode === option.mode ? "subTabActive" : ""}`}
-                        onClick={() => setListMode(option.mode)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
+                  {!isMobile ? (
+                    <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
+                      {availableListModes.map((option) => (
+                        <button
+                          key={option.mode}
+                          className={`subTab ${listMode === option.mode ? "subTabActive" : ""}`}
+                          onClick={() => setListMode(option.mode)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {availableListModes.map((option) => {
+                        const active = listMode === option.mode;
+                        return (
+                          <button
+                            key={option.mode}
+                            type="button"
+                            onClick={() => setListMode(option.mode)}
+                            style={{
+                              flex: "1 1 calc(50% - 4px)",
+                              minWidth: 0,
+                              padding: "8px 10px",
+                              borderRadius: 999,
+                              border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
+                              background: active ? "rgba(10,40,75,0.92)" : "rgba(255,255,255,0.92)",
+                              color: active ? "#fff" : "rgba(10,40,75,0.76)",
+                              fontSize: option.mode === "inteligentes" ? 10.5 : 11,
+                              fontWeight: 800,
+                              lineHeight: 1.15,
+                              minHeight: 38,
+                              textAlign: "center",
+                              whiteSpace: "normal",
+                              wordBreak: "break-word",
+                              cursor: "pointer",
+                              boxShadow: active ? "0 8px 20px rgba(10,40,75,0.14)" : "none",
+                            }}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div className="panelTitle">{listHeaderLabel}</div>
                 </div>
 
@@ -7213,35 +7286,66 @@ export default function MapPage() {
                   style={{
                     padding: 12,
                     borderRadius: 16,
-                    background: "rgba(255,255,255,0.90)",
-                    border: "1px solid rgba(0,0,0,0.10)",
+                    background: "rgba(255,255,255,0.88)",
+                    border: "1px solid rgba(10,40,75,0.08)",
                     marginBottom: 12,
                   }}
                 >
-                  <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>Dados do usuário</div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 900,
+                      letterSpacing: "0.08em",
+                      color: "rgba(10,40,75,0.58)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    PERFIL
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8, color: "#0f172a" }}>Dados do usuário</div>
                   <div style={{ display: "grid", gap: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900 }}>Nome</div>
-                    <div style={{ fontSize: 13 }}>{me?.full_name || "-"}</div>
-                    <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Email</div>
-                    <div style={{ fontSize: 13, opacity: 0.7 }}>{me?.email || "-"}</div>
-	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Perfil de acesso</div>
-	                  <div style={{ fontSize: 13, opacity: 0.85 }}>
-	                    {roleLabel(role)}
-	                  </div>
-	                  <div style={{ fontSize: 12, fontWeight: 900, marginTop: 6 }}>Organização</div>
-	                  <div style={{ fontSize: 13, opacity: 0.85 }}>{auth.organizationName || "-"}</div>
-	                </div>
-	              </div>
+                    <div style={{ fontSize: 11, fontWeight: 900, color: "rgba(10,40,75,0.58)" }}>Nome</div>
+                    <div style={{ fontSize: 13, color: "#0f172a" }}>{me?.full_name || "-"}</div>
+                    <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Email</div>
+                    <div style={{ fontSize: 13, color: "rgba(15,23,42,0.72)" }}>{me?.email || "-"}</div>
+                    <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Organização</div>
+                    <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>{auth.organizationName || "-"}</div>
+                  </div>
+                </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2 }}>Trocar senha</div>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    padding: 12,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.88)",
+                    border: "1px solid rgba(10,40,75,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 900,
+                      letterSpacing: "0.08em",
+                      color: "rgba(10,40,75,0.58)",
+                    }}
+                  >
+                    SEGURANÇA
+                  </div>
+                  <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2, color: "#0f172a" }}>Trocar senha</div>
                   <div style={{ position: "relative" }}>
                     <input
                       value={pwOld}
                       onChange={(e) => setPwOld(e.target.value)}
                       type={showPwOld ? "text" : "password"}
                       placeholder="Senha atual"
-                      style={{ ...inputStyle(), paddingRight: 44 }}
+                      style={{
+                        ...inputStyle(),
+                        paddingRight: 44,
+                        border: "1px solid rgba(10,40,75,0.12)",
+                        background: "rgba(255,255,255,0.96)",
+                      }}
                     />
                     <button
                       type="button"
@@ -7255,7 +7359,7 @@ export default function MapPage() {
                         transform: "translateY(-50%)",
                         border: "none",
                         background: "transparent",
-                        color: "rgba(0,0,0,0.72)",
+                        color: "rgba(10,40,75,0.64)",
                         padding: 0,
                         width: 20,
                         height: 20,
@@ -7274,7 +7378,12 @@ export default function MapPage() {
                       onChange={(e) => setPwNew(e.target.value)}
                       type={showPwNew ? "text" : "password"}
                       placeholder="Nova senha"
-                      style={{ ...inputStyle(), paddingRight: 44 }}
+                      style={{
+                        ...inputStyle(),
+                        paddingRight: 44,
+                        border: "1px solid rgba(10,40,75,0.12)",
+                        background: "rgba(255,255,255,0.96)",
+                      }}
                     />
                     <button
                       type="button"
@@ -7288,7 +7397,7 @@ export default function MapPage() {
                         transform: "translateY(-50%)",
                         border: "none",
                         background: "transparent",
-                        color: "rgba(0,0,0,0.72)",
+                        color: "rgba(10,40,75,0.64)",
                         padding: 0,
                         width: 20,
                         height: 20,
@@ -7307,7 +7416,12 @@ export default function MapPage() {
                       onChange={(e) => setPwNew2(e.target.value)}
                       type={showPwNew2 ? "text" : "password"}
                       placeholder="Confirmar nova senha"
-                      style={{ ...inputStyle(), paddingRight: 44 }}
+                      style={{
+                        ...inputStyle(),
+                        paddingRight: 44,
+                        border: "1px solid rgba(10,40,75,0.12)",
+                        background: "rgba(255,255,255,0.96)",
+                      }}
                     />
                     <button
                       type="button"
@@ -7321,7 +7435,7 @@ export default function MapPage() {
                         transform: "translateY(-50%)",
                         border: "none",
                         background: "transparent",
-                        color: "rgba(0,0,0,0.72)",
+                        color: "rgba(10,40,75,0.64)",
                         padding: 0,
                         width: 20,
                         height: 20,
@@ -7340,8 +7454,8 @@ export default function MapPage() {
                     style={{
                       padding: "10px 12px",
                       borderRadius: 14,
-                      border: "1px solid rgba(0,0,0,0.12)",
-                      background: "rgba(0,0,0,0.86)",
+                      border: "1px solid rgba(10,40,75,0.18)",
+                      background: "rgba(10,40,75,0.92)",
                       color: "#fff",
                       cursor: "pointer",
                       fontWeight: 900,
@@ -7350,17 +7464,17 @@ export default function MapPage() {
                     {pwLoading ? "Salvando..." : "Salvar nova senha"}
                   </button>
                   {pwMsg && (
-                    <div
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: 14,
-                        background: "rgba(255,255,255,0.90)",
-                        border: "1px solid rgba(0,0,0,0.10)",
-                        fontSize: 13,
-                        color: "rgba(0,0,0,0.85)",
-                      }}
-                    >
-                      {pwMsg}
+                  <div
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 14,
+                      background: "rgba(255,255,255,0.96)",
+                      border: "1px solid rgba(10,40,75,0.10)",
+                      fontSize: 13,
+                      color: "rgba(15,23,42,0.85)",
+                    }}
+                  >
+                    {pwMsg}
                     </div>
                   )}
                 </div>
@@ -7371,38 +7485,81 @@ export default function MapPage() {
 
             {panel === "admin" && isAdmin && (
               <>
-                <div className="tabsRail tabsRailAdmin tabsRailAdminMobile">
-                  <button
-                    className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("users")}
+                {!isMobile ? (
+                  <div className="tabsRail tabsRailAdmin tabsRailAdminMobile">
+                    <button
+                      className={`subTab ${adminTab === "users" ? "subTabActive" : ""}`}
+                      onClick={() => setAdminTab("users")}
+                    >
+                      Usuários
+                    </button>
+                    <button
+                      className={`subTab ${adminTab === "organizations" ? "subTabActive" : ""}`}
+                      onClick={() => setAdminTab("organizations")}
+                    >
+                      Organizações
+                    </button>
+                    <button
+                      className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
+                      onClick={() => setAdminTab("cameras")}
+                    >
+                      Câmeras
+                    </button>
+                    <button
+                      className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
+                      onClick={() => setAdminTab("radares")}
+                    >
+                      Radares
+                    </button>
+                    <button
+                      className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
+                      onClick={() => setAdminTab("logs")}
+                    >
+                      Logs
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 6,
+                      marginBottom: 12,
+                      padding: "10px 12px",
+                      borderRadius: 16,
+                      border: "1px solid rgba(10,40,75,0.08)",
+                      background: "rgba(255,255,255,0.88)",
+                    }}
                   >
-                    Usuários
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "organizations" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("organizations")}
-                  >
-                    Organizações
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "cameras" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("cameras")}
-                  >
-                    Câmeras
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "radares" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("radares")}
-                  >
-                    Radares
-                  </button>
-                  <button
-                    className={`subTab ${adminTab === "logs" ? "subTabActive" : ""}`}
-                    onClick={() => setAdminTab("logs")}
-                  >
-                    Logs
-                  </button>
-                </div>
+                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>
+                      SEÇÃO
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {ADMIN_TAB_OPTIONS.map((option) => {
+                        const active = adminTab === option.key;
+                        return (
+                          <button
+                            key={option.key}
+                            type="button"
+                            onClick={() => setAdminTab(option.key)}
+                            style={{
+                              padding: "7px 12px",
+                              borderRadius: 999,
+                              border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
+                              background: active ? "rgba(10,40,75,0.92)" : "rgba(255,255,255,0.96)",
+                              color: active ? "#fff" : "rgba(10,40,75,0.76)",
+                              fontSize: 11,
+                              fontWeight: 800,
+                              whiteSpace: "nowrap",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {adminTab === "users" && (
                   <AdminUsersPanel
