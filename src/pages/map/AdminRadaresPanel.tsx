@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Radar } from "./types";
 import {
   fetchJson,
@@ -9,6 +9,8 @@ import {
   getPointCollectionKey,
   getPointCollectionTitle,
   isEntityActive,
+  inputStyle,
+  normalizeSearchText,
 } from "./shared";
 import Swal from "sweetalert2";
 import radarIcon from "@/assets/radar-icon.png";
@@ -35,6 +37,7 @@ export function AdminRadaresPanel({
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusLoadingKey, setStatusLoadingKey] = useState<string | null>(null);
   const cardRowStyle = {
     border: "1px solid rgba(15,23,42,0.10)",
@@ -123,6 +126,47 @@ export function AdminRadaresPanel({
     return getPointCollectionKey(radar);
   }
 
+  function renderSearchRow(value: string, onChange: (next: string) => void) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Buscar por código ou nome"
+            style={{
+              ...inputStyle(),
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.96)",
+            }}
+          />
+        </div>
+        {value.trim() && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            style={{
+              height: 40,
+              padding: "0 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.92)",
+              color: "#0f172a",
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: "0 4px 10px rgba(15,23,42,0.05)",
+            }}
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+    );
+  }
+
   async function saveRadarStatus(radar: Radar, nextActive: boolean) {
     const action = nextActive ? "reactivate" : "deactivate";
     const candidates = getPointCollectionIdentifiers(radar);
@@ -161,7 +205,15 @@ export function AdminRadaresPanel({
     );
   }
 
-  const filteredItems = applyStatusFilter(items, statusFilter);
+  const normalizedSearchQuery = normalizeSearchText(searchQuery);
+
+  const filteredItems = useMemo(() => {
+    const byStatus = applyStatusFilter(items, statusFilter);
+    if (!normalizedSearchQuery) return byStatus;
+    return byStatus.filter((r) =>
+      normalizeSearchText([getPointCollectionCode(r), getPointCollectionTitle(r), r.local, r.logradouro, r.localidade, r.bairro].filter(Boolean).join(" ")).includes(normalizedSearchQuery)
+    );
+  }, [items, statusFilter, normalizedSearchQuery]);
 
   async function toggleRadarStatus(radar: Radar) {
     const key = getRadarKey(radar);
@@ -254,7 +306,7 @@ export function AdminRadaresPanel({
   useEffect(() => {
     setPage(1);
     setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length, statusFilter]);
+  }, [items.length, statusFilter, searchQuery]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -291,6 +343,7 @@ export function AdminRadaresPanel({
             </button>
           </div>
         </div>
+        {renderSearchRow(searchQuery, setSearchQuery)}
 
         <div
           className="scrollbarHidden"
@@ -395,7 +448,11 @@ export function AdminRadaresPanel({
             );
           })}
 
-          {!filteredItems.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum radar encontrado.</div>}
+          {!filteredItems.length && !loading && (
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              {searchQuery.trim() ? "Nenhum radar encontrado para essa busca." : "Nenhum radar encontrado."}
+            </div>
+          )}
         </div>
 
         {!isMobile && filteredItems.length > ADMIN_PAGE_SIZE && (

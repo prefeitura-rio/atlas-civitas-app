@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Camera, CameraIntel, CameraLpr } from "./types";
 import {
   fetchJson,
@@ -7,6 +7,8 @@ import {
   getPointCollectionKey,
   getPointCollectionTitle,
   isEntityActive,
+  inputStyle,
+  normalizeSearchText,
 } from "./shared";
 import Swal from "sweetalert2";
 import cameraIcon from "@/assets/camera-icon.png";
@@ -68,6 +70,9 @@ export function AdminCamerasPanel({
   const [camsStatusFilter, setCamsStatusFilter] = useState<StatusFilter>("all");
   const [intelStatusFilter, setIntelStatusFilter] = useState<StatusFilter>("all");
   const [lprStatusFilter, setLprStatusFilter] = useState<StatusFilter>("all");
+  const [camsSearchQuery, setCamsSearchQuery] = useState("");
+  const [intelSearchQuery, setIntelSearchQuery] = useState("");
+  const [lprSearchQuery, setLprSearchQuery] = useState("");
   const [statusLoadingKey, setStatusLoadingKey] = useState<string | null>(null);
   const cardRowStyle = {
     border: "1px solid rgba(15,23,42,0.10)",
@@ -185,6 +190,47 @@ export function AdminCamerasPanel({
     return isEntityActive(item);
   }
 
+  function renderSearchRow(value: string, onChange: (next: string) => void) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Buscar por código ou nome"
+            style={{
+              ...inputStyle(),
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.96)",
+            }}
+          />
+        </div>
+        {value.trim() && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            style={{
+              height: 40,
+              padding: "0 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.92)",
+              color: "#0f172a",
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: "0 4px 10px rgba(15,23,42,0.05)",
+            }}
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+    );
+  }
+
   function patchLocalStatus(scope: CameraScope, item: Camera | CameraIntel | CameraLpr, nextActive: boolean) {
     const targetIds = new Set(getPointCollectionIdentifiers(item));
     const patch = <T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(arr: T[]) =>
@@ -205,9 +251,33 @@ export function AdminCamerasPanel({
     setLprItems((prev) => patch(prev as any) as CameraLpr[]);
   }
 
-  const filteredCams = applyStatusFilter(items, camsStatusFilter);
-  const filteredIntel = applyStatusFilter(intelItems, intelStatusFilter);
-  const filteredLpr = applyStatusFilter(lprItems, lprStatusFilter);
+  const normalizedCamsSearchQuery = normalizeSearchText(camsSearchQuery);
+  const normalizedIntelSearchQuery = normalizeSearchText(intelSearchQuery);
+  const normalizedLprSearchQuery = normalizeSearchText(lprSearchQuery);
+
+  const filteredCams = useMemo(() => {
+    const byStatus = applyStatusFilter(items, camsStatusFilter);
+    if (!normalizedCamsSearchQuery) return byStatus;
+    return byStatus.filter((c) =>
+      normalizeSearchText([getPointCollectionCode(c), c.name, getPointCollectionTitle(c), c.city, c.uf].filter(Boolean).join(" ")).includes(normalizedCamsSearchQuery)
+    );
+  }, [items, camsStatusFilter, normalizedCamsSearchQuery]);
+
+  const filteredIntel = useMemo(() => {
+    const byStatus = applyStatusFilter(intelItems, intelStatusFilter);
+    if (!normalizedIntelSearchQuery) return byStatus;
+    return byStatus.filter((c) =>
+      normalizeSearchText([getPointCollectionCode(c), c.name, getPointCollectionTitle(c), c.responsavel, c.direction].filter(Boolean).join(" ")).includes(normalizedIntelSearchQuery)
+    );
+  }, [intelItems, intelStatusFilter, normalizedIntelSearchQuery]);
+
+  const filteredLpr = useMemo(() => {
+    const byStatus = applyStatusFilter(lprItems, lprStatusFilter);
+    if (!normalizedLprSearchQuery) return byStatus;
+    return byStatus.filter((c) =>
+      normalizeSearchText([getPointCollectionCode(c), c.name, getPointCollectionTitle(c), c.bairro, c.sentido, c.direction].filter(Boolean).join(" ")).includes(normalizedLprSearchQuery)
+    );
+  }, [lprItems, lprStatusFilter, normalizedLprSearchQuery]);
 
   async function saveCameraStatus(scope: CameraScope, item: Camera | CameraIntel | CameraLpr, nextActive: boolean) {
     const baseUrl = getResourceBase(scope);
@@ -412,6 +482,9 @@ export function AdminCamerasPanel({
     camsStatusFilter,
     intelStatusFilter,
     lprStatusFilter,
+    camsSearchQuery,
+    intelSearchQuery,
+    lprSearchQuery,
   ]);
 
   return (
@@ -548,6 +621,7 @@ export function AdminCamerasPanel({
               <div style={{ flex: 1 }} />
               {renderStatusFilter(camsStatusFilter, setCamsStatusFilter)}
             </div>
+            {renderSearchRow(camsSearchQuery, setCamsSearchQuery)}
 
             <div
               className="scrollbarHidden"
@@ -653,7 +727,9 @@ export function AdminCamerasPanel({
               })}
 
               {!filteredCams.length && !loading && (
-                <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera encontrada.</div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  {camsSearchQuery.trim() ? "Nenhuma câmera encontrada para essa busca." : "Nenhuma câmera encontrada."}
+                </div>
               )}
             </div>
 
@@ -694,14 +770,15 @@ export function AdminCamerasPanel({
             border: "1px solid rgba(0,0,0,0.10)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {intelLoading ? "Carregando..." : `${filteredIntel.length} itens`}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {intelLoading ? "Carregando..." : `${filteredIntel.length} itens`}
+              </div>
+              <div style={{ flex: 1 }} />
+              {renderStatusFilter(intelStatusFilter, setIntelStatusFilter)}
             </div>
-            <div style={{ flex: 1 }} />
-            {renderStatusFilter(intelStatusFilter, setIntelStatusFilter)}
-          </div>
+          {renderSearchRow(intelSearchQuery, setIntelSearchQuery)}
           <div
             className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
@@ -802,7 +879,11 @@ export function AdminCamerasPanel({
               );
             })}
             {!filteredIntel.length && !intelLoading && (
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma Super Câmera Inteligente encontrada.</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {intelSearchQuery.trim()
+                  ? "Nenhuma Super Câmera Inteligente encontrada para essa busca."
+                  : "Nenhuma Super Câmera Inteligente encontrada."}
+              </div>
             )}
           </div>
 
@@ -842,14 +923,15 @@ export function AdminCamerasPanel({
             border: "1px solid rgba(0,0,0,0.10)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras LPR</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {lprLoading ? "Carregando..." : `${filteredLpr.length} itens`}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras LPR</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {lprLoading ? "Carregando..." : `${filteredLpr.length} itens`}
+              </div>
+              <div style={{ flex: 1 }} />
+              {renderStatusFilter(lprStatusFilter, setLprStatusFilter)}
             </div>
-            <div style={{ flex: 1 }} />
-            {renderStatusFilter(lprStatusFilter, setLprStatusFilter)}
-          </div>
+          {renderSearchRow(lprSearchQuery, setLprSearchQuery)}
           <div
             className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
@@ -951,7 +1033,9 @@ export function AdminCamerasPanel({
               );
             })}
             {!filteredLpr.length && !lprLoading && (
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera LPR encontrada.</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {lprSearchQuery.trim() ? "Nenhuma câmera LPR encontrada para essa busca." : "Nenhuma câmera LPR encontrada."}
+              </div>
             )}
           </div>
 

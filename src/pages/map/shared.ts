@@ -13,6 +13,10 @@ export function cleanString(value: unknown): string {
   return String(value).trim();
 }
 
+export function normalizeSearchText(value: unknown): string {
+  return cleanString(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 export function firstNonEmptyString(...values: unknown[]): string {
   for (const value of values) {
     const text = cleanString(value);

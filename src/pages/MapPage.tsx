@@ -983,22 +983,23 @@ function closestPointOnSegment2D(
   return { x, y, distanceSq: distX * distX + distY * distY };
 }
 
-function getAreaDrawInsertInfo(
+const AREA_DRAW_MIN_VERTEX_DISTANCE_PX = 6;
+
+type AreaDrawInsertCandidate = {
+  insertIndex: number;
+  projectedPoint: [number, number];
+  distanceSq: number;
+};
+
+function getAreaDrawInsertCandidates(
   map: mapboxgl.Map,
   points: Array<[number, number]>,
   target: [number, number]
 ) {
-  if (points.length < 2) return null;
+  if (points.length < 2) return [];
 
   const targetPx = map.project(target);
-  let best:
-    | {
-        insertIndex: number;
-        x: number;
-        y: number;
-        distanceSq: number;
-      }
-    | null = null;
+  const candidates: AreaDrawInsertCandidate[] = [];
 
   const inspectSegment = (startIndex: number, endIndex: number) => {
     const startPx = map.project(points[startIndex]);
@@ -1012,14 +1013,12 @@ function getAreaDrawInsertInfo(
       endPx.y
     );
 
-    if (!best || closest.distanceSq < best.distanceSq) {
-      best = {
-        insertIndex: startIndex + 1,
-        x: closest.x,
-        y: closest.y,
-        distanceSq: closest.distanceSq,
-      };
-    }
+    const lngLat = map.unproject([closest.x, closest.y]);
+    candidates.push({
+      insertIndex: startIndex + 1,
+      projectedPoint: [lngLat.lng, lngLat.lat],
+      distanceSq: closest.distanceSq,
+    });
   };
 
   for (let i = 0; i < points.length - 1; i++) {
@@ -1030,14 +1029,58 @@ function getAreaDrawInsertInfo(
     inspectSegment(points.length - 1, 0);
   }
 
-  if (!best) return null;
-  const finalBest = best;
+  return candidates.sort((a, b) => a.distanceSq - b.distanceSq);
+}
 
-  const lngLat = map.unproject([finalBest.x, finalBest.y]);
+function getAreaDrawInsertInfo(
+  map: mapboxgl.Map,
+  points: Array<[number, number]>,
+  target: [number, number]
+) {
+  const best = getAreaDrawInsertCandidates(map, points, target)[0];
+  if (!best) return null;
   return {
-    insertIndex: finalBest.insertIndex,
-    point: [lngLat.lng, lngLat.lat] as [number, number],
+    insertIndex: best.insertIndex,
+    point: best.projectedPoint,
   };
+}
+
+function areaDrawContainsPoint(points: Array<[number, number]>, target: [number, number]) {
+  if (points.length < 3) return false;
+  return pointInRing(target, points);
+}
+
+function areaDrawIsNearExistingVertex(
+  map: mapboxgl.Map,
+  points: Array<[number, number]>,
+  target: [number, number],
+  minDistancePx = AREA_DRAW_MIN_VERTEX_DISTANCE_PX
+) {
+  if (!points.length) return false;
+  const targetPx = map.project(target);
+  const minDistanceSq = minDistancePx * minDistancePx;
+
+  return points.some((point) => {
+    const pointPx = map.project(point);
+    const dx = targetPx.x - pointPx.x;
+    const dy = targetPx.y - pointPx.y;
+    return dx * dx + dy * dy <= minDistanceSq;
+  });
+}
+
+function getAreaDrawExpandedPoints(
+  map: mapboxgl.Map,
+  points: Array<[number, number]>,
+  target: [number, number]
+) {
+  const candidates = getAreaDrawInsertCandidates(map, points, target);
+
+  for (const candidate of candidates) {
+    const nextPoints = insertAreaDrawPoint(points, candidate.insertIndex, target);
+    if (!areaDrawHasSelfIntersection(nextPoints)) return nextPoints;
+  }
+
+  return null;
 }
 
 function insertAreaDrawPoint(
@@ -1058,6 +1101,61 @@ function replaceAreaDrawPoint(
   return points.map((point, pointIndex) =>
     pointIndex === index ? nextPoint : point
   );
+}
+
+function areaDrawOrientation(a: [number, number], b: [number, number], c: [number, number]) {
+  const value = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
+  const epsilon = 1e-12;
+  if (Math.abs(value) <= epsilon) return 0;
+  return value > 0 ? 1 : 2;
+}
+
+function areaDrawOnSegment(a: [number, number], b: [number, number], c: [number, number]) {
+  const epsilon = 1e-12;
+  return (
+    b[0] <= Math.max(a[0], c[0]) + epsilon &&
+    b[0] + epsilon >= Math.min(a[0], c[0]) &&
+    b[1] <= Math.max(a[1], c[1]) + epsilon &&
+    b[1] + epsilon >= Math.min(a[1], c[1])
+  );
+}
+
+function areaDrawSegmentsIntersect(
+  a1: [number, number],
+  a2: [number, number],
+  b1: [number, number],
+  b2: [number, number]
+) {
+  const o1 = areaDrawOrientation(a1, a2, b1);
+  const o2 = areaDrawOrientation(a1, a2, b2);
+  const o3 = areaDrawOrientation(b1, b2, a1);
+  const o4 = areaDrawOrientation(b1, b2, a2);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && areaDrawOnSegment(a1, b1, a2)) return true;
+  if (o2 === 0 && areaDrawOnSegment(a1, b2, a2)) return true;
+  if (o3 === 0 && areaDrawOnSegment(b1, a1, b2)) return true;
+  if (o4 === 0 && areaDrawOnSegment(b1, a2, b2)) return true;
+  return false;
+}
+
+function areaDrawHasSelfIntersection(points: Array<[number, number]>) {
+  if (points.length < 4) return false;
+
+  const segments = points.map((point, index) => [point, points[(index + 1) % points.length]] as const);
+
+  for (let i = 0; i < segments.length; i += 1) {
+    for (let j = i + 1; j < segments.length; j += 1) {
+      const adjacent = Math.abs(i - j) <= 1;
+      const closingAdjacent = i === 0 && j === segments.length - 1;
+      if (adjacent || closingAdjacent) continue;
+      if (areaDrawSegmentsIntersect(segments[i][0], segments[i][1], segments[j][0], segments[j][1])) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function featureCoordKey(feature: Feature<Point, any>): string | null {
@@ -1137,6 +1235,7 @@ export default function MapPage() {
   const areaDrawPointsRef = useRef<Array<[number, number]>>([]);
   const draggingAreaPointIndexRef = useRef<number | null>(null);
   const areaPointDragMovedRef = useRef(false);
+  const areaPointDragSnapshotRef = useRef<Array<[number, number]> | null>(null);
   const areaPointDragPanWasEnabledRef = useRef(false);
   const suppressAreaDrawClickRef = useRef(false);
   const showBairrosRef = useRef(false);
@@ -1154,11 +1253,15 @@ export default function MapPage() {
   const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
   const hoverPreviewTimerRef = useRef<number | null>(null);
   const hoverPreviewCloseTimerRef = useRef<number | null>(null);
+  const hoverPreviewCountdownTimerRef = useRef<number | null>(null);
   const hoverPreviewGenerationRef = useRef(0);
   const poiCoordIndexRef = useRef<Map<string, Feature<Point, any>[]>>(new Map());
   const suppressHoverHideRef = useRef(false);
   const suppressHoverHideTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileSearchSubmittingRef = useRef(false);
+  const mobileSearchTouchSubmitAtRef = useRef(0);
 
   const handlersBoundRef = useRef(false);
   const selectionRingTimerRef = useRef<number | null>(null);
@@ -1169,6 +1272,7 @@ export default function MapPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileSearchFocused, setMobileSearchFocused] = useState(false);
   const [mapBaseStyle, setMapBaseStyle] = useState<MapBaseStyle>(() => {
     if (typeof window === "undefined") return "streets";
     try {
@@ -1513,7 +1617,9 @@ export default function MapPage() {
     const setViewportHeightVar = () => {
       const vv = window.visualViewport;
       const height = vv?.height ?? window.innerHeight;
+      const offsetTop = vv?.offsetTop ?? 0;
       document.documentElement.style.setProperty("--vvh", `${Math.round(height)}px`);
+      document.documentElement.style.setProperty("--vv-offset-top", `${Math.round(offsetTop)}px`);
       const map = mapRef.current;
       if (map) {
         window.requestAnimationFrame(() => map.resize());
@@ -2708,11 +2814,40 @@ export default function MapPage() {
       hoverPreviewCloseTimerRef.current = null;
     }
 
+    function clearHoverPreviewCountdownTimer() {
+      if (!hoverPreviewCountdownTimerRef.current) return;
+      window.clearInterval(hoverPreviewCountdownTimerRef.current);
+      hoverPreviewCountdownTimerRef.current = null;
+    }
+
+    function startSmartCameraPreviewCountdown(generation: number, durationSeconds: number) {
+      clearHoverPreviewCountdownTimer();
+      const endsAt = Date.now() + durationSeconds * 1000;
+
+      const updateCountdown = () => {
+        if (generation !== hoverPreviewGenerationRef.current) {
+          clearHoverPreviewCountdownTimer();
+          return;
+        }
+
+        const remaining = clamp(Math.ceil((endsAt - Date.now()) / 1000), 0, durationSeconds);
+        const countdownEl = hoverPreviewPopupRef.current
+          ?.getElement()
+          ?.querySelector<HTMLElement>("[data-smart-preview-countdown]");
+        if (countdownEl) countdownEl.textContent = `${remaining}s`;
+        if (remaining <= 0) clearHoverPreviewCountdownTimer();
+      };
+
+      updateCountdown();
+      hoverPreviewCountdownTimerRef.current = window.setInterval(updateCountdown, 1000);
+    }
+
     function hideHoverPreview() {
       if (suppressHoverHideRef.current && hoverPreviewPopupRef.current?.isOpen()) return;
       hoverPreviewGenerationRef.current += 1;
       clearHoverPreviewTimer();
       clearHoverPreviewCloseTimer();
+      clearHoverPreviewCountdownTimer();
       hoverPreviewPopupRef.current?.remove();
     }
 
@@ -2925,7 +3060,7 @@ export default function MapPage() {
           const streamLink =
             info.kind === "camera_intel"
               ? hasSmartCameraStreamingAccessRef.current && info.smartId
-                ? `<button type="button" class="cameraPopupStreamLink stackPopupStreamLink" data-smart-camera-stream data-smart-camera-id="${escapeHtml(
+                ? `<button type="button" class="cameraPopupStreamLink stackPopupStreamLink cameraPopupStreamLink--soft" data-smart-camera-stream data-smart-camera-id="${escapeHtml(
                     info.smartId
                   )}" data-smart-camera-external-camera-id="${escapeHtml(
                     info.externalCameraId || ""
@@ -3037,9 +3172,17 @@ export default function MapPage() {
       areaPointDragPanWasEnabledRef.current = false;
 
       if (areaPointDragMovedRef.current) {
-        setAreaDrawPoints(areaDrawPointsRef.current);
+        if (areaDrawHasSelfIntersection(areaDrawPointsRef.current) && areaPointDragSnapshotRef.current) {
+          areaDrawPointsRef.current = areaPointDragSnapshotRef.current;
+          setAreaDrawPoints(areaPointDragSnapshotRef.current);
+          setAreaReportMsg("A área não pode se cruzar. O ponto voltou para a posição anterior.");
+        } else {
+          setAreaDrawPoints(areaDrawPointsRef.current);
+          setAreaReportMsg(null);
+        }
       }
       areaPointDragMovedRef.current = false;
+      areaPointDragSnapshotRef.current = null;
       setCursorForIdleMap();
     }
 
@@ -3139,13 +3282,23 @@ export default function MapPage() {
       if (!insertInfo) return;
 
       suppressAreaDrawClickRef.current = true;
+      if (areaDrawIsNearExistingVertex(map, areaDrawPointsRef.current, insertInfo.point)) {
+        setAreaReportMsg("Esse ponto está muito próximo de outro vértice da área.");
+        e.preventDefault();
+        return;
+      }
       const nextPoints = insertAreaDrawPoint(
         areaDrawPointsRef.current,
         insertInfo.insertIndex,
         insertInfo.point
       );
+      if (areaDrawHasSelfIntersection(nextPoints)) {
+        setAreaReportMsg("A área não pode se cruzar. Ajuste os pontos antes de continuar.");
+        return;
+      }
       areaDrawPointsRef.current = nextPoints;
       setAreaDrawPoints(nextPoints);
+      setAreaReportMsg(null);
       e.preventDefault();
     });
 
@@ -3157,6 +3310,7 @@ export default function MapPage() {
       suppressAreaDrawClickRef.current = true;
       areaPointDragMovedRef.current = false;
       draggingAreaPointIndexRef.current = dragIndex;
+      areaPointDragSnapshotRef.current = [...areaDrawPointsRef.current];
       areaPointDragPanWasEnabledRef.current = map.dragPan.isEnabled();
       if (areaPointDragPanWasEnabledRef.current) {
         map.dragPan.disable();
@@ -3241,6 +3395,7 @@ export default function MapPage() {
     function showSmartCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
       clearHoverPreviewTimer();
       clearHoverPreviewCloseTimer();
+      clearHoverPreviewCountdownTimer();
       setCursorPointer();
 
       if (!hasSmartCameraStreamingAccessRef.current) return;
@@ -3249,8 +3404,7 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const smartId = cleanString(p.id);
-      const externalCameraId = cleanString(p.external_camera_id);
-      if (!smartId || !externalCameraId) return;
+      if (!smartId) return;
 
       const coords = (f.geometry as any).coordinates as [number, number];
       const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
@@ -3295,23 +3449,39 @@ export default function MapPage() {
                     scrolling="no"
                     style="position:absolute;top:0;left:0;width:1600px;height:900px;border:0;background:#000;transform:scale(0.225);transform-origin:top left;"
                   ></iframe>
+                  <div class="smartPreviewCountdown" data-smart-preview-countdown>
+                    ${SMART_CAMERA_PREVIEW_DURATION_SECONDS}s
+                  </div>
                 </div>
                 <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
-                  Preview tempor&aacute;rio. Esta sess&atilde;o encerra em 60 segundos.
+                  Para abrir a imagem maior, clique na c&acirc;mera e abra o link.
                 </div>
               </div>
             `);
           centerMobilePopup(hoverPreviewPopup);
+          startSmartCameraPreviewCountdown(requestGeneration, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
 
           clearHoverPreviewCloseTimer();
           hoverPreviewCloseTimerRef.current = window.setTimeout(() => {
             if (requestGeneration !== hoverPreviewGenerationRef.current) return;
             hoverPreviewPopupRef.current?.remove();
             clearHoverPreviewCloseTimer();
+            clearHoverPreviewCountdownTimer();
           }, SMART_CAMERA_PREVIEW_DURATION_SECONDS * 1000);
         } catch (error) {
           if (requestGeneration !== hoverPreviewGenerationRef.current) return;
-          hoverPreviewPopupRef.current?.remove();
+          clearHoverPreviewCountdownTimer();
+          hoverPreviewPopup
+            ?.setLngLat(coords)
+            .setOffset(isNearTop ? [0, offsetY] : 14)
+            .setHTML(`
+              <div style="width:360px;background:#000;">
+                <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:12px;line-height:1.4;text-align:center;padding:18px;box-sizing:border-box;">
+                  Preview indispon&iacute;vel no momento.
+                </div>
+              </div>
+            `)
+            .addTo(map);
           await Swal.fire({
             icon: "warning",
             title: "Preview indisponível",
@@ -3449,7 +3619,7 @@ export default function MapPage() {
               ${allowStreaming
                 ? `<button
                     type="button"
-                    class="cameraPopupStreamLink"
+                    class="cameraPopupStreamLink cameraPopupStreamLink--soft"
                     data-smart-camera-stream
                     data-smart-camera-id="${escapeHtml(smartId)}"
                     data-smart-camera-external-camera-id="${escapeHtml(
@@ -3587,7 +3757,34 @@ export default function MapPage() {
         const lng = Number(e.lngLat?.lng);
         const lat = Number(e.lngLat?.lat);
         if (Number.isFinite(lng) && Number.isFinite(lat)) {
-          setAreaDrawPoints((prev) => [...prev, [lng, lat]]);
+          const target = [lng, lat] as [number, number];
+          const currentPoints = areaDrawPointsRef.current;
+
+          if (areaDrawIsNearExistingVertex(map, currentPoints, target)) {
+            setAreaReportMsg("Esse ponto está muito próximo de outro vértice da área.");
+            return;
+          }
+
+          const next =
+            currentPoints.length >= 3
+              ? areaDrawContainsPoint(currentPoints, target)
+                ? null
+                : getAreaDrawExpandedPoints(map, currentPoints, target)
+              : [...currentPoints, target];
+
+          if (!next) {
+            setAreaReportMsg(
+              currentPoints.length >= 3 && areaDrawContainsPoint(currentPoints, target)
+                ? "Esse ponto já está dentro da área. Clique fora para expandir ou arraste os vértices para ajustar."
+                : "Não foi possível agregar esse ponto sem cruzar a área. Tente clicar mais perto da borda."
+            );
+          } else if (areaDrawHasSelfIntersection(next)) {
+            setAreaReportMsg("A área não pode se cruzar. Ajuste os pontos antes de continuar.");
+          } else {
+            areaDrawPointsRef.current = next;
+            setAreaDrawPoints(next);
+            setAreaReportMsg(null);
+          }
         }
         return;
       }
@@ -4325,6 +4522,7 @@ export default function MapPage() {
   }
 
   function clearAreaDrawing() {
+    areaDrawPointsRef.current = [];
     setAreaDrawPoints([]);
     setAreaReportMsg(null);
   }
@@ -4337,7 +4535,11 @@ export default function MapPage() {
   }
 
   function removeLastAreaPoint() {
-    setAreaDrawPoints((prev) => prev.slice(0, -1));
+    setAreaDrawPoints((prev) => {
+      const next = prev.slice(0, -1);
+      areaDrawPointsRef.current = next;
+      return next;
+    });
     setAreaReportMsg(null);
   }
 
@@ -4353,6 +4555,10 @@ export default function MapPage() {
     const geometry = areaGeometryFromPoints(areaDrawPoints);
     if (!geometry) {
       setAreaReportMsg("Desenhe uma área com pelo menos 3 pontos.");
+      return;
+    }
+    if (areaDrawHasSelfIntersection(areaDrawPoints)) {
+      setAreaReportMsg("A área não pode se cruzar. Ajuste os pontos antes de gerar o PDF.");
       return;
     }
 
@@ -5185,11 +5391,10 @@ export default function MapPage() {
     }
   }
 
-  async function handleSearch() {
-    const q = searchQuery.trim();
-    if (!q) return;
+  async function handleSearch(queryOverride?: string): Promise<boolean> {
+    const q = (queryOverride ?? searchQuery).trim();
+    if (!q) return false;
     setSearchErr(null);
-    setSearchQuery("");
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
 
     const rioPolygon: Array<[number, number]> = [
@@ -5230,27 +5435,25 @@ export default function MapPage() {
       return inside;
     }
 
-    const coordMatch = q.match(
-      /(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/i
-    );
+    const coordMatch = q.match(/(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/i);
     if (coordMatch) {
       const lat = Number(coordMatch[1]);
       const lng = Number(coordMatch[2]);
       if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
         if (!isInRio(lat, lng)) {
           setSearchErr("Somente município do Rio de Janeiro.");
-          return;
+          return false;
         }
         setSearchPin({ lng, lat });
         flyToPoint(lng, lat, 16);
         searchTimerRef.current = window.setTimeout(() => setSearchPin(null), 4000);
-        return;
+        return true;
       }
     }
 
     if (!MAPBOX_TOKEN) {
       setSearchErr("Sem token do Mapbox.");
-      return;
+      return false;
     }
 
     try {
@@ -5304,25 +5507,51 @@ export default function MapPage() {
 
       if (!f || !Array.isArray(center)) {
         setSearchErr("Nenhum resultado.");
-        return;
+        return false;
       }
       const [lng, lat] = center;
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         setSearchErr("Resultado inválido.");
-        return;
+        return false;
       }
       if (!isInRio(lat, lng)) {
         setSearchErr("Somente município do Rio de Janeiro.");
-        return;
+        return false;
       }
       setSearchPin({ lng, lat });
       const isAddress =
         Array.isArray(f.place_type) && (f.place_type.includes("address") || f.place_type.includes("poi"));
       flyToPoint(lng, lat, isAddress ? 17.5 : 16);
       searchTimerRef.current = window.setTimeout(() => setSearchPin(null), 4000);
+      return true;
     } catch (e: any) {
       setSearchErr(e?.message || "Falha ao buscar endereço.");
+      return false;
     }
+  }
+
+  async function submitMobileSearch(queryOverride?: string) {
+    if (mobileSearchSubmittingRef.current) return;
+    mobileSearchSubmittingRef.current = true;
+    try {
+      const ok = await handleSearch(queryOverride);
+      if (ok) setMobileSearchOpen(false);
+    } finally {
+      mobileSearchSubmittingRef.current = false;
+    }
+  }
+
+  function submitMobileSearchFromTouch(event: React.PointerEvent<HTMLButtonElement>) {
+    if (event.pointerType !== "touch") return;
+    event.preventDefault();
+    event.stopPropagation();
+    mobileSearchTouchSubmitAtRef.current = Date.now();
+    void submitMobileSearch();
+  }
+
+  function submitMobileSearchFromClick() {
+    if (Date.now() - mobileSearchTouchSubmitAtRef.current < 700) return;
+    void submitMobileSearch();
   }
 
   const filtered = useMemo(() => {
@@ -5432,6 +5661,10 @@ export default function MapPage() {
     isMobileRef.current = isMobile;
     if (isMobile) setDockOpen(false);
   }, [isMobile]);
+
+  useEffect(() => {
+    setMobileSearchFocused(false);
+  }, [mobileSearchOpen]);
 
   useEffect(() => {
     if (listMode === "cameras") setPageCameras(1);
@@ -6247,6 +6480,11 @@ export default function MapPage() {
                 <div className="dockNote" style={{ margin: 0 }}>
                   Pontos da área: {areaDrawPoints.length}
                 </div>
+                {areaDrawPoints.length >= 3 && areaDrawMode && (
+                  <div className="dockNote" style={{ margin: 0, fontSize: 10 }}>
+                    Clique fora da área para expandir pelo trecho de borda mais próximo.
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                   <button
                     className="btnGhost"
@@ -6541,14 +6779,17 @@ export default function MapPage() {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
             <input
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchErr(null);
+                setSearchQuery(e.target.value);
+              }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleSearch();
+                if (e.key === "Enter") void handleSearch();
               }}
               placeholder="Buscar rua ou coordenadas no RJ"
               style={{ ...inputStyle(), flex: "1 1 240px", minWidth: 240, maxWidth: 320, padding: "8px 10px" }}
             />
-            <button className="btnGhost" onClick={handleSearch} title="Buscar">
+            <button className="btnGhost" onClick={() => void handleSearch()} title="Buscar">
               BUSCAR
             </button>
           </div>
@@ -6712,18 +6953,7 @@ export default function MapPage() {
                                   target="_blank"
                                   rel="noreferrer"
                                   onClick={(e) => e.stopPropagation()}
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    borderRadius: 999,
-                                    padding: "2px 8px",
-                                    fontSize: 11,
-                                    fontWeight: 800,
-                                    border: "1px solid rgba(15,23,42,0.18)",
-                                    background: "rgba(241,245,249,0.95)",
-                                    color: "#0f172a",
-                                    textDecoration: "none",
-                                  }}
+                                  className="listStreamPill listStreamPill--camera"
                                 >
                                   Abrir streaming
                                 </a>
@@ -6785,7 +7015,7 @@ export default function MapPage() {
                                 {showSmartStreamButton && (
                                   <button
                                     type="button"
-                                    className="cameraPopupStreamLink stackPopupStreamLink"
+                                    className="listStreamPill listStreamPill--smart"
                                     onClick={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
@@ -7309,6 +7539,7 @@ export default function MapPage() {
                       type="button"
                       className="mobileMenuAction"
                       onClick={() => {
+                        setSearchErr(null);
                         setMobileSearchOpen(true);
                         setMobileMenuOpen(false);
                       }}
@@ -7416,21 +7647,37 @@ export default function MapPage() {
               </button>
 
               {canAccessAdmin && (
-                  <button
-                    className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
-                    style={{
-                      minHeight: 42,
-                      display: "flex",
+                <button
+                  className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
+                  style={{
+                    minHeight: 42,
+                    display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     whiteSpace: "normal",
                     lineHeight: 1.15,
-                    }}
-                    onClick={() => toggleMobilePanel("admin")}
-                  >
-                    {developmentTabLabel}
-                  </button>
-                )}
+                  }}
+                  onClick={() => toggleMobilePanel("admin")}
+                >
+                  {developmentTabLabel}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="civitasSearchBtn"
+                style={{
+                  minHeight: 42,
+                  width: "100%",
+                  fontSize: 12,
+                  padding: "10px 12px",
+                  borderRadius: 14,
+                }}
+                onClick={() => toggleMobilePanel("civitas")}
+                title={panel === "civitas" ? "Fechar CIVITAS" : "Abrir CIVITAS"}
+              >
+                {civitasTabLabel}
+              </button>
             </div>
 
             {panel === "map" && (
@@ -7446,7 +7693,7 @@ export default function MapPage() {
                         >
                           {option.label}
                         </button>
-                      ))}
+                          ))}
                     </div>
                   ) : (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -7581,18 +7828,7 @@ export default function MapPage() {
                                     target="_blank"
                                     rel="noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      borderRadius: 999,
-                                      padding: "1px 7px",
-                                      fontSize: 10,
-                                      fontWeight: 800,
-                                      border: "1px solid rgba(15,23,42,0.18)",
-                                      background: "rgba(241,245,249,0.95)",
-                                      color: "#0f172a",
-                                      textDecoration: "none",
-                                    }}
+                                    className="listStreamPill listStreamPill--camera"
                                   >
                                     Abrir streaming
                                   </a>
@@ -7656,7 +7892,7 @@ export default function MapPage() {
                                 {showSmartStreamButton && (
                                   <button
                                     type="button"
-                                    className="cameraPopupStreamLink stackPopupStreamLink"
+                                    className="listStreamPill listStreamPill--smart"
                                     onClick={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
@@ -8132,69 +8368,117 @@ export default function MapPage() {
 
       {mobileSearchOpen && (
         <div
-          className="glassStrong"
-          style={{
-            position: "fixed",
-            left: 12,
-            right: 12,
-            bottom: 12,
-            zIndex: 26,
-            padding: 10,
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            color: "#0b0b0f",
-          }}
+          className={`mobileSearchLayer ${mobileSearchFocused ? "mobileSearchLayer--focused" : ""}`}
+          role="presentation"
         >
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSearch();
-                setMobileSearchOpen(false);
-              }
-            }}
-            placeholder="Buscar rua ou coordenadas no RJ"
-            style={{ ...inputStyle(), flex: 1 }}
+          <button
+            type="button"
+            className="mobileSearchBackdrop"
+            aria-label="Fechar busca"
+            onClick={() => setMobileSearchOpen(false)}
           />
-          <button
-            className="btnGhost"
-            onClick={() => {
-              handleSearch();
-              setMobileSearchOpen(false);
-            }}
-            title="Buscar"
-          >
-            BUSCAR
-          </button>
-          <button
-            className="btnGhost"
-            onClick={() => {
-              setMobileSearchOpen(false);
-            }}
-            title="Fechar"
-            style={{ padding: "8px 10px" }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
-      {mobileSearchOpen && searchErr && (
-        <div
-          style={{
-            position: "fixed",
-            left: 12,
-            right: 12,
-            bottom: 68,
-            zIndex: 26,
-            fontSize: 11,
-            color: "#991b1b",
-            textAlign: "center",
-          }}
-        >
-          {searchErr}
+          <div className="mobileSearchSheet" role="dialog" aria-modal="true" aria-label="Buscar local">
+            <div className="mobileSearchHandle" aria-hidden="true" />
+
+            <div className="mobileSearchHeader">
+              <div className="mobileSearchHeading">
+                <div className="mobileSearchEyebrow">BUSCAR LOCAL</div>
+                <div className="mobileSearchTitleRow">
+                  <div className="mobileSearchTitle">Rio em foco</div>
+                  <span className="mobileSearchBadge">RJ</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="mobileSearchCloseBtn"
+                onClick={() => setMobileSearchOpen(false)}
+                aria-label="Fechar busca"
+                title="Fechar"
+              >
+                <X size={15} strokeWidth={2.8} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="mobileSearchCopy">
+              Digite rua, bairro, ponto de referência ou coordenada no mapa.
+            </div>
+
+            <div className="mobileSearchFieldShell">
+              <span className="mobileSearchFieldIcon" aria-hidden="true">
+                <Search size={16} strokeWidth={2.35} />
+              </span>
+              <input
+                ref={mobileSearchInputRef}
+                value={searchQuery}
+                onFocus={() => setMobileSearchFocused(true)}
+                onBlur={() => setMobileSearchFocused(false)}
+                onChange={(e) => {
+                  setSearchErr(null);
+                  setSearchQuery(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void submitMobileSearch();
+                  }
+                  if (e.key === "Escape") {
+                    setMobileSearchOpen(false);
+                  }
+                }}
+                placeholder="Buscar rua ou coordenadas no RJ"
+                className="mobileSearchInput"
+              />
+              {searchQuery.trim() && (
+                <button
+                  type="button"
+                  className="mobileSearchClearBtn"
+                  onClick={() => {
+                    setSearchErr(null);
+                    setSearchQuery("");
+                  }}
+                  aria-label="Limpar busca"
+                  title="Limpar"
+                >
+                  <X size={14} strokeWidth={2.8} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+
+            <div className="mobileSearchSectionLabel">Sugestões rápidas</div>
+            <div className="mobileSearchChips">
+              {[
+                { label: "Copacabana", value: "Copacabana" },
+                { label: "Centro", value: "Centro" },
+                { label: "Barra da Tijuca", value: "Barra da Tijuca" },
+                { label: "-22.91, -43.18", value: "-22.91, -43.18" },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  className="mobileSearchChip"
+                  onClick={() => {
+                    setSearchQuery(item.value);
+                    void submitMobileSearch(item.value);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {searchErr && <div className="mobileSearchError">{searchErr}</div>}
+
+            <button
+              type="button"
+              className="mobileSearchSubmitBtn"
+              onPointerDown={submitMobileSearchFromTouch}
+              onClick={submitMobileSearchFromClick}
+            >
+              Buscar no mapa
+            </button>
+
+            <div className="mobileSearchHint">Toque fora para fechar. A busca fica limitada ao município do Rio.</div>
+          </div>
         </div>
       )}
     </div>

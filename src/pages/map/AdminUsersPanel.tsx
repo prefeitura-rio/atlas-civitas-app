@@ -1128,17 +1128,25 @@ export function AdminUsersPanel({
                       fontSize: 12,
                       opacity: 0.72,
                       marginTop: 2,
-                      whiteSpace: isMobile ? "normal" : "nowrap",
-                      overflow: isMobile ? "visible" : "hidden",
-                      textOverflow: isMobile ? "clip" : "ellipsis",
+                      whiteSpace: "normal",
+                      overflow: "visible",
+                      textOverflow: "clip",
                       wordBreak: "break-word",
+                      overflowWrap: "anywhere",
+                      lineHeight: 1.35,
                     }}
                   >
-                    {user.is_active ? "ATIVO" : "INATIVO"}
-                    {user.cpf ? ` • CPF: ${user.cpf}` : ""}
-                    {` • Matrícula: ${formatMatriculaLabel(user.matricula)}`}
-                    {user.orgao || user.organization_name ? ` • ${user.orgao || user.organization_name}` : ""}
-                    {user.unidade ? ` • ${user.unidade}` : ""}
+                    <div>
+                      {user.is_active ? "ATIVO" : "INATIVO"}
+                      {user.cpf ? ` • CPF: ${user.cpf}` : ""}
+                      {` • Matrícula: ${formatMatriculaLabel(user.matricula)}`}
+                    </div>
+                    {(user.orgao || user.organization_name || user.unidade) && (
+                      <div>
+                        {user.orgao || user.organization_name ? `• ${user.orgao || user.organization_name}` : ""}
+                        {user.unidade ? ` • ${user.unidade}` : ""}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                     <span
