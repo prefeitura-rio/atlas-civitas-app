@@ -1259,6 +1259,7 @@ export default function MapPage() {
   const suppressHoverHideRef = useRef(false);
   const suppressHoverHideTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const unavailableSmartCameraIdsRef = useRef<Record<string, true>>({});
   const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const mobileSearchSubmittingRef = useRef(false);
   const mobileSearchTouchSubmitAtRef = useRef(0);
@@ -1273,6 +1274,7 @@ export default function MapPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSearchFocused, setMobileSearchFocused] = useState(false);
+  const [unavailableSmartCameraIds, setUnavailableSmartCameraIds] = useState<Record<string, true>>({});
   const [mapBaseStyle, setMapBaseStyle] = useState<MapBaseStyle>(() => {
     if (typeof window === "undefined") return "streets";
     try {
@@ -1748,6 +1750,10 @@ export default function MapPage() {
   useEffect(() => {
     hasSmartCameraStreamingAccessRef.current = hasSmartCameraStreamingAccess;
   }, [hasSmartCameraStreamingAccess]);
+
+  useEffect(() => {
+    unavailableSmartCameraIdsRef.current = unavailableSmartCameraIds;
+  }, [unavailableSmartCameraIds]);
 
   useEffect(() => {
     if (!availableListModes.length) return;
@@ -3059,7 +3065,7 @@ export default function MapPage() {
           const iconSrc = getPoiIconSource(mapBaseStyleRef.current, info.kind);
           const streamLink =
             info.kind === "camera_intel"
-              ? hasSmartCameraStreamingAccessRef.current && info.smartId
+              ? hasSmartCameraStreamingAccessRef.current && info.smartId && !isSmartCameraStreamingUnavailable(info.smartId)
                 ? `<button type="button" class="cameraPopupStreamLink stackPopupStreamLink cameraPopupStreamLink--soft" data-smart-camera-stream data-smart-camera-id="${escapeHtml(
                     info.smartId
                   )}" data-smart-camera-external-camera-id="${escapeHtml(
@@ -3405,6 +3411,7 @@ export default function MapPage() {
       const p = f.properties || {};
       const smartId = cleanString(p.id);
       if (!smartId) return;
+      if (isSmartCameraStreamingUnavailable(smartId)) return;
 
       const coords = (f.geometry as any).coordinates as [number, number];
       const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
@@ -3470,14 +3477,30 @@ export default function MapPage() {
           }, SMART_CAMERA_PREVIEW_DURATION_SECONDS * 1000);
         } catch (error) {
           if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+          if (shouldDisableSmartCameraStreaming(error)) {
+            markSmartCameraStreamingUnavailable(smartId);
+            clearHoverPreviewCountdownTimer();
+            hoverPreviewPopup
+              ?.setLngLat(coords)
+              .setOffset(isNearTop ? [0, offsetY] : 14)
+              .setHTML(`
+                <div style="width:360px;background:#000;">
+                  <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
+                    Streaming indispon&iacute;vel. Para acessar mais informa&ccedil;&otilde;es, clique na c&acirc;mera.
+                  </div>
+                </div>
+              `)
+              .addTo(map);
+            return;
+          }
           clearHoverPreviewCountdownTimer();
           hoverPreviewPopup
             ?.setLngLat(coords)
             .setOffset(isNearTop ? [0, offsetY] : 14)
             .setHTML(`
               <div style="width:360px;background:#000;">
-                <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:12px;line-height:1.4;text-align:center;padding:18px;box-sizing:border-box;">
-                  Preview indispon&iacute;vel no momento.
+                <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
+                  Streaming indispon&iacute;vel. Para acessar mais informa&ccedil;&otilde;es, clique na c&acirc;mera.
                 </div>
               </div>
             `)
@@ -3578,7 +3601,8 @@ export default function MapPage() {
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
       const smartId = cleanString(p.id);
-      const allowStreaming = hasSmartCameraStreamingAccessRef.current && Boolean(smartId);
+      const allowStreaming =
+        hasSmartCameraStreamingAccessRef.current && Boolean(smartId) && !isSmartCameraStreamingUnavailable(smartId);
       setSelectionRing(coords[0], coords[1]);
       if (openStackedPopupIfNeeded(coords)) return;
 
@@ -4214,6 +4238,36 @@ export default function MapPage() {
 
   type SmartCameraSessionSource = Pick<CameraIntel, "id" | "external_camera_id">;
 
+  function markSmartCameraStreamingUnavailable(smartId: string) {
+    const normalizedId = cleanString(smartId);
+    if (!normalizedId) return;
+    setUnavailableSmartCameraIds((prev) => (prev[normalizedId] ? prev : { ...prev, [normalizedId]: true }));
+  }
+
+  function clearSmartCameraStreamingUnavailable(smartId: string) {
+    const normalizedId = cleanString(smartId);
+    if (!normalizedId) return;
+    setUnavailableSmartCameraIds((prev) => {
+      if (!prev[normalizedId]) return prev;
+      const next = { ...prev };
+      delete next[normalizedId];
+      return next;
+    });
+  }
+
+  function isSmartCameraStreamingUnavailable(source: SmartCameraSessionSource | string | null | undefined) {
+    const smartId = typeof source === "string" ? cleanString(source) : getSmartCameraId(source);
+    if (!smartId) return false;
+    return Boolean(unavailableSmartCameraIdsRef.current[smartId]);
+  }
+
+  function shouldDisableSmartCameraStreaming(error: unknown) {
+    const rawMessage = String((error as any)?.message || "").trim();
+    const match = rawMessage.match(/^(\d{3})\s*-\s*(.*)$/);
+    const status = match ? Number(match[1]) : null;
+    return status === 403 || status === 404 || status === 409 || rawMessage.includes("URL de sessão válida");
+  }
+
   function getSmartCameraSessionErrorMessage(error: unknown, action: "preview" | "stream") {
     const rawMessage = String((error as any)?.message || "").trim();
     const match = rawMessage.match(/^(\d{3})\s*-\s*(.*)$/);
@@ -4256,6 +4310,8 @@ export default function MapPage() {
     if (!sessionUrl) {
       throw new Error("O backend não retornou uma URL de sessão válida.");
     }
+
+    clearSmartCameraStreamingUnavailable(trimmedSmartId);
 
     return {
       ...data,
@@ -4300,6 +4356,9 @@ export default function MapPage() {
         window.location.href = session.sessionUrl;
       }
     } catch (error) {
+      if (shouldDisableSmartCameraStreaming(error)) {
+        markSmartCameraStreamingUnavailable(smartId);
+      }
       if (streamWindow) {
         streamWindow.close();
       }
@@ -6969,7 +7028,8 @@ export default function MapPage() {
                   (listItems as CameraIntel[]).map((c) => {
                     const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
                     const smartId = cleanString(c.id);
-                    const showSmartStreamButton = hasSmartCameraStreamingAccess && Boolean(smartId);
+                    const showSmartStreamButton =
+                      hasSmartCameraStreamingAccess && Boolean(smartId) && !Boolean(smartId && unavailableSmartCameraIds[smartId]);
                     return (
                       <div
                         key={smartId || c.code}
@@ -7844,7 +7904,8 @@ export default function MapPage() {
                     (listItems as CameraIntel[]).map((c) => {
                       const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
                       const smartId = cleanString(c.id);
-                      const showSmartStreamButton = hasSmartCameraStreamingAccess && Boolean(smartId);
+                      const showSmartStreamButton =
+                        hasSmartCameraStreamingAccess && Boolean(smartId) && !Boolean(smartId && unavailableSmartCameraIds[smartId]);
                       return (
                         <div
                           key={smartId || c.code}
