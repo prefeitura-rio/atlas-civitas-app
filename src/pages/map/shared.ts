@@ -8,6 +8,101 @@ const API_BASE =
   (import.meta as any).env?.VITE_API_BASE_URL?.toString() ||
   "http://127.0.0.1:8000";
 
+export function cleanString(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+export function normalizeSearchText(value: unknown): string {
+  return cleanString(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+export function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    const text = cleanString(value);
+    if (text) return text;
+  }
+  return "";
+}
+
+export function uniqueStrings(values: unknown[]): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  for (const value of values) {
+    const text = cleanString(value);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    next.push(text);
+  }
+
+  return next;
+}
+
+export function coerceCoord(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
+}
+
+export function getLat(value: any) {
+  return coerceCoord(value?.lat ?? value?.latitude ?? value?.latitud ?? value?.y);
+}
+
+export function getLng(value: any) {
+  return coerceCoord(value?.lng ?? value?.lon ?? value?.long ?? value?.longitude ?? value?.longitud ?? value?.x);
+}
+
+export function isEntityActive(value: any) {
+  const raw = value?.status_ativo ?? value?.is_active;
+
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw !== 0;
+  if (typeof raw === "string") {
+    const normalized = raw.trim().toLowerCase();
+    if (["0", "false", "f", "off", "inativo", "inactive", "desligado"].includes(normalized)) return false;
+    if (["1", "true", "t", "on", "ativo", "active", "ligado"].includes(normalized)) return true;
+  }
+
+  const status = cleanString(value?.status).toLowerCase();
+  if (status.includes("inativo") || status.includes("deslig")) return false;
+  if (status.includes("ativo") || status.includes("active") || status.includes("ligado")) return true;
+
+  return true;
+}
+
+export function getPointCollectionIdentifiers(value: any): string[] {
+  return uniqueStrings([
+    value?.id_ponto_coleta,
+    value?.id,
+    value?.code,
+    value?.codcet,
+  ]);
+}
+
+export function getPointCollectionKey(value: any) {
+  return firstNonEmptyString(value?.id_ponto_coleta, value?.id, value?.code, value?.codcet);
+}
+
+export function getPointCollectionCode(value: any) {
+  return firstNonEmptyString(value?.id_ponto_coleta, value?.code, value?.codcet, value?.id);
+}
+
+export function getPointCollectionTitle(value: any) {
+  return firstNonEmptyString(
+    value?.local,
+    value?.logradouro,
+    value?.localidade,
+    value?.name,
+    value?.code,
+    value?.codcet
+  );
+}
+
 function getStoredAccessToken() {
   return sessionStorage.getItem("access_token") || localStorage.getItem("access_token");
 }

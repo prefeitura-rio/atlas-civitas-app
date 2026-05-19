@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { AdminOrganization, FeatureCatalogItem } from "./types";
 import { fetchJson, inputStyle } from "./shared";
+import { normalizeFeatureCode, normalizeFeatureCodes } from "../../app/featureCodes";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
@@ -87,22 +88,6 @@ function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeFeatureCodes(value: unknown) {
-  if (!Array.isArray(value)) return [];
-
-  const seen = new Set<string>();
-  const next: string[] = [];
-
-  for (const item of value) {
-    const code = clean(item).toLowerCase();
-    if (!code || seen.has(code)) continue;
-    seen.add(code);
-    next.push(code);
-  }
-
-  return next;
-}
-
 function sameFeatureCodes(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
   return a.every((code, index) => code === b[index]);
@@ -123,7 +108,7 @@ function normalizeOrganization(raw: any, idx = 0): AdminOrganization {
 }
 
 function normalizeFeatureCatalogItem(raw: any, idx = 0): FeatureCatalogItem {
-  const code = clean(raw?.code || raw?.feature_code || raw?.id || `feature-${idx}`).toLowerCase();
+  const code = normalizeFeatureCode(raw?.code || raw?.feature_code || raw?.id || `feature-${idx}`);
   const rawName = clean(raw?.name || raw?.label || code || `Feature ${idx + 1}`);
   return {
     code,
@@ -134,7 +119,7 @@ function normalizeFeatureCatalogItem(raw: any, idx = 0): FeatureCatalogItem {
 }
 
 function getFeatureDisplayName(code: string, fallback = "") {
-  const normalized = clean(code).toLowerCase();
+  const normalized = normalizeFeatureCode(code);
   if (!normalized) return clean(fallback) || "-";
 
   const mapped = FEATURE_DISPLAY_NAMES[normalized];
@@ -806,7 +791,7 @@ export function AdminOrganizationsPanel({
                                 <img
                                   src={icon.src}
                                   alt=""
-                                  style={{ width: 11, height: 11, objectFit: "contain", opacity: 0.9 }}
+                                  style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }}
                                 />
                               ) : (
                                 <icon.Icon size={11} strokeWidth={2.1} />

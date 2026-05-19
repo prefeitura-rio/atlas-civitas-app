@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Camera, CameraIntel, CameraLpr } from "./types";
-import { fetchJson } from "./shared";
+import {
+  fetchJson,
+  getPointCollectionCode,
+  getPointCollectionIdentifiers,
+  getPointCollectionKey,
+  getPointCollectionTitle,
+  isEntityActive,
+  inputStyle,
+  normalizeSearchText,
+} from "./shared";
 import Swal from "sweetalert2";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
@@ -61,6 +70,9 @@ export function AdminCamerasPanel({
   const [camsStatusFilter, setCamsStatusFilter] = useState<StatusFilter>("all");
   const [intelStatusFilter, setIntelStatusFilter] = useState<StatusFilter>("all");
   const [lprStatusFilter, setLprStatusFilter] = useState<StatusFilter>("all");
+  const [camsSearchQuery, setCamsSearchQuery] = useState("");
+  const [intelSearchQuery, setIntelSearchQuery] = useState("");
+  const [lprSearchQuery, setLprSearchQuery] = useState("");
   const [statusLoadingKey, setStatusLoadingKey] = useState<string | null>(null);
   const cardRowStyle = {
     border: "1px solid rgba(15,23,42,0.10)",
@@ -127,10 +139,13 @@ export function AdminCamerasPanel({
 
   type CameraScope = "cameras" | "inteligentes" | "lpr";
 
-  function applyStatusFilter<T extends { is_active?: boolean }>(list: T[], filter: StatusFilter) {
+  function applyStatusFilter<T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(
+    list: T[],
+    filter: StatusFilter
+  ) {
     if (filter === "all") return list;
-    if (filter === "active") return list.filter((item) => item.is_active !== false);
-    return list.filter((item) => item.is_active === false);
+    if (filter === "active") return list.filter((item) => isEntityActive(item));
+    return list.filter((item) => !isEntityActive(item));
   }
 
   function renderStatusFilter(value: StatusFilter, onChange: (next: StatusFilter) => void) {
@@ -168,16 +183,62 @@ export function AdminCamerasPanel({
   }
 
   function getCameraKey(item: Camera | CameraIntel | CameraLpr) {
-    return String((item as any).id ?? item.code ?? "");
+    return getPointCollectionKey(item);
   }
 
   function getCameraActive(item: Camera | CameraIntel | CameraLpr) {
-    return (item as any).is_active !== false;
+    return isEntityActive(item);
   }
 
-  function patchLocalStatus(scope: CameraScope, key: string, nextActive: boolean) {
-    const patch = <T extends { id?: string; code: string; is_active?: boolean }>(arr: T[]) =>
-      arr.map((row) => (String((row as any).id ?? row.code ?? "") === key ? { ...row, is_active: nextActive } : row));
+  function renderSearchRow(value: string, onChange: (next: string) => void) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Buscar por código ou nome"
+            style={{
+              ...inputStyle(),
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.96)",
+            }}
+          />
+        </div>
+        {value.trim() && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            style={{
+              height: 40,
+              padding: "0 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.92)",
+              color: "#0f172a",
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: "0 4px 10px rgba(15,23,42,0.05)",
+            }}
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  function patchLocalStatus(scope: CameraScope, item: Camera | CameraIntel | CameraLpr, nextActive: boolean) {
+    const targetIds = new Set(getPointCollectionIdentifiers(item));
+    const patch = <T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(arr: T[]) =>
+      arr.map((row) =>
+        getPointCollectionIdentifiers(row as any).some((candidate) => targetIds.has(candidate))
+          ? { ...row, is_active: nextActive, status_ativo: nextActive }
+          : row
+      );
 
     if (scope === "cameras") {
       setItems((prev) => patch(prev as any) as Camera[]);
@@ -190,47 +251,77 @@ export function AdminCamerasPanel({
     setLprItems((prev) => patch(prev as any) as CameraLpr[]);
   }
 
-  const filteredCams = applyStatusFilter(items, camsStatusFilter);
-  const filteredIntel = applyStatusFilter(intelItems, intelStatusFilter);
-  const filteredLpr = applyStatusFilter(lprItems, lprStatusFilter);
+  const normalizedCamsSearchQuery = normalizeSearchText(camsSearchQuery);
+  const normalizedIntelSearchQuery = normalizeSearchText(intelSearchQuery);
+  const normalizedLprSearchQuery = normalizeSearchText(lprSearchQuery);
 
-  async function saveCameraStatus(scope: CameraScope, key: string, nextActive: boolean) {
+  const filteredCams = useMemo(() => {
+    const byStatus = applyStatusFilter(items, camsStatusFilter);
+    if (!normalizedCamsSearchQuery) return byStatus;
+    return byStatus.filter((c) =>
+      normalizeSearchText([getPointCollectionCode(c), c.name, getPointCollectionTitle(c), c.city, c.uf].filter(Boolean).join(" ")).includes(normalizedCamsSearchQuery)
+    );
+  }, [items, camsStatusFilter, normalizedCamsSearchQuery]);
+
+  const filteredIntel = useMemo(() => {
+    const byStatus = applyStatusFilter(intelItems, intelStatusFilter);
+    if (!normalizedIntelSearchQuery) return byStatus;
+    return byStatus.filter((c) =>
+      normalizeSearchText([getPointCollectionCode(c), c.name, getPointCollectionTitle(c), c.responsavel, c.direction].filter(Boolean).join(" ")).includes(normalizedIntelSearchQuery)
+    );
+  }, [intelItems, intelStatusFilter, normalizedIntelSearchQuery]);
+
+  const filteredLpr = useMemo(() => {
+    const byStatus = applyStatusFilter(lprItems, lprStatusFilter);
+    if (!normalizedLprSearchQuery) return byStatus;
+    return byStatus.filter((c) =>
+      normalizeSearchText([getPointCollectionCode(c), c.name, getPointCollectionTitle(c), c.bairro, c.sentido, c.direction].filter(Boolean).join(" ")).includes(normalizedLprSearchQuery)
+    );
+  }, [lprItems, lprStatusFilter, normalizedLprSearchQuery]);
+
+  async function saveCameraStatus(scope: CameraScope, item: Camera | CameraIntel | CameraLpr, nextActive: boolean) {
     const baseUrl = getResourceBase(scope);
-    const encoded = encodeURIComponent(key);
     const authHeaders = { Authorization: `Bearer ${token}` };
     const jsonHeaders = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     };
     const body = JSON.stringify({ is_active: nextActive });
-
-    const attempts = [
-      () =>
-        fetchJson<any>(`${baseUrl}/${encoded}`, {
-          method: "PUT",
-          headers: jsonHeaders,
-          body,
-        }),
-      () =>
-        fetchJson<any>(`${baseUrl}/${encoded}`, {
-          method: "PATCH",
-          headers: jsonHeaders,
-          body,
-        }),
-      () =>
-        fetchJson<any>(`${baseUrl}/${encoded}/${nextActive ? "reactivate" : "deactivate"}`, {
-          method: "POST",
-          headers: authHeaders,
-        }),
-    ];
+    const candidates = getPointCollectionIdentifiers(item);
+    if (!candidates.length) {
+      throw new Error("Não foi possível identificar esta câmera para atualizar o status.");
+    }
 
     let lastErr: any = null;
-    for (const run of attempts) {
-      try {
-        await run();
-        return;
-      } catch (err: any) {
-        lastErr = err;
+    for (const key of candidates) {
+      const encoded = encodeURIComponent(key);
+      const attempts = [
+        () =>
+          fetchJson<any>(`${baseUrl}/${encoded}`, {
+            method: "PUT",
+            headers: jsonHeaders,
+            body,
+          }),
+        () =>
+          fetchJson<any>(`${baseUrl}/${encoded}`, {
+            method: "PATCH",
+            headers: jsonHeaders,
+            body,
+          }),
+        () =>
+          fetchJson<any>(`${baseUrl}/${encoded}/${nextActive ? "reactivate" : "deactivate"}`, {
+            method: "POST",
+            headers: authHeaders,
+          }),
+      ];
+
+      for (const run of attempts) {
+        try {
+          await run();
+          return;
+        } catch (err: any) {
+          lastErr = err;
+        }
       }
     }
     throw lastErr || new Error("Falha ao atualizar status da câmera.");
@@ -242,7 +333,7 @@ export function AdminCamerasPanel({
       setErr("Não foi possível identificar esta câmera para atualizar o status.");
       return;
     }
-    const name = (item as any).name || item.code || "câmera";
+    const name = getPointCollectionTitle(item) || "câmera";
     const isActive = getCameraActive(item);
     const nextActive = !isActive;
 
@@ -267,8 +358,8 @@ export function AdminCamerasPanel({
     setErr(null);
     setStatusLoadingKey(`${scope}:${key}`);
     try {
-      await saveCameraStatus(scope, key, nextActive);
-      patchLocalStatus(scope, key, nextActive);
+      await saveCameraStatus(scope, item, nextActive);
+      patchLocalStatus(scope, item, nextActive);
       onStatusChanged?.();
 
       await Swal.fire({
@@ -344,7 +435,7 @@ export function AdminCamerasPanel({
   async function loadLpr() {
     setLprLoading(true);
     try {
-      const data = await fetchJson<any>(CAMS_LPR_URL, {
+      const data = await fetchJson<any>(`${CAMS_LPR_URL}?only_active=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const list: CameraLpr[] = Array.isArray(data) ? data : [];
@@ -391,6 +482,9 @@ export function AdminCamerasPanel({
     camsStatusFilter,
     intelStatusFilter,
     lprStatusFilter,
+    camsSearchQuery,
+    intelSearchQuery,
+    lprSearchQuery,
   ]);
 
   return (
@@ -527,6 +621,7 @@ export function AdminCamerasPanel({
               <div style={{ flex: 1 }} />
               {renderStatusFilter(camsStatusFilter, setCamsStatusFilter)}
             </div>
+            {renderSearchRow(camsSearchQuery, setCamsSearchQuery)}
 
             <div
               className="scrollbarHidden"
@@ -548,7 +643,7 @@ export function AdminCamerasPanel({
                 const loadingStatus = statusLoadingKey === `cameras:${key}`;
                 return (
                   <div
-                    key={c.id || c.code}
+                    key={key || c.id || c.code}
                     className="adminRow"
                     style={{
                       ...cardRowStyle,
@@ -584,17 +679,17 @@ export function AdminCamerasPanel({
                         >
                           {c.name}
                         </div>
-                        <span
-                          style={{
-                            ...chipStyle,
-                            borderColor: "rgba(59,130,246,0.32)",
-                            background: "rgba(219,234,254,0.92)",
-                            color: "#1d4ed8",
-                          }}
-                        >
-                          {c.code}
-                        </span>
-                      </div>
+                      <span
+                        style={{
+                          ...chipStyle,
+                          borderColor: "rgba(59,130,246,0.32)",
+                          background: "rgba(219,234,254,0.92)",
+                          color: "#1d4ed8",
+                        }}
+                      >
+                          {getPointCollectionCode(c)}
+                      </span>
+                    </div>
                       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                         <span style={chipStyle}>
                           {String((c as any).zona_camera ?? (c as any).zone ?? "").trim() ||
@@ -632,7 +727,9 @@ export function AdminCamerasPanel({
               })}
 
               {!filteredCams.length && !loading && (
-                <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera encontrada.</div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  {camsSearchQuery.trim() ? "Nenhuma câmera encontrada para essa busca." : "Nenhuma câmera encontrada."}
+                </div>
               )}
             </div>
 
@@ -673,14 +770,15 @@ export function AdminCamerasPanel({
             border: "1px solid rgba(0,0,0,0.10)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {intelLoading ? "Carregando..." : `${filteredIntel.length} itens`}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, fontSize: 13 }}>Super Câmeras Inteligentes</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {intelLoading ? "Carregando..." : `${filteredIntel.length} itens`}
+              </div>
+              <div style={{ flex: 1 }} />
+              {renderStatusFilter(intelStatusFilter, setIntelStatusFilter)}
             </div>
-            <div style={{ flex: 1 }} />
-            {renderStatusFilter(intelStatusFilter, setIntelStatusFilter)}
-          </div>
+          {renderSearchRow(intelSearchQuery, setIntelSearchQuery)}
           <div
             className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
@@ -701,7 +799,7 @@ export function AdminCamerasPanel({
               const loadingStatus = statusLoadingKey === `inteligentes:${key}`;
               return (
                 <div
-                  key={c.id || c.code}
+                  key={key || c.id || c.code}
                   className="adminRow"
                   style={{
                     ...cardRowStyle,
@@ -745,7 +843,7 @@ export function AdminCamerasPanel({
                           color: "#c2410c",
                         }}
                       >
-                        {c.code}
+                        {getPointCollectionCode(c)}
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
@@ -781,7 +879,11 @@ export function AdminCamerasPanel({
               );
             })}
             {!filteredIntel.length && !intelLoading && (
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma Super Câmera Inteligente encontrada.</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {intelSearchQuery.trim()
+                  ? "Nenhuma Super Câmera Inteligente encontrada para essa busca."
+                  : "Nenhuma Super Câmera Inteligente encontrada."}
+              </div>
             )}
           </div>
 
@@ -821,14 +923,15 @@ export function AdminCamerasPanel({
             border: "1px solid rgba(0,0,0,0.10)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras LPR</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {lprLoading ? "Carregando..." : `${filteredLpr.length} itens`}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, fontSize: 13 }}>Câmeras LPR</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {lprLoading ? "Carregando..." : `${filteredLpr.length} itens`}
+              </div>
+              <div style={{ flex: 1 }} />
+              {renderStatusFilter(lprStatusFilter, setLprStatusFilter)}
             </div>
-            <div style={{ flex: 1 }} />
-            {renderStatusFilter(lprStatusFilter, setLprStatusFilter)}
-          </div>
+          {renderSearchRow(lprSearchQuery, setLprSearchQuery)}
           <div
             className="scrollbarHidden"
             style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
@@ -849,7 +952,7 @@ export function AdminCamerasPanel({
               const loadingStatus = statusLoadingKey === `lpr:${key}`;
               return (
                 <div
-                  key={c.id || c.code}
+                  key={key || c.id || c.code}
                   className="adminRow"
                   style={{
                     ...cardRowStyle,
@@ -893,12 +996,13 @@ export function AdminCamerasPanel({
                           color: "#166534",
                         }}
                       >
-                        {c.code}
+                        {getPointCollectionCode(c)}
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                      <span style={chipStyle}>Bairro: {c.neighborhood || (c as any).bairro || "-"}</span>
-                      <span style={chipStyle}>Direção: {c.direction || "-"}</span>
+                      <span style={chipStyle}>Local: {getPointCollectionTitle(c) || "-"}</span>
+                      <span style={chipStyle}>Bairro: {c.bairro || c.neighborhood || "-"}</span>
+                      <span style={chipStyle}>Sentido: {c.sentido || c.direction || "-"}</span>
                     </div>
                   </div>
                   <div style={{ display: "grid", justifyItems: "end", gap: 6, flex: "0 0 auto" }}>
@@ -929,7 +1033,9 @@ export function AdminCamerasPanel({
               );
             })}
             {!filteredLpr.length && !lprLoading && (
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhuma câmera LPR encontrada.</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {lprSearchQuery.trim() ? "Nenhuma câmera LPR encontrada para essa busca." : "Nenhuma câmera LPR encontrada."}
+              </div>
             )}
           </div>
 

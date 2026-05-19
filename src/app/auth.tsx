@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { normalizeFeatureCode, normalizeFeatureCodes } from "./featureCodes";
 
 export type AuthUser = {
   id?: string;
@@ -7,6 +8,7 @@ export type AuthUser = {
   name?: string;
   role?: string;
   roles?: string[];
+  matricula?: string | null;
   is_active?: boolean;
   organization_id?: string | null;
   organization_name?: string | null;
@@ -49,22 +51,6 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeFeatureCodes(value: unknown) {
-  if (!Array.isArray(value)) return [];
-
-  const seen = new Set<string>();
-  const next: string[] = [];
-
-  for (const item of value) {
-    const code = cleanString(item).toLowerCase();
-    if (!code || seen.has(code)) continue;
-    seen.add(code);
-    next.push(code);
-  }
-
-  return next;
-}
-
 function normalizeRoles(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value
@@ -83,6 +69,7 @@ function normalizeUser(payload: any): AuthUser | null {
     cleanString(payload.organization_id || payload.organization?.id || payload.org_id) || null;
   const organizationName =
     cleanString(payload.organization_name || payload.organization?.name || payload.org_name) || null;
+  const matricula = cleanString(payload.matricula) || null;
 
   return {
     id: cleanString(payload.id) || undefined,
@@ -91,6 +78,7 @@ function normalizeUser(payload: any): AuthUser | null {
     name: fullName || undefined,
     role: role || roles[0] || undefined,
     roles: roles.length ? roles : undefined,
+    matricula,
     is_active: typeof payload.is_active === "boolean" ? payload.is_active : undefined,
     organization_id: organizationId,
     organization_name: organizationName,
@@ -292,7 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const organizationName = user?.organization_name || null;
   const hasFeature = useCallback(
     (code: string) => {
-      const normalized = cleanString(code).toLowerCase();
+      const normalized = normalizeFeatureCode(code);
       if (!normalized) return false;
       return featureCodes.includes(normalized);
     },

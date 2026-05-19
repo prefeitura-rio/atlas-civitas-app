@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Radar } from "./types";
-import { fetchJson } from "./shared";
+import {
+  fetchJson,
+  getLat,
+  getLng,
+  getPointCollectionCode,
+  getPointCollectionIdentifiers,
+  getPointCollectionKey,
+  getPointCollectionTitle,
+  isEntityActive,
+  inputStyle,
+  normalizeSearchText,
+} from "./shared";
 import Swal from "sweetalert2";
 import radarIcon from "@/assets/radar-icon.png";
 
@@ -26,6 +37,7 @@ export function AdminRadaresPanel({
   const [page, setPage] = useState(1);
   const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusLoadingKey, setStatusLoadingKey] = useState<string | null>(null);
   const cardRowStyle = {
     border: "1px solid rgba(15,23,42,0.10)",
@@ -101,7 +113,7 @@ export function AdminRadaresPanel({
   } as const;
 
   function getRadarActive(radar: Radar) {
-    return radar.is_active !== false;
+    return isEntityActive(radar);
   }
 
   function applyStatusFilter(list: Radar[], filter: StatusFilter) {
@@ -111,15 +123,53 @@ export function AdminRadaresPanel({
   }
 
   function getRadarKey(radar: Radar) {
-    return String(radar.id ?? radar.codcet ?? "");
+    return getPointCollectionKey(radar);
+  }
+
+  function renderSearchRow(value: string, onChange: (next: string) => void) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Buscar por código ou nome"
+            style={{
+              ...inputStyle(),
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.96)",
+            }}
+          />
+        </div>
+        {value.trim() && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            style={{
+              height: 40,
+              padding: "0 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(15,23,42,0.14)",
+              background: "rgba(255,255,255,0.92)",
+              color: "#0f172a",
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: "0 4px 10px rgba(15,23,42,0.05)",
+            }}
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+    );
   }
 
   async function saveRadarStatus(radar: Radar, nextActive: boolean) {
     const action = nextActive ? "reactivate" : "deactivate";
-    const candidates = [radar.id, radar.codcet]
-      .map((v) => (v ?? "").toString().trim())
-      .filter(Boolean)
-      .filter((v, i, arr) => arr.indexOf(v) === i);
+    const candidates = getPointCollectionIdentifiers(radar);
     if (!candidates.length) {
       throw new Error("Não foi possível identificar este radar para atualizar o status.");
     }
@@ -140,13 +190,14 @@ export function AdminRadaresPanel({
   }
 
   function patchLocalStatus(radar: Radar, nextActive: boolean) {
-    const target = getRadarKey(radar);
+    const targetIds = new Set(getPointCollectionIdentifiers(radar));
     setItems((prev) =>
       prev.map((row) =>
-        getRadarKey(row) === target
+        getPointCollectionIdentifiers(row).some((candidate) => targetIds.has(candidate))
           ? {
               ...row,
               is_active: nextActive,
+              status_ativo: nextActive,
               status: nextActive ? "ATIVO" : "INATIVO",
             }
           : row
@@ -154,7 +205,15 @@ export function AdminRadaresPanel({
     );
   }
 
-  const filteredItems = applyStatusFilter(items, statusFilter);
+  const normalizedSearchQuery = normalizeSearchText(searchQuery);
+
+  const filteredItems = useMemo(() => {
+    const byStatus = applyStatusFilter(items, statusFilter);
+    if (!normalizedSearchQuery) return byStatus;
+    return byStatus.filter((r) =>
+      normalizeSearchText([getPointCollectionCode(r), getPointCollectionTitle(r), r.local, r.logradouro, r.localidade, r.bairro].filter(Boolean).join(" ")).includes(normalizedSearchQuery)
+    );
+  }, [items, statusFilter, normalizedSearchQuery]);
 
   async function toggleRadarStatus(radar: Radar) {
     const key = getRadarKey(radar);
@@ -164,7 +223,7 @@ export function AdminRadaresPanel({
     }
     const active = getRadarActive(radar);
     const nextActive = !active;
-    const radarName = radar.logradouro || radar.localidade || radar.codcet || "Radar";
+    const radarName = getPointCollectionTitle(radar) || "Radar";
 
     const confirm = await Swal.fire({
       ...swalBase,
@@ -217,7 +276,7 @@ export function AdminRadaresPanel({
     setErr(null);
     setLoading(true);
     try {
-      const data = await fetchJson<any>(RADARES_URL, {
+      const data = await fetchJson<any>(`${RADARES_URL}?only_active=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -226,8 +285,8 @@ export function AdminRadaresPanel({
       const normalized = list
         .map((r) => ({
           ...r,
-          lat: r.lat === undefined || r.lat === null ? null : Number(r.lat),
-          lng: r.lng === undefined || r.lng === null ? null : Number(r.lng),
+          lat: getLat(r) ?? NaN,
+          lng: getLng(r) ?? NaN,
         }))
         .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any));
 
@@ -247,7 +306,7 @@ export function AdminRadaresPanel({
   useEffect(() => {
     setPage(1);
     setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length, statusFilter]);
+  }, [items.length, statusFilter, searchQuery]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -284,6 +343,7 @@ export function AdminRadaresPanel({
             </button>
           </div>
         </div>
+        {renderSearchRow(searchQuery, setSearchQuery)}
 
         <div
           className="scrollbarHidden"
@@ -298,13 +358,13 @@ export function AdminRadaresPanel({
         >
           {(isMobile
             ? filteredItems.slice(0, mobileCount)
-            : filteredItems.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
+              : filteredItems.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
           ).map((r) => {
             const active = getRadarActive(r);
             const loadingStatus = statusLoadingKey === getRadarKey(r);
             return (
               <div
-                key={r.id || r.codcet}
+                key={getRadarKey(r) || r.codcet}
                 style={{
                   ...cardRowStyle,
                   alignItems: "flex-start",
@@ -324,43 +384,42 @@ export function AdminRadaresPanel({
                 >
                   <img src={radarIcon} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-                    <div
-                      style={{
-                        fontWeight: 900,
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          fontWeight: 900,
                         fontSize: 13,
                         whiteSpace: "normal",
                         overflow: "visible",
                         textOverflow: "clip",
                         wordBreak: "break-word",
-                        color: "#0f172a",
-                      }}
-                    >
-                      {r.logradouro || r.localidade || "Radar"}
+                          color: "#0f172a",
+                        }}
+                      >
+                      {getPointCollectionTitle(r) || "Radar"}
+                      </div>
+                      <span
+                        style={{
+                          ...chipStyle,
+                          borderColor: "rgba(234,88,12,0.30)",
+                          background: "rgba(255,237,213,0.92)",
+                          color: "#c2410c",
+                        }}
+                      >
+                      {getPointCollectionCode(r)}
+                      </span>
                     </div>
-                    <span
-                      style={{
-                        ...chipStyle,
-                        borderColor: "rgba(234,88,12,0.30)",
-                        background: "rgba(255,237,213,0.92)",
-                        color: "#c2410c",
-                      }}
-                    >
-                      {r.codcet}
-                    </span>
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      <span style={chipStyle}>Local: {r.local || r.logradouro || r.localidade || "-"}</span>
+                      <span style={chipStyle}>Bairro: {r.bairro || "-"}</span>
+                      <span style={chipStyle}>Sentido: {r.sentido || "-"}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      <span style={chipStyle}>Origem: {r.origem_equipamento || "-"}</span>
+                      <span style={chipStyle}>Status: {r.status || (active ? "ATIVO" : "INATIVO")}</span>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                    <span style={chipStyle}>Bairro: {r.bairro || "-"}</span>
-                    <span style={chipStyle}>Sentido: {r.sentido || "-"}</span>
-                    <span style={chipStyle}>Empresa: {r.empresa || "-"}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                    <span style={chipStyle}>Vel: {r.velofisc ?? "-"}</span>
-                    <span style={chipStyle}>Equip: {r.numero_equipamento || "-"}</span>
-                    <span style={chipStyle}>Status: {r.status || (active ? "ATIVO" : "INATIVO")}</span>
-                  </div>
-                </div>
                 <div style={{ display: "grid", justifyItems: "end", gap: 6, flex: "0 0 auto" }}>
                   <button
                     type="button"
@@ -389,7 +448,11 @@ export function AdminRadaresPanel({
             );
           })}
 
-          {!filteredItems.length && !loading && <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum radar encontrado.</div>}
+          {!filteredItems.length && !loading && (
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              {searchQuery.trim() ? "Nenhum radar encontrado para essa busca." : "Nenhum radar encontrado."}
+            </div>
+          )}
         </div>
 
         {!isMobile && filteredItems.length > ADMIN_PAGE_SIZE && (
