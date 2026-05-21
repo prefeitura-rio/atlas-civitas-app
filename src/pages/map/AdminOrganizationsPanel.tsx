@@ -28,7 +28,8 @@ const FEATURE_DISPLAY_NAMES: Record<string, string> = {
   cameras_inteligentes: "Super Câmeras Inteligentes",
   cameras_lpr: "Câmeras LPR",
   radares: "Radares",
-  bairros: "Bairros",
+  bairros_com_extracao_dados: "Bairros com extração de dados",
+  bairros_sem_extracao_dados: "Bairros sem extração de dados",
   risp: "RISP",
   aisp: "AISP",
   cisp: "CISP",
@@ -41,7 +42,8 @@ const FEATURE_CARD_ICONS: Partial<Record<string, FeatureCardIconConfig>> = {
   cameras_inteligentes: { kind: "image", src: cameraIntelIcon },
   cameras_lpr: { kind: "image", src: cameraLprIcon },
   radares: { kind: "image", src: radarIcon },
-  bairros: { kind: "lucide", Icon: Building2 },
+  bairros_com_extracao_dados: { kind: "lucide", Icon: Building2 },
+  bairros_sem_extracao_dados: { kind: "lucide", Icon: Building2 },
   risp: { kind: "lucide", Icon: Shield },
   aisp: { kind: "lucide", Icon: ShieldAlert },
   cisp: { kind: "lucide", Icon: ShieldCheck },
@@ -54,7 +56,8 @@ const FALLBACK_FEATURE_CATALOG: FeatureCatalogItem[] = [
   { code: "cameras_inteligentes", name: "Super Câmeras Inteligentes", category: "layer" },
   { code: "cameras_lpr", name: "Câmeras LPR", category: "layer" },
   { code: "radares", name: "Radares", category: "layer" },
-  { code: "bairros", name: "Bairros", category: "layer" },
+  { code: "bairros_com_extracao_dados", name: "Bairros com extração de dados", category: "layer" },
+  { code: "bairros_sem_extracao_dados", name: "Bairros sem extração de dados", category: "layer" },
   { code: "risp", name: "RISP", category: "layer" },
   { code: "aisp", name: "AISP", category: "layer" },
   { code: "cisp", name: "CISP", category: "layer" },
@@ -84,6 +87,11 @@ type OrganizationForm = {
   feature_codes: string[];
 };
 
+const BAIRROS_FEATURE_CODES = [
+  "bairros_com_extracao_dados",
+  "bairros_sem_extracao_dados",
+] as const;
+
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -91,6 +99,10 @@ function clean(value: unknown) {
 function sameFeatureCodes(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
   return a.every((code, index) => code === b[index]);
+}
+
+function isBairrosFeatureCode(code: string) {
+  return BAIRROS_FEATURE_CODES.includes(code as (typeof BAIRROS_FEATURE_CODES)[number]);
 }
 
 function normalizeOrganization(raw: any, idx = 0): AdminOrganization {
@@ -256,7 +268,7 @@ export function AdminOrganizationsPanel({
   const jurisdictionLevelWrapRef = useRef<HTMLDivElement | null>(null);
 
   const catalogItems = useMemo(() => {
-    const source = featureCatalog.length ? featureCatalog : FALLBACK_FEATURE_CATALOG;
+    const source = featureCatalog.length ? [...featureCatalog, ...FALLBACK_FEATURE_CATALOG] : FALLBACK_FEATURE_CATALOG;
     return source.filter((item, index, array) => array.findIndex((candidate) => candidate.code === item.code) === index);
   }, [featureCatalog]);
 
@@ -289,9 +301,13 @@ export function AdminOrganizationsPanel({
   function toggleFeature(code: string) {
     setForm((prev) => {
       const exists = prev.feature_codes.includes(code);
-      const nextCodes = exists
+      let nextCodes = exists
         ? prev.feature_codes.filter((item) => item !== code)
         : [...prev.feature_codes, code];
+
+      if (!exists && isBairrosFeatureCode(code)) {
+        nextCodes = nextCodes.filter((item) => item === code || !isBairrosFeatureCode(item));
+      }
 
       return {
         ...prev,

@@ -71,6 +71,7 @@ type PanelKey = TabKey | null;
 type AdminTab = "users" | "organizations" | "logs" | "cameras" | "radares";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
+type AreaDrawPolygonPoints = Array<[number, number]>;
 
 const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
   { key: "users", label: "Usuários" },
@@ -384,7 +385,7 @@ function loadImagePromise(map: mapboxgl.Map, url: string) {
   });
 }
 
-type BairrosFeature = Feature<Polygon | MultiPolygon, { NOME?: string } & Record<string, any>>;
+type BairrosFeature = Feature<Polygon | MultiPolygon, { NOME?: string; nome?: string } & Record<string, any>>;
 type SecurityAreaFeature = Feature<Polygon | MultiPolygon, { name?: string | number } & Record<string, any>>;
 type GeometryStats = {
   cameras: number;
@@ -399,6 +400,39 @@ type GeometrySelectionIds = {
   radar: string[];
 };
 type PolygonalGeometry = Polygon | MultiPolygon;
+
+function normalizeBairrosGeoData(
+  data: FeatureCollection<Polygon | MultiPolygon, any>
+): FeatureCollection<Polygon | MultiPolygon, any> {
+  return {
+    ...data,
+    features: (data.features || []).map((feature) => {
+      const properties = { ...(feature.properties || {}) };
+      const nome =
+        (typeof properties.NOME === "string" && properties.NOME.trim()) ||
+        (typeof properties.nome === "string" && properties.nome.trim()) ||
+        "";
+
+      if (nome) {
+        properties.NOME = nome;
+        properties.nome = nome;
+      }
+
+      return {
+        ...feature,
+        properties,
+      };
+    }),
+  };
+}
+
+function getBairroFeatureName(properties: Record<string, any> | null | undefined): string {
+  return (
+    (typeof properties?.NOME === "string" && properties.NOME.trim()) ||
+    (typeof properties?.nome === "string" && properties.nome.trim()) ||
+    ""
+  );
+}
 
 function emptyGeometrySelectionIds(): GeometrySelectionIds {
   return {
@@ -1167,31 +1201,45 @@ function featureCoordKey(feature: Feature<Point, any>): string | null {
   return poiCoordKey(lng, lat);
 }
 
-function makeAreaDrawGeoJSON(points: Array<[number, number]>) {
+function makeAreaDrawGeoJSON(
+  polygons: AreaDrawPolygonPoints[],
+  currentPoints: AreaDrawPolygonPoints
+) {
   const features: Feature<any, any>[] = [];
 
-  if (points.length >= 3) {
-    const ring = [...points, points[0]];
+  polygons.forEach((points, polygonIndex) => {
+    if (points.length >= 3) {
+      const ring = [...points, points[0]];
+      features.push({
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: [ring] },
+        properties: { kind: "area_polygon_completed", polygon_index: polygonIndex },
+      } as any);
+    }
+  });
+
+  if (currentPoints.length >= 3) {
+    const ring = [...currentPoints, currentPoints[0]];
     features.push({
       type: "Feature",
       geometry: { type: "Polygon", coordinates: [ring] },
-      properties: { kind: "area_polygon" },
+      properties: { kind: "area_polygon_current" },
     } as any);
   }
 
-  if (points.length >= 2) {
+  if (currentPoints.length >= 2) {
     features.push({
       type: "Feature",
-      geometry: { type: "LineString", coordinates: points },
-      properties: { kind: "area_line" },
+      geometry: { type: "LineString", coordinates: currentPoints },
+      properties: { kind: "area_line_current" },
     } as any);
   }
 
-  points.forEach((pt, index) => {
+  currentPoints.forEach((pt, index) => {
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: pt },
-      properties: { kind: "area_point", point_index: index },
+      properties: { kind: "area_point_current", point_index: index },
     } as any);
   });
 
@@ -1210,12 +1258,14 @@ export default function MapPage() {
   const authLoading = auth.loading;
   const me = auth.user;
   const hasFeature = auth.hasFeature;
+  const hasAnyFeature = (...codes: string[]) => codes.some((code) => hasFeature(code));
 
   const canViewCameras = hasFeature("cameras");
   const canViewCamerasIntel = hasFeature("cameras_inteligentes");
   const canViewCamerasLpr = hasFeature("cameras_lpr");
   const canViewRadares = hasFeature("radares");
-  const canViewBairros = hasFeature("bairros");
+  const canViewBairros = hasAnyFeature("bairros_com_extracao_dados", "bairros_sem_extracao_dados");
+  const canExtractBairroData = hasFeature("bairros_com_extracao_dados");
   const canViewRisp = hasFeature("risp");
   const canViewAisp = hasFeature("aisp");
   const canViewCisp = hasFeature("cisp");
@@ -1233,6 +1283,7 @@ export default function MapPage() {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const areaDrawModeRef = useRef(false);
   const areaDrawPointsRef = useRef<Array<[number, number]>>([]);
+  const areaDrawPolygonsRef = useRef<AreaDrawPolygonPoints[]>([]);
   const draggingAreaPointIndexRef = useRef<number | null>(null);
   const areaPointDragMovedRef = useRef(false);
   const areaPointDragSnapshotRef = useRef<Array<[number, number]> | null>(null);
@@ -1330,7 +1381,7 @@ export default function MapPage() {
     [hasFeature, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
   );
   const hasAuthorizedReportLayers = authorizedReportLayers.length > 0;
-  const canRequestBairroReport = canViewBairros && activeReportLayers.length > 0;
+  const canRequestBairroReport = canExtractBairroData && activeReportLayers.length > 0;
   const canRequestAreaReport = canUseAreaDraw && activeReportLayers.length > 0;
 
   const [loadingBairros, setLoadingBairros] = useState(false);
@@ -1357,6 +1408,7 @@ export default function MapPage() {
   const [areaDrawMode, setAreaDrawMode] = useState(false);
   const [areaToolsOpen, setAreaToolsOpen] = useState(false);
   const [areaDrawPoints, setAreaDrawPoints] = useState<Array<[number, number]>>([]);
+  const [areaDrawPolygons, setAreaDrawPolygons] = useState<AreaDrawPolygonPoints[]>([]);
   const [areaReportLoading, setAreaReportLoading] = useState(false);
   const [areaReportMsg, setAreaReportMsg] = useState<string | null>(null);
 
@@ -1383,6 +1435,10 @@ export default function MapPage() {
   useEffect(() => {
     areaDrawPointsRef.current = areaDrawPoints;
   }, [areaDrawPoints]);
+
+  useEffect(() => {
+    areaDrawPolygonsRef.current = areaDrawPolygons;
+  }, [areaDrawPolygons]);
 
   useEffect(() => {
     showBairrosRef.current = showBairros;
@@ -2180,7 +2236,11 @@ export default function MapPage() {
         id: LAYERS.area_draw_fill,
         type: "fill",
         source: SOURCES.area_draw,
-        filter: ["==", ["get", "kind"], "area_polygon"],
+        filter: [
+          "any",
+          ["==", ["get", "kind"], "area_polygon_completed"],
+          ["==", ["get", "kind"], "area_polygon_current"],
+        ],
         paint: {
           "fill-color": "#38bdf8",
           "fill-opacity": 0.18,
@@ -2193,7 +2253,12 @@ export default function MapPage() {
         id: LAYERS.area_draw_line,
         type: "line",
         source: SOURCES.area_draw,
-        filter: ["any", ["==", ["get", "kind"], "area_line"], ["==", ["get", "kind"], "area_polygon"]],
+        filter: [
+          "any",
+          ["==", ["get", "kind"], "area_line_current"],
+          ["==", ["get", "kind"], "area_polygon_current"],
+          ["==", ["get", "kind"], "area_polygon_completed"],
+        ],
         paint: {
           "line-color": "#0ea5e9",
           "line-width": 2.5,
@@ -2207,7 +2272,7 @@ export default function MapPage() {
         id: LAYERS.area_draw_points,
         type: "circle",
         source: SOURCES.area_draw,
-        filter: ["==", ["get", "kind"], "area_point"],
+        filter: ["==", ["get", "kind"], "area_point_current"],
         paint: {
           "circle-radius": 6,
           "circle-color": "#e0f2fe",
@@ -2223,8 +2288,9 @@ export default function MapPage() {
         type: "fill",
         source: SOURCES.bairros,
         paint: {
-          "fill-color": "#22c55e",
-          "fill-opacity": 0,
+          "fill-color": "#38bdf8",
+          // Mantem a camada clicavel sem esconder o mapa base.
+          "fill-opacity": 0.05,
         },
       });
     }
@@ -2235,8 +2301,9 @@ export default function MapPage() {
         type: "line",
         source: SOURCES.bairros,
         paint: {
-          "line-color": "#9d18e1",
-          "line-width": 2.5,
+          "line-color": "#38bdf8",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 11, 1.8, 14, 2.6],
+          "line-opacity": 0.95,
         },
       });
     }
@@ -2248,8 +2315,8 @@ export default function MapPage() {
         source: SOURCES.bairros,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
-          "fill-color": "#34d399",
-          "fill-opacity": 0.18,
+          "fill-color": "#22c55e",
+          "fill-opacity": 0.16,
         },
       });
     }
@@ -2261,8 +2328,9 @@ export default function MapPage() {
         source: SOURCES.bairros,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
-          "line-color": "#9d18e1",
-          "line-width": 3.5,
+          "line-color": "#22c55e",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2, 11, 3, 14, 4],
+          "line-opacity": 1,
         },
       });
     }
@@ -2558,10 +2626,14 @@ export default function MapPage() {
     }
   }
 
-  function updateAreaDrawData(map: mapboxgl.Map, points: Array<[number, number]>) {
+  function updateAreaDrawData(
+    map: mapboxgl.Map,
+    polygons: AreaDrawPolygonPoints[],
+    currentPoints: AreaDrawPolygonPoints
+  ) {
     const src: any = map.getSource(SOURCES.area_draw);
     if (!src || typeof src.setData !== "function") return;
-    src.setData(makeAreaDrawGeoJSON(points));
+    src.setData(makeAreaDrawGeoJSON(polygons, currentPoints));
   }
 
   function updateBairrosData(
@@ -2708,7 +2780,7 @@ export default function MapPage() {
 
     updateGpsData(map, gps, gpsOnRef.current);
     updateSearchPin(map, searchPin);
-    updateAreaDrawData(map, areaDrawPoints);
+    updateAreaDrawData(map, areaDrawPolygonsRef.current, areaDrawPointsRef.current);
     applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
   }
 
@@ -3278,6 +3350,10 @@ export default function MapPage() {
 
     map.on("click", LAYERS.area_draw_line, (e) => {
       if (suppressAreaDrawClickRef.current) return;
+      const feature: any = e.features?.[0];
+      if (feature?.properties?.kind !== "area_line_current" && feature?.properties?.kind !== "area_polygon_current") {
+        return;
+      }
       if (areaDrawPointsRef.current.length < 2) return;
 
       const lng = Number(e.lngLat?.lng);
@@ -3339,7 +3415,7 @@ export default function MapPage() {
       areaPointDragMovedRef.current = true;
       const nextPoints = replaceAreaDrawPoint(areaDrawPointsRef.current, dragIndex, [lng, lat]);
       areaDrawPointsRef.current = nextPoints;
-      updateAreaDrawData(map, nextPoints);
+      updateAreaDrawData(map, areaDrawPolygonsRef.current, nextPoints);
       map.getCanvas().style.cursor = "grabbing";
     });
 
@@ -3878,10 +3954,9 @@ export default function MapPage() {
           ];
           const renderedBairroFeatures = map.queryRenderedFeatures(e.point, { layers: bairroLayers });
           const bairroFeature = renderedBairroFeatures.find((f: any) => {
-            const nome = f?.properties?.NOME;
-            return typeof nome === "string" && nome.trim().length > 0;
+            return getBairroFeatureName(f?.properties).length > 0;
           }) as any;
-          clickedBairro = (bairroFeature?.properties?.NOME || "").toString().trim();
+          clickedBairro = getBairroFeatureName(bairroFeature?.properties);
 
           if (!clickedBairro) {
             const lng = Number(e.lngLat?.lng);
@@ -3890,7 +3965,7 @@ export default function MapPage() {
             if (Number.isFinite(lng) && Number.isFinite(lat) && data?.features?.length) {
               const point: [number, number] = [lng, lat];
               for (const feature of data.features as BairrosFeature[]) {
-                const nome = (feature.properties?.NOME || "").trim();
+                const nome = getBairroFeatureName(feature.properties);
                 if (!nome || !feature.geometry) continue;
                 const bbox = getGeometryBbox(feature.geometry);
                 if (!bbox) continue;
@@ -3980,40 +4055,65 @@ export default function MapPage() {
       return;
     }
 
+    if (authLoading || !accessToken) {
+      return;
+    }
+
     let active = true;
     async function loadBairros() {
       setLoadingBairros(true);
       setBairrosErr(null);
 
-      const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
-      const candidates = [
-        `${baseUrl}GeojsonBairros.geojson`,
-        "/GeojsonBairros.geojson",
-        "./GeojsonBairros.geojson",
-      ];
+      try {
+        const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(
+          `${API_BASE}/bairros/geojson`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+        if (!active) return;
+        setBairrosGeo(normalizeBairrosGeoData(data));
+        setLoadingBairros(false);
+      } catch (e) {
+        console.warn("Falha ao carregar bairros da API. Tentando fallback local.", e);
 
-      for (const url of candidates) {
-        try {
-          const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
-          if (!active) return;
-          setBairrosGeo(data);
-          setLoadingBairros(false);
-          return;
-        } catch (e) {
-          console.warn("Falha ao carregar bairros de", url, e);
+        const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
+        const candidates = [
+          `${baseUrl}GeojsonBairros.geojson`,
+          "/GeojsonBairros.geojson",
+          "./GeojsonBairros.geojson",
+        ];
+
+        for (const url of candidates) {
+          try {
+            const fallbackRes = await fetch(url);
+            if (!fallbackRes.ok) {
+              throw new Error(`${fallbackRes.status} - ${fallbackRes.statusText || "Erro"}`);
+            }
+            const fallbackData = (await fallbackRes.json()) as FeatureCollection<Polygon | MultiPolygon, any>;
+            if (!active) return;
+            setBairrosGeo(normalizeBairrosGeoData(fallbackData));
+            setBairrosErr(null);
+            setLoadingBairros(false);
+            return;
+          } catch (fallbackError) {
+            console.warn("Falha ao carregar fallback local de bairros em", url, fallbackError);
+          }
         }
-      }
 
-      if (!active) return;
-      setBairrosErr("Não foi possível carregar o GeoJSON dos bairros.");
-      setLoadingBairros(false);
+        if (!active) return;
+        setBairrosErr("Não foi possível carregar os bairros pela API nem pelo arquivo local.");
+        setLoadingBairros(false);
+      }
     }
 
     loadBairros();
     return () => {
       active = false;
     };
-  }, [canViewBairros]);
+  }, [accessToken, authLoading, canViewBairros]);
 
   useEffect(() => {
     if (!canViewRisp) {
@@ -4571,18 +4671,33 @@ export default function MapPage() {
     }
   }
 
-  function areaGeometryFromPoints(points: Array<[number, number]>): Polygon | null {
-    if (points.length < 3) return null;
-    const ring = [...points, points[0]];
+  function areaGeometryFromPolygons(
+    polygons: AreaDrawPolygonPoints[],
+    currentPoints: AreaDrawPolygonPoints
+  ): PolygonalGeometry | null {
+    const validPolygons = [...polygons];
+    if (currentPoints.length >= 3 && !areaDrawHasSelfIntersection(currentPoints)) {
+      validPolygons.push(currentPoints);
+    }
+    if (!validPolygons.length) return null;
+    if (validPolygons.length === 1) {
+      const ring = [...validPolygons[0], validPolygons[0][0]];
+      return {
+        type: "Polygon",
+        coordinates: [ring],
+      };
+    }
     return {
-      type: "Polygon",
-      coordinates: [ring],
+      type: "MultiPolygon",
+      coordinates: validPolygons.map((points) => [[...points, points[0]]]),
     };
   }
 
   function clearAreaDrawing() {
     areaDrawPointsRef.current = [];
+    areaDrawPolygonsRef.current = [];
     setAreaDrawPoints([]);
+    setAreaDrawPolygons([]);
     setAreaReportMsg(null);
   }
 
@@ -4602,6 +4717,24 @@ export default function MapPage() {
     setAreaReportMsg(null);
   }
 
+  function finalizeCurrentAreaPolygon() {
+    if (areaDrawPointsRef.current.length < 3) {
+      setAreaReportMsg("Adicione pelo menos 3 pontos para concluir este polígono.");
+      return;
+    }
+    if (areaDrawHasSelfIntersection(areaDrawPointsRef.current)) {
+      setAreaReportMsg("A área não pode se cruzar. Ajuste os pontos antes de concluir o polígono.");
+      return;
+    }
+
+    const nextPolygons = [...areaDrawPolygonsRef.current, [...areaDrawPointsRef.current]];
+    areaDrawPolygonsRef.current = nextPolygons;
+    areaDrawPointsRef.current = [];
+    setAreaDrawPolygons(nextPolygons);
+    setAreaDrawPoints([]);
+    setAreaReportMsg("Polígono concluído. Você pode iniciar outro desenho.");
+  }
+
   async function downloadAreaReport() {
     if (!canRequestAreaReport) {
       setAreaReportMsg(
@@ -4611,13 +4744,13 @@ export default function MapPage() {
       );
       return;
     }
-    const geometry = areaGeometryFromPoints(areaDrawPoints);
+    const geometry = areaGeometryFromPolygons(areaDrawPolygons, areaDrawPoints);
     if (!geometry) {
-      setAreaReportMsg("Desenhe uma área com pelo menos 3 pontos.");
+      setAreaReportMsg("Desenhe pelo menos um polígono com 3 pontos.");
       return;
     }
     if (areaDrawHasSelfIntersection(areaDrawPoints)) {
-      setAreaReportMsg("A área não pode se cruzar. Ajuste os pontos antes de gerar o PDF.");
+      setAreaReportMsg("O polígono em edição não pode se cruzar. Ajuste os pontos antes de gerar o PDF.");
       return;
     }
 
@@ -4872,7 +5005,7 @@ export default function MapPage() {
     if (!bairrosGeo?.features?.length) return [];
     const names = new Set<string>();
     for (const f of bairrosGeo.features as BairrosFeature[]) {
-      const nome = (f.properties?.NOME || "").trim();
+      const nome = getBairroFeatureName(f.properties);
       if (nome) names.add(nome);
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -4932,7 +5065,7 @@ export default function MapPage() {
   const selectedBairroFeature = useMemo(() => {
     if (!selectedBairro || !bairrosGeo) return null;
     return (bairrosGeo.features as BairrosFeature[]).find(
-      (f) => (f.properties?.NOME || "").trim() === selectedBairro
+      (f) => getBairroFeatureName(f.properties) === selectedBairro
     ) || null;
   }, [bairrosGeo, selectedBairro]);
 
@@ -5331,7 +5464,7 @@ export default function MapPage() {
     if (!selectedBairro || !bairrosGeo) return;
 
     const feature = (bairrosGeo.features as BairrosFeature[]).find(
-      (f) => (f.properties?.NOME || "").trim() === selectedBairro
+      (f) => getBairroFeatureName(f.properties) === selectedBairro
     );
     if (!feature || !feature.geometry) return;
 
@@ -5397,19 +5530,19 @@ export default function MapPage() {
     if (!map) return;
     if (map.isStyleLoaded()) {
       ensureSourcesAndLayers(map);
-      updateAreaDrawData(map, areaDrawPoints);
+      updateAreaDrawData(map, areaDrawPolygons, areaDrawPoints);
       return;
     }
     const handleLoad = () => {
       ensureSourcesAndLayers(map);
-      updateAreaDrawData(map, areaDrawPoints);
+      updateAreaDrawData(map, areaDrawPolygons, areaDrawPoints);
     };
     map.once("load", handleLoad);
     return () => {
       map.off("load", handleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areaDrawPoints]);
+  }, [areaDrawPolygons, areaDrawPoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5845,6 +5978,10 @@ export default function MapPage() {
     : "";
   const canRequestSecurityAreaReport =
     !!selectedSecurityFeature?.geometry && activeReportLayers.length > 0;
+  const totalAreaPolygonCount =
+    areaDrawPolygons.length + (areaDrawPoints.length >= 3 ? 1 : 0);
+  const totalAreaPointCount =
+    areaDrawPolygons.reduce((total, points) => total + points.length, 0) + areaDrawPoints.length;
 
   const renderGeometrySummaryCard = ({
     title,
@@ -6216,6 +6353,7 @@ export default function MapPage() {
         }}
       >
         {showBairros &&
+          canExtractBairroData &&
           selectedBairro &&
           selectedBairroStats &&
           renderGeometrySummaryCard({
@@ -6485,6 +6623,11 @@ export default function MapPage() {
                 ) : null}
                 {loadingBairros && <div className="dockNote">Carregando bairros...</div>}
                 {bairrosErr && <div className="dockNote">{bairrosErr}</div>}
+                {!canExtractBairroData && selectedBairro && (
+                  <div className="dockNote">
+                    Esta camada exibe somente o contorno do bairro, sem resumo e sem download de PDF.
+                  </div>
+                )}
               </div>
             )}
 
@@ -6494,7 +6637,9 @@ export default function MapPage() {
                 onClick={() => {
                   if (areaDrawMode) {
                     setAreaDrawMode(false);
+                    areaDrawPolygonsRef.current = [];
                     setAreaDrawPoints([]);
+                    setAreaDrawPolygons([]);
                     setAreaToolsOpen(false);
                     setAreaReportMsg(null);
                     return;
@@ -6537,7 +6682,10 @@ export default function MapPage() {
                   </div>
                 </div>
                 <div className="dockNote" style={{ margin: 0 }}>
-                  Pontos da área: {areaDrawPoints.length}
+                  Polígonos: {totalAreaPolygonCount} • Pontos: {totalAreaPointCount}
+                </div>
+                <div className="dockNote" style={{ margin: 0 }}>
+                  Polígono em edição: {areaDrawPoints.length} ponto(s)
                 </div>
                 {areaDrawPoints.length >= 3 && areaDrawMode && (
                   <div className="dockNote" style={{ margin: 0, fontSize: 10 }}>
@@ -6548,7 +6696,13 @@ export default function MapPage() {
                   <button
                     className="btnGhost"
                     onClick={toggleAreaDrawing}
-                    style={{ borderRadius: 10, fontWeight: 800 }}
+                    style={{
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      background: areaDrawMode ? "rgba(239, 68, 68, 0.16)" : undefined,
+                      borderColor: areaDrawMode ? "rgba(239, 68, 68, 0.35)" : undefined,
+                      color: areaDrawMode ? "#b91c1c" : undefined,
+                    }}
                   >
                     {areaDrawMode ? "Parar desenho" : "Desenhar área"}
                   </button>
@@ -6562,19 +6716,40 @@ export default function MapPage() {
                   </button>
                   <button
                     className="btnGhost"
-                    onClick={clearAreaDrawing}
-                    disabled={areaDrawPoints.length === 0 || areaReportLoading}
-                    style={{ borderRadius: 10, opacity: areaDrawPoints.length === 0 || areaReportLoading ? 0.5 : 1 }}
+                    onClick={finalizeCurrentAreaPolygon}
+                    disabled={areaDrawPoints.length < 3 || areaReportLoading}
+                    style={{
+                      borderRadius: 10,
+                      opacity: areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1,
+                      background: "rgba(34, 197, 94, 0.14)",
+                      borderColor: "rgba(34, 197, 94, 0.32)",
+                      color: "#166534",
+                    }}
                   >
-                    Limpar área
+                    Novo polígono
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={clearAreaDrawing}
+                    disabled={(areaDrawPoints.length === 0 && areaDrawPolygons.length === 0) || areaReportLoading}
+                    style={{
+                      borderRadius: 10,
+                      opacity:
+                        (areaDrawPoints.length === 0 && areaDrawPolygons.length === 0) || areaReportLoading ? 0.5 : 1,
+                    }}
+                  >
+                    Limpar tudo
                   </button>
                   <button
                     className="btnGhost"
                     onClick={downloadAreaReport}
-                    disabled={!canRequestAreaReport || areaDrawPoints.length < 3 || areaReportLoading}
+                    disabled={!canRequestAreaReport || totalAreaPolygonCount === 0 || areaReportLoading}
                     style={{
                       borderRadius: 10,
-                      opacity: !canRequestAreaReport || areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1,
+                      opacity: !canRequestAreaReport || totalAreaPolygonCount === 0 || areaReportLoading ? 0.5 : 1,
+                      background: "rgba(56, 189, 248, 0.16)",
+                      borderColor: "rgba(56, 189, 248, 0.35)",
+                      color: "#075985",
                     }}
                   >
                     {areaReportLoading ? "Gerando..." : "Baixar PDF"}
