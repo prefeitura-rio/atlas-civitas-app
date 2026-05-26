@@ -364,6 +364,11 @@ function normalizeSessionUrl(value: unknown) {
   return raw.startsWith("/") ? `${API_BASE}${raw}` : raw;
 }
 
+function isHttpsUrl(value: unknown) {
+  if (typeof value !== "string") return false;
+  return /^https:\/\//i.test(value.trim());
+}
+
 function getSmartCameraId(value: any) {
   return cleanString(value?.id);
 }
@@ -3440,6 +3445,23 @@ export default function MapPage() {
         try {
           const session = await requestSmartCameraSession(smartId, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
           if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+
+          if (!isHttpsUrl(session.sessionUrl)) {
+            clearHoverPreviewCountdownTimer();
+            hoverPreviewPopup
+              ?.setLngLat(coords)
+              .setOffset(isNearTop ? [0, offsetY] : 14)
+              .setHTML(`
+                <div style="width:360px;background:#000;">
+                  <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
+                    Preview indispon&iacute;vel. Clique na c&acirc;mera e abra o streaming.
+                  </div>
+                </div>
+              `)
+              .addTo(map);
+            centerMobilePopup(hoverPreviewPopup);
+            return;
+          }
 
           hoverPreviewPopup
             ?.setLngLat(coords)
