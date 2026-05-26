@@ -6537,7 +6537,15 @@ export default function MapPage() {
               <button
                 className={`dockChip ${showBairros ? "dockChipOn" : ""}`}
                 onClick={() => {
-                  setShowBairros((v) => !v);
+                  setShowBairros((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setSelectedBairro("");
+                      setBairroQuery("");
+                      setBairroReportMsg(null);
+                    }
+                    return next;
+                  });
                   bumpDockAutoHide();
                 }}
                 title={showBairros ? "Bairros ON" : "Bairros OFF"}
