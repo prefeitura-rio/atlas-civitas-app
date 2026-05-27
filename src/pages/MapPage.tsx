@@ -2,7 +2,16 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
-import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon, GeometryCollection } from "geojson";
+import type {
+  FeatureCollection,
+  Feature,
+  Point,
+  Polygon,
+  MultiPolygon,
+  LineString,
+  MultiLineString,
+  GeometryCollection,
+} from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
 import Swal from "sweetalert2";
 import {
@@ -55,6 +64,7 @@ import { AdminOrganizationsPanel } from "./map/AdminOrganizationsPanel";
 import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
 import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
+import { AdminUsageDashboardPanel } from "./map/AdminUsageDashboardPanel";
 import {
   cleanString,
   firstNonEmptyString,
@@ -68,7 +78,7 @@ import {
 type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
-type AdminTab = "users" | "organizations" | "logs" | "cameras" | "radares";
+type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "radares";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
 type AreaDrawPolygonPoints = Array<[number, number]>;
@@ -78,6 +88,7 @@ const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
   { key: "organizations", label: "Organizações" },
   { key: "cameras", label: "Câmeras" },
   { key: "radares", label: "Radares" },
+  { key: "usage", label: "Métricas" },
   { key: "logs", label: "Logs" },
 ];
 
@@ -127,6 +138,7 @@ const SOURCES = {
   selection: "src-selection",
   area_draw: "src-area-draw",
   bairros: "src-bairros",
+  bairros_lines: "src-bairros-lines",
   risp: "src-risp",
   aisp: "src-aisp",
   cisp: "src-cisp",
@@ -386,6 +398,7 @@ function loadImagePromise(map: mapboxgl.Map, url: string) {
 }
 
 type BairrosFeature = Feature<Polygon | MultiPolygon, { NOME?: string; nome?: string } & Record<string, any>>;
+type BairrosLineFeature = Feature<LineString | MultiLineString, { NOME?: string; nome?: string } & Record<string, any>>;
 type SecurityAreaFeature = Feature<Polygon | MultiPolygon, { name?: string | number } & Record<string, any>>;
 type GeometryStats = {
   cameras: number;
@@ -401,12 +414,43 @@ type GeometrySelectionIds = {
 };
 type PolygonalGeometry = Polygon | MultiPolygon;
 
-function normalizeBairrosGeoData(
+function closeLinearRing(ring: number[][]) {
+  if (!ring.length) return ring;
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first?.[0] === last?.[0] && first?.[1] === last?.[1]) return ring;
+  return [...ring, [...first]];
+}
+
+function sameCoordinate(a: number[] | undefined, b: number[] | undefined) {
+  if (!a || !b) return false;
+  return Math.abs(Number(a[0]) - Number(b[0])) < 1e-10 && Math.abs(Number(a[1]) - Number(b[1])) < 1e-10;
+}
+
+function isValidLngLat(position: number[] | undefined): position is number[] {
+  return Number.isFinite(Number(position?.[0])) && Number.isFinite(Number(position?.[1]));
+}
+
+function splitRingIntoLineStrings(rawRing: number[][]) {
+  const ring = rawRing.filter(isValidLngLat);
+  if (ring.length < 2) return [];
+  return [ring.length >= 3 ? closeLinearRing(ring) : ring];
+}
+
+function geometryToLineStrings(geometry: Polygon | MultiPolygon | null | undefined) {
+  if (!geometry) return [];
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.flatMap((polygon) => polygon.flatMap((ring) => splitRingIntoLineStrings(ring)));
+}
+
+function buildBairrosLineGeoData(
   data: FeatureCollection<Polygon | MultiPolygon, any>
-): FeatureCollection<Polygon | MultiPolygon, any> {
-  return {
-    ...data,
-    features: (data.features || []).map((feature) => {
+): FeatureCollection<LineString | MultiLineString, any> {
+  const features = (data.features || [])
+    .map((feature) => {
+      const lineStrings = geometryToLineStrings(feature.geometry);
+      if (!lineStrings.length) return null;
+
       const properties = { ...(feature.properties || {}) };
       const nome =
         (typeof properties.NOME === "string" && properties.NOME.trim()) ||
@@ -418,11 +462,192 @@ function normalizeBairrosGeoData(
         properties.nome = nome;
       }
 
+      const geometry =
+        lineStrings.length === 1
+          ? ({ type: "LineString", coordinates: lineStrings[0] } as LineString)
+          : ({ type: "MultiLineString", coordinates: lineStrings } as MultiLineString);
+
       return {
         ...feature,
+        geometry,
         properties,
       };
-    }),
+    })
+    .filter((feature): feature is BairrosLineFeature => !!feature);
+
+  return {
+    type: "FeatureCollection",
+    features,
+  };
+}
+
+function splitRawRingIntoClosedRings(rawRing: number[][]) {
+  const rings: number[][][] = [];
+  let current: number[][] = [];
+
+  for (let i = 0; i < rawRing.length; i++) {
+    const position = rawRing[i];
+    current.push(position);
+
+    if (current.length >= 4 && sameCoordinate(position, current[0])) {
+      rings.push(current);
+      current = [];
+    }
+  }
+
+  if (current.length >= 3) {
+    rings.push(closeLinearRing(current));
+  }
+
+  return rings;
+}
+
+function getRingSamplePoint(ring: number[][]): [number, number] | null {
+  for (const position of ring) {
+    const lng = Number(position?.[0]);
+    const lat = Number(position?.[1]);
+    if (Number.isFinite(lng) && Number.isFinite(lat)) return [lng, lat];
+  }
+  return null;
+}
+
+function getRingSignedArea(ring: number[][]) {
+  let area = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const current = ring[i];
+    const next = ring[i + 1];
+    area += Number(current?.[0]) * Number(next?.[1]) - Number(next?.[0]) * Number(current?.[1]);
+  }
+  return area / 2;
+}
+
+function getRingOrientation(ring: number[][]) {
+  const area = getRingSignedArea(ring);
+  if (Math.abs(area) < 1e-12) return 0;
+  return area > 0 ? 1 : -1;
+}
+
+function splitPolygonRingsIntoPolygons(rings: number[][][]) {
+  const polygons: number[][][][] = [];
+  const exteriorOrientations: number[] = [];
+
+  for (const rawRing of rings) {
+    const closedRings = splitRawRingIntoClosedRings(rawRing);
+
+    for (const closedRing of closedRings) {
+      const ring = closeLinearRing(closedRing);
+      if (ring.length < 4) continue;
+
+      const sample = getRingSamplePoint(ring);
+      const orientation = getRingOrientation(ring);
+      let parentIndex = -1;
+
+      if (sample && orientation !== 0) {
+        parentIndex = polygons.findIndex(
+          (polygon, index) =>
+            polygon[0] &&
+            exteriorOrientations[index] !== 0 &&
+            orientation !== exteriorOrientations[index] &&
+            pointInRing(sample, polygon[0])
+        );
+      }
+
+      if (parentIndex >= 0) {
+        polygons[parentIndex].push(ring);
+      } else {
+        polygons.push([ring]);
+        exteriorOrientations.push(orientation);
+      }
+    }
+  }
+
+  return polygons;
+}
+
+function normalizeBairroGeometry(geometry: Polygon | MultiPolygon | null | undefined): Polygon | MultiPolygon | null {
+  if (!geometry) return null;
+
+  const polygons =
+    geometry.type === "Polygon"
+      ? splitPolygonRingsIntoPolygons(geometry.coordinates)
+      : geometry.coordinates.flatMap((polygon) => splitPolygonRingsIntoPolygons(polygon));
+
+  if (!polygons.length) return null;
+  return polygons.length === 1
+    ? ({ type: "Polygon", coordinates: polygons[0] } as Polygon)
+    : ({ type: "MultiPolygon", coordinates: polygons } as MultiPolygon);
+}
+
+function mergePolygonalGeometries(geometries: Array<Polygon | MultiPolygon>): Polygon | MultiPolygon | null {
+  const coordinates = geometries.flatMap((geometry) => geometryToMultiPolygonCoordinates(geometry));
+  if (!coordinates.length) return null;
+  return coordinates.length === 1
+    ? ({ type: "Polygon", coordinates: coordinates[0] } as Polygon)
+    : ({ type: "MultiPolygon", coordinates } as MultiPolygon);
+}
+
+function normalizeBairrosGeoData(
+  data: FeatureCollection<Polygon | MultiPolygon, any>
+): FeatureCollection<Polygon | MultiPolygon, any> {
+  const grouped = new Map<string, Feature<Polygon | MultiPolygon, any>[]>();
+  const passthrough: Feature<Polygon | MultiPolygon, any>[] = [];
+
+  for (const feature of data.features || []) {
+    const geometry = normalizeBairroGeometry(feature.geometry);
+    if (!geometry) continue;
+
+    const properties = { ...(feature.properties || {}) };
+    const nome =
+      (typeof properties.NOME === "string" && properties.NOME.trim()) ||
+      (typeof properties.nome === "string" && properties.nome.trim()) ||
+      "";
+
+    if (!nome) {
+      passthrough.push({ ...feature, geometry });
+      continue;
+    }
+
+    properties.NOME = nome;
+    properties.nome = nome;
+
+    const nextFeature = {
+      ...feature,
+      geometry,
+      properties,
+    };
+
+    const current = grouped.get(nome);
+    if (current) {
+      current.push(nextFeature);
+    } else {
+      grouped.set(nome, [nextFeature]);
+    }
+  }
+
+  const merged = Array.from(grouped.entries()).map(([nome, features]) => {
+    const geometries = features
+      .map((feature) => feature.geometry)
+      .filter((geometry): geometry is Polygon | MultiPolygon => !!geometry);
+    const geometry = mergePolygonalGeometries(geometries);
+    const base = features[0];
+
+    if (!geometry) return null;
+
+    return {
+      ...base,
+      geometry,
+      properties: {
+        ...base.properties,
+        NOME: nome,
+        nome,
+        bairro_parts: features.length,
+      },
+    };
+  }).filter((feature): feature is Feature<Polygon | MultiPolygon, any> => !!feature);
+
+  return {
+    ...data,
+    features: [...passthrough, ...merged],
   };
 }
 
@@ -1386,6 +1611,9 @@ export default function MapPage() {
 
   const [loadingBairros, setLoadingBairros] = useState(false);
   const [bairrosGeo, setBairrosGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const [bairrosLinesGeo, setBairrosLinesGeo] = useState<FeatureCollection<LineString | MultiLineString, any> | null>(
+    null
+  );
   const [bairrosErr, setBairrosErr] = useState<string | null>(null);
   const [rispGeo, setRispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [aispGeo, setAispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
@@ -2020,6 +2248,13 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getSource(SOURCES.bairros_lines)) {
+      map.addSource(SOURCES.bairros_lines, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
     if (!map.getSource(SOURCES.risp)) {
       map.addSource(SOURCES.risp, {
         type: "geojson",
@@ -2282,6 +2517,13 @@ export default function MapPage() {
       });
     }
 
+    for (const layerId of [LAYERS.bairros_line, LAYERS.bairros_selected_line]) {
+      const layer = map.getLayer(layerId) as mapboxgl.AnyLayer | undefined;
+      if (layer && "source" in layer && layer.source !== SOURCES.bairros_lines) {
+        map.removeLayer(layerId);
+      }
+    }
+
     if (!map.getLayer(LAYERS.bairros_fill)) {
       map.addLayer({
         id: LAYERS.bairros_fill,
@@ -2290,7 +2532,7 @@ export default function MapPage() {
         paint: {
           "fill-color": "#38bdf8",
           // Mantem a camada clicavel sem esconder o mapa base.
-          "fill-opacity": 0.05,
+          "fill-opacity": 0.01,
         },
       });
     }
@@ -2299,7 +2541,7 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.bairros_line,
         type: "line",
-        source: SOURCES.bairros,
+        source: SOURCES.bairros_lines,
         paint: {
           "line-color": "#38bdf8",
           "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 11, 1.8, 14, 2.6],
@@ -2316,7 +2558,7 @@ export default function MapPage() {
         filter: ["==", ["get", "NOME"], ""],
         paint: {
           "fill-color": "#22c55e",
-          "fill-opacity": 0.16,
+          "fill-opacity": 0.04,
         },
       });
     }
@@ -2325,14 +2567,20 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.bairros_selected_line,
         type: "line",
-        source: SOURCES.bairros,
+        source: SOURCES.bairros_lines,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
           "line-color": "#22c55e",
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2, 11, 3, 14, 4],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2.4, 11, 3.8, 14, 5.2],
           "line-opacity": 1,
+          "line-blur": 0.25,
         },
       });
+    }
+
+    if (map.getLayer(LAYERS.bairros_fill)) map.setPaintProperty(LAYERS.bairros_fill, "fill-opacity", 0.01);
+    if (map.getLayer(LAYERS.bairros_selected_fill)) {
+      map.setPaintProperty(LAYERS.bairros_selected_fill, "fill-opacity", 0.04);
     }
 
     if (!map.getLayer(LAYERS.risp_fill)) {
@@ -2574,6 +2822,19 @@ export default function MapPage() {
 
     applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
 
+    for (const id of [
+      LAYERS.bairros_fill,
+      LAYERS.bairros_line,
+      LAYERS.bairros_selected_fill,
+      LAYERS.bairros_selected_line,
+    ]) {
+      if (map.getLayer(id)) {
+        try {
+          map.moveLayer(id);
+        } catch {}
+      }
+    }
+
     // Garante que pontos e o cone do GPS fiquem acima dos bairros
     const aboveBairros = [
       LAYERS.clusters,
@@ -2641,6 +2902,14 @@ export default function MapPage() {
     data: FeatureCollection<Polygon | MultiPolygon, any>
   ) {
     const src: any = map.getSource(SOURCES.bairros);
+    if (src && typeof src.setData === "function") src.setData(data);
+  }
+
+  function updateBairrosLineData(
+    map: mapboxgl.Map,
+    data: FeatureCollection<LineString | MultiLineString, any>
+  ) {
+    const src: any = map.getSource(SOURCES.bairros_lines);
     if (src && typeof src.setData === "function") src.setData(data);
   }
 
@@ -2742,6 +3011,7 @@ export default function MapPage() {
 
     updatePoisData(map, poisGeo);
     if (bairrosGeo) updateBairrosData(map, bairrosGeo);
+    if (bairrosLinesGeo) updateBairrosLineData(map, bairrosLinesGeo);
     if (rispGeo) updateRispData(map, rispGeo);
     if (aispGeo) updateAispData(map, aispGeo);
     if (cispGeo) updateCispData(map, cispGeo);
@@ -3899,50 +4169,6 @@ export default function MapPage() {
         ],
       });
       if (!features || features.length === 0) {
-        const codeFeature = map
-          .queryRenderedFeatures(e.point, {
-            layers: [
-              LAYERS.risp_selected_fill,
-              LAYERS.risp_selected_line,
-              LAYERS.risp_fill,
-              LAYERS.risp_line,
-              LAYERS.risp_label,
-              LAYERS.aisp_selected_fill,
-              LAYERS.aisp_selected_line,
-              LAYERS.aisp_fill,
-              LAYERS.aisp_line,
-              LAYERS.aisp_label,
-              LAYERS.cisp_selected_fill,
-              LAYERS.cisp_selected_line,
-              LAYERS.cisp_fill,
-              LAYERS.cisp_line,
-              LAYERS.cisp_label,
-            ],
-          })
-          .find((feature: any) => {
-            const code = feature?.properties?.name;
-            return code !== undefined && code !== null && String(code).trim().length > 0;
-          }) as any;
-
-        if (codeFeature) {
-          const kind = getSecurityAreaKindFromLayerId(codeFeature.layer?.id || "");
-          const code = String(codeFeature.properties?.name || "").trim();
-          if (kind && code) {
-            selectSecurityArea({ kind, code });
-            return;
-          }
-        }
-
-        const lng = Number(e.lngLat?.lng);
-        const lat = Number(e.lngLat?.lat);
-        if (Number.isFinite(lng) && Number.isFinite(lat)) {
-          const geometryMatch = findSecurityAreaFromGeometry([lng, lat]);
-          if (geometryMatch) {
-            selectSecurityArea(geometryMatch);
-            return;
-          }
-        }
-
         let clickedBairro = "";
 
         if (showBairrosRef.current) {
@@ -3992,6 +4218,50 @@ export default function MapPage() {
           setBairroQuery("");
           setBairroReportMsg(null);
           return;
+        }
+
+        const codeFeature = map
+          .queryRenderedFeatures(e.point, {
+            layers: [
+              LAYERS.risp_selected_fill,
+              LAYERS.risp_selected_line,
+              LAYERS.risp_fill,
+              LAYERS.risp_line,
+              LAYERS.risp_label,
+              LAYERS.aisp_selected_fill,
+              LAYERS.aisp_selected_line,
+              LAYERS.aisp_fill,
+              LAYERS.aisp_line,
+              LAYERS.aisp_label,
+              LAYERS.cisp_selected_fill,
+              LAYERS.cisp_selected_line,
+              LAYERS.cisp_fill,
+              LAYERS.cisp_line,
+              LAYERS.cisp_label,
+            ],
+          })
+          .find((feature: any) => {
+            const code = feature?.properties?.name;
+            return code !== undefined && code !== null && String(code).trim().length > 0;
+          }) as any;
+
+        if (codeFeature) {
+          const kind = getSecurityAreaKindFromLayerId(codeFeature.layer?.id || "");
+          const code = String(codeFeature.properties?.name || "").trim();
+          if (kind && code) {
+            selectSecurityArea({ kind, code });
+            return;
+          }
+        }
+
+        const lng = Number(e.lngLat?.lng);
+        const lat = Number(e.lngLat?.lat);
+        if (Number.isFinite(lng) && Number.isFinite(lat)) {
+          const geometryMatch = findSecurityAreaFromGeometry([lng, lat]);
+          if (geometryMatch) {
+            selectSecurityArea(geometryMatch);
+            return;
+          }
         }
 
         if (showBairrosRef.current) {
@@ -4051,6 +4321,7 @@ export default function MapPage() {
     if (!canViewBairros) {
       setLoadingBairros(false);
       setBairrosGeo(null);
+      setBairrosLinesGeo(null);
       setBairrosErr(null);
       return;
     }
@@ -4075,6 +4346,7 @@ export default function MapPage() {
         );
         if (!active) return;
         setBairrosGeo(normalizeBairrosGeoData(data));
+        setBairrosLinesGeo(buildBairrosLineGeoData(data));
         setLoadingBairros(false);
       } catch (e) {
         console.warn("Falha ao carregar bairros da API. Tentando fallback local.", e);
@@ -4095,6 +4367,7 @@ export default function MapPage() {
             const fallbackData = (await fallbackRes.json()) as FeatureCollection<Polygon | MultiPolygon, any>;
             if (!active) return;
             setBairrosGeo(normalizeBairrosGeoData(fallbackData));
+            setBairrosLinesGeo(buildBairrosLineGeoData(fallbackData));
             setBairrosErr(null);
             setLoadingBairros(false);
             return;
@@ -4105,6 +4378,7 @@ export default function MapPage() {
 
         if (!active) return;
         setBairrosErr("Não foi possível carregar os bairros pela API nem pelo arquivo local.");
+        setBairrosLinesGeo(null);
         setLoadingBairros(false);
       }
     }
@@ -4114,6 +4388,28 @@ export default function MapPage() {
       active = false;
     };
   }, [accessToken, authLoading, canViewBairros]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !canViewBairros || !bairrosGeo || !bairrosLinesGeo) return;
+
+    const syncBairros = () => {
+      ensureSourcesAndLayers(map);
+      updateBairrosData(map, bairrosGeo);
+      updateBairrosLineData(map, bairrosLinesGeo);
+      applyBairrosVisibility(map, showBairros, selectedBairro);
+    };
+
+    if (map.isStyleLoaded()) {
+      syncBairros();
+      return;
+    }
+
+    map.once("load", syncBairros);
+    return () => {
+      map.off("load", syncBairros);
+    };
+  }, [bairrosGeo, bairrosLinesGeo, canViewBairros, showBairros, selectedBairro]);
 
   useEffect(() => {
     if (!canViewRisp) {
@@ -5064,9 +5360,26 @@ export default function MapPage() {
 
   const selectedBairroFeature = useMemo(() => {
     if (!selectedBairro || !bairrosGeo) return null;
-    return (bairrosGeo.features as BairrosFeature[]).find(
+    const matches = (bairrosGeo.features as BairrosFeature[]).filter(
       (f) => getBairroFeatureName(f.properties) === selectedBairro
-    ) || null;
+    );
+    if (!matches.length) return null;
+    if (matches.length === 1) return matches[0];
+
+    const geometries = matches
+      .map((feature) => feature.geometry)
+      .filter((geometry): geometry is Polygon | MultiPolygon => !!geometry);
+    const geometry = mergePolygonalGeometries(geometries);
+    if (!geometry) return null;
+
+    return {
+      ...matches[0],
+      geometry,
+      properties: {
+        ...matches[0].properties,
+        bairro_parts: matches.length,
+      },
+    };
   }, [bairrosGeo, selectedBairro]);
 
   const selectedBairroStats = useMemo(() => {
@@ -5283,24 +5596,26 @@ export default function MapPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!bairrosGeo) return;
+    if (!bairrosGeo || !bairrosLinesGeo) return;
 
     if (map.isStyleLoaded()) {
       ensureSourcesAndLayers(map);
       updateBairrosData(map, bairrosGeo);
+      updateBairrosLineData(map, bairrosLinesGeo);
       return;
     }
 
     const handleLoad = () => {
       ensureSourcesAndLayers(map);
       updateBairrosData(map, bairrosGeo);
+      updateBairrosLineData(map, bairrosLinesGeo);
     };
     map.once("load", handleLoad);
     return () => {
       map.off("load", handleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bairrosGeo]);
+  }, [bairrosGeo, bairrosLinesGeo]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5940,16 +6255,25 @@ export default function MapPage() {
     }
   }, [panel, activeAdminTab]);
 
-  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1120 : 560;
+  const panelWidth =
+    panel === "admin"
+      ? activeAdminTab === "usage"
+        ? 1240
+        : 860
+      : panel === "civitas"
+        ? 1120
+        : 560;
   const panelSideInset = 16;
   const panelShiftRight = panel === "civitas" ? 190 : 0;
   const panelMaxHeight =
     panel === "admin"
-      ? activeAdminTab === "organizations"
-        ? "84vh"
-        : activeAdminTab === "users" && adminUsersOrgOpen
-        ? "84vh"
-        : "74vh"
+      ? activeAdminTab === "usage"
+        ? "82vh"
+        : activeAdminTab === "organizations"
+          ? "84vh"
+          : activeAdminTab === "users" && adminUsersOrgOpen
+            ? "84vh"
+            : "74vh"
       : "56vh";
   const currentListOption =
     availableListModes.find(({ mode }) => mode === listMode) ||
@@ -7640,6 +7964,9 @@ export default function MapPage() {
                     onOrgDropdownOpenChange={setAdminUsersOrgOpen}
                   />
                 )}
+                {activeAdminTab === "usage" && (
+                  <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+                )}
                 {activeAdminTab === "organizations" && (
                   <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
                 )}
@@ -8577,6 +8904,9 @@ export default function MapPage() {
                     isMobile={isMobile}
                     onOrgDropdownOpenChange={setAdminUsersOrgOpen}
                   />
+                )}
+                {activeAdminTab === "usage" && (
+                  <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
                 )}
                 {activeAdminTab === "organizations" && (
                   <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />

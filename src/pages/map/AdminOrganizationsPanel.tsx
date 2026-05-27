@@ -78,6 +78,7 @@ const FALLBACK_ORGANIZATION_TYPES = [
 ];
 
 const FALLBACK_JURISDICTION_LEVELS = ["Federal", "Estadual", "Municipal", "Privada"];
+const BAIROS_FEATURE_FAMILY = "bairros";
 
 type OrganizationForm = {
   name: string;
@@ -94,6 +95,16 @@ const BAIRROS_FEATURE_CODES = [
 
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeLooseText(value: unknown) {
+  return clean(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[-\s]+/g, "_")
+    .replace(/__+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function sameFeatureCodes(a: string[], b: string[]) {
@@ -150,6 +161,13 @@ function getFeatureDisplayName(code: string, fallback = "") {
     .join(" ");
 }
 
+function isBairrosFeature(feature: Pick<FeatureCatalogItem, "code" | "name"> | string) {
+  const code = typeof feature === "string" ? feature : feature.code;
+  const name = typeof feature === "string" ? "" : feature.name;
+  const haystack = `${normalizeLooseText(code)} ${normalizeLooseText(name)}`;
+  return haystack.includes(BAIROS_FEATURE_FAMILY);
+}
+
 function normalizeCatalogValues(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return [...fallback];
 
@@ -192,6 +210,25 @@ function sortFeatureCodes(codes: string[], catalog: FeatureCatalogItem[]) {
     if (diff !== 0) return diff;
     return a.localeCompare(b, "pt-BR");
   });
+}
+
+function normalizeExclusiveFeatureCodes(codes: string[], catalog: FeatureCatalogItem[]) {
+  const next: string[] = [];
+  const seenFamilies = new Set<string>();
+
+  for (const code of sortFeatureCodes(codes, catalog)) {
+    const family = isBairrosFeature(
+      catalog.find((item) => item.code === code) || { code, name: getFeatureDisplayName(code) }
+    )
+      ? BAIROS_FEATURE_FAMILY
+      : "";
+
+    if (family && seenFamilies.has(family)) continue;
+    if (family) seenFamilies.add(family);
+    next.push(code);
+  }
+
+  return next;
 }
 
 function getInitialForm(): OrganizationForm {
@@ -303,7 +340,7 @@ export function AdminOrganizationsPanel({
       const exists = prev.feature_codes.includes(code);
       let nextCodes = exists
         ? prev.feature_codes.filter((item) => item !== code)
-        : [...prev.feature_codes, code];
+        : [...prev.feature_codes.filter((item) => !isBairrosFeature(item) || item === code), code];
 
       if (!exists && isBairrosFeatureCode(code)) {
         nextCodes = nextCodes.filter((item) => item === code || !isBairrosFeatureCode(item));
@@ -311,7 +348,7 @@ export function AdminOrganizationsPanel({
 
       return {
         ...prev,
-        feature_codes: sortFeatureCodes(nextCodes, catalogItems),
+        feature_codes: normalizeExclusiveFeatureCodes(nextCodes, catalogItems),
       };
     });
   }
@@ -334,7 +371,7 @@ export function AdminOrganizationsPanel({
       organization_type: clean(org.organization_type),
       acronym: clean(org.acronym),
       jurisdiction_level: clean(org.jurisdiction_level),
-      feature_codes: sortFeatureCodes(normalizeFeatureCodes(org.feature_codes), catalogItems),
+      feature_codes: normalizeExclusiveFeatureCodes(normalizeFeatureCodes(org.feature_codes), catalogItems),
     };
     setId(clean(org.id) || null);
     setForm(normalized);
@@ -481,7 +518,7 @@ export function AdminOrganizationsPanel({
       organization_type: clean(form.organization_type),
       acronym: clean(form.acronym),
       jurisdiction_level: clean(form.jurisdiction_level),
-      feature_codes: sortFeatureCodes(normalizeFeatureCodes(form.feature_codes), catalogItems),
+      feature_codes: normalizeExclusiveFeatureCodes(normalizeFeatureCodes(form.feature_codes), catalogItems),
     };
 
     if (!editingId) {
@@ -770,7 +807,7 @@ export function AdminOrganizationsPanel({
                 >
                   {categoryItems.map((feature) => {
                     const active = form.feature_codes.includes(feature.code);
-                    const icon = FEATURE_CARD_ICONS[feature.code];
+                    const icon = FEATURE_CARD_ICONS[feature.code] || (isBairrosFeature(feature) ? { kind: "lucide", Icon: Building2 } : undefined);
                     return (
                       <button
                         key={feature.code}

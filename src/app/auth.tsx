@@ -51,6 +51,16 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeLooseFeatureCode(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[-\s]+/g, "_")
+    .replace(/__+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function normalizeRoles(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value
@@ -282,7 +292,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (code: string) => {
       const normalized = normalizeFeatureCode(code);
       if (!normalized) return false;
-      return featureCodes.includes(normalized);
+      if (featureCodes.includes(normalized)) return true;
+      if (normalized === "bairros") {
+        return featureCodes.some((featureCode) => normalizeLooseFeatureCode(featureCode).includes("bairros"));
+      }
+      return false;
     },
     [featureCodes]
   );
