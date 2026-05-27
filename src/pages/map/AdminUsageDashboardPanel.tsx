@@ -365,7 +365,7 @@ export function AdminUsageDashboardPanel({
               Centro de inteligência operacional
             </div>
             <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.78)" }}>
-              Uma visão executiva do uso da plataforma com sessões, rankings, downloads e acessos a câmera em uma leitura que parece dashboard de produto premium.
+              Uma visão executiva do uso da plataforma com sessões, rankings, downloads e acessos a câmera.
             </div>
           </div>
 
