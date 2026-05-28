@@ -988,6 +988,8 @@ function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
       geometry: { type: "Point", coordinates: [c.lng, c.lat] },
       properties: {
         kind: "camera",
+        id: c.id ?? "",
+        camera_id: c.id ?? "",
         code: c.code,
         name: c.name,
         zona_camera: (c as any).zona_camera ?? (c as any).zone ?? "",
@@ -3229,6 +3231,15 @@ export default function MapPage() {
           );
         };
       });
+
+      popupEl.querySelectorAll<HTMLButtonElement>("[data-camera-stream]").forEach((btn) => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const duration = Number(btn.dataset.cameraDuration || 0);
+          void openCommonCameraStreamWindow(btn.dataset.cameraId || "", Number.isFinite(duration) ? duration : 0);
+        };
+      });
     }
 
     function centerMobilePopup(target?: mapboxgl.Popup | null) {
@@ -3290,6 +3301,7 @@ export default function MapPage() {
       if (kind === "camera") {
         return {
           kind,
+          cameraId: cleanString(p.camera_id || p.id),
           title: (p.name || "Câmera sem nome").toString(),
           meta: `Zona: ${(p.zona_camera || "-").toString()}`,
           streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
@@ -3414,8 +3426,10 @@ export default function MapPage() {
                     info.externalCameraId || ""
                   )}" data-smart-camera-duration="480" title="Abrir streaming completo">Abrir streaming</button>`
                 : ""
-              : hasStreamingAccessRef.current && info.streamingUrl
-              ? `<a class="cameraPopupStreamLink stackPopupStreamLink" href="${escapeHtml(info.streamingUrl)}" target="_blank" rel="noreferrer">Streaming</a>`
+              : hasStreamingAccessRef.current && info.streamingUrl && info.cameraId
+              ? `<button type="button" class="cameraPopupStreamLink stackPopupStreamLink" data-camera-stream data-camera-id="${escapeHtml(
+                  info.cameraId
+                )}" data-camera-duration="0">Streaming</button>`
               : "";
 
           return `
@@ -3462,6 +3476,13 @@ export default function MapPage() {
           </div>
         `)
         .addTo(map);
+
+      stack.forEach((feature) => {
+        const info = getPoiInfo(feature);
+        if (info?.kind === "camera" && info.cameraId) {
+          trackCommonCameraPopupView(info.cameraId);
+        }
+      });
 
       bindPopupCloseButton();
       bindSmartCameraPopupActions();
@@ -3713,7 +3734,8 @@ export default function MapPage() {
       const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
 
       hoverPreviewTimerRef.current = window.setTimeout(() => {
-      hoverPreviewPopup
+        trackCommonCameraPopupView(cleanString(p.camera_id || p.id));
+        hoverPreviewPopup
           ?.setLngLat(coords)
           .setOffset(isNearTop ? [0, offsetY] : 14)
           .setHTML(`
@@ -3928,14 +3950,18 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${allowStreaming && streamingUrl
-                ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+              ${allowStreaming && streamingUrl && cleanString(p.camera_id || p.id)
+                ? `<button type="button" class="cameraPopupStreamLink" data-camera-stream data-camera-id="${escapeHtml(
+                    cleanString(p.camera_id || p.id)
+                  )}" data-camera-duration="0">Abrir streaming</button>`
                 : ""}
             </div>
           </div>
         `)
         .addTo(map);
+      trackCommonCameraPopupView(cleanString(p.camera_id || p.id));
       bindPopupCloseButton();
+      bindSmartCameraPopupActions();
       if (allowStreaming && streamingUrl) centerMobilePopup();
     });
 
@@ -4715,6 +4741,45 @@ export default function MapPage() {
     };
   }
 
+  async function requestCommonCameraSession(cameraId: string, durationSeconds: number) {
+    const trimmedCameraId = cleanString(cameraId);
+    if (!trimmedCameraId) {
+      throw new Error("ID da câmera indisponível.");
+    }
+
+    const data = await fetchJson<any>(`${API_BASE}/cameras/${encodeURIComponent(trimmedCameraId)}/session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ durationSeconds }),
+    });
+
+    const sessionUrl = normalizeSessionUrl(data?.session_url);
+    if (!sessionUrl) {
+      throw new Error("O backend não retornou uma URL de sessão válida.");
+    }
+
+    return {
+      ...data,
+      sessionUrl,
+    };
+  }
+
+  async function requestCommonCameraView(cameraId: string) {
+    const trimmedCameraId = cleanString(cameraId);
+    if (!trimmedCameraId) return;
+
+    await fetchJson<any>(`${API_BASE}/cameras/${encodeURIComponent(trimmedCameraId)}/view`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+  }
+
   async function openSmartCameraStreamWindow(source: SmartCameraSessionSource, durationSeconds: number) {
     if (!hasSmartCameraStreamingAccessRef.current) {
       await Swal.fire({
@@ -4765,6 +4830,64 @@ export default function MapPage() {
         confirmButtonText: "Entendi",
       });
     }
+  }
+
+  async function openCommonCameraStreamWindow(cameraId: string, durationSeconds: number) {
+    if (!hasStreamingAccessRef.current) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: "Seu perfil não pode abrir streaming desta câmera.",
+        confirmButtonText: "Entendi",
+      });
+      return;
+    }
+
+    const trimmedCameraId = cleanString(cameraId);
+    if (!trimmedCameraId) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: "Esta câmera não possui um ID válido para streaming.",
+        confirmButtonText: "Entendi",
+      });
+      return;
+    }
+
+    const streamWindow = window.open("about:blank", "_blank");
+    if (streamWindow) {
+      try {
+        streamWindow.opener = null;
+      } catch {}
+    }
+
+    try {
+      const session = await requestCommonCameraSession(trimmedCameraId, durationSeconds);
+      if (streamWindow && !streamWindow.closed) {
+        streamWindow.location.href = session.sessionUrl;
+      } else {
+        window.location.href = session.sessionUrl;
+      }
+    } catch (error) {
+      if (streamWindow) {
+        streamWindow.close();
+      }
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: String((error as any)?.message || "Não foi possível abrir o streaming da câmera."),
+        confirmButtonText: "Entendi",
+      });
+    }
+  }
+
+  function trackCommonCameraPopupView(cameraId: string) {
+    const trimmedCameraId = cleanString(cameraId);
+    if (!trimmedCameraId) return;
+
+    void requestCommonCameraView(trimmedCameraId).catch((error) => {
+      console.warn("Falha ao registrar visualização da câmera.", error);
+    });
   }
 
   async function loadCamerasLpr() {
@@ -4928,6 +5051,7 @@ export default function MapPage() {
     setBairroReportMsg("Solicitando geração do relatório...");
     try {
       const payload = {
+        name: `Relatório Bairro ${selectedBairro} - ${new Date().toISOString()}`,
         bairro: selectedBairro,
         geometry: selectedBairroFeature.geometry,
         selected_ids: selectedBairroReportSelectionIds,
@@ -7513,16 +7637,18 @@ export default function MapPage() {
                                   [c.city, c.uf].filter(Boolean).join(" - ") ||
                                   "-"}
                               </span>
-                              {hasStreamingAccess && streamUrl && (
-                                <a
-                                  href={streamUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
+                              {hasStreamingAccess && streamUrl && c.id && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    void openCommonCameraStreamWindow(c.id || "", 0);
+                                  }}
                                   className="listStreamPill listStreamPill--camera"
                                 >
                                   Abrir streaming
-                                </a>
+                                </button>
                               )}
                             </div>
                           </div>
@@ -8392,16 +8518,18 @@ export default function MapPage() {
                                     [c.city, c.uf].filter(Boolean).join(" - ") ||
                                     "-"}
                                 </span>
-                                {hasStreamingAccess && streamUrl && (
-                                  <a
-                                    href={streamUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
+                                {hasStreamingAccess && streamUrl && c.id && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      void openCommonCameraStreamWindow(c.id || "", 0);
+                                    }}
                                     className="listStreamPill listStreamPill--camera"
                                   >
                                     Abrir streaming
-                                  </a>
+                                  </button>
                                 )}
                               </div>
                             </div>

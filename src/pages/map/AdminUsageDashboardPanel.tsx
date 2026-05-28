@@ -8,7 +8,10 @@ type UsageSummary = {
     events?: number;
     logins?: number;
     report_downloads?: number;
+    camera_views?: number;
     camera_sessions?: number;
+    camera_smart_sessions?: number;
+    camera_accesses?: number;
     distinct_users?: number;
     distinct_organizations?: number;
     sessions?: number;
@@ -28,7 +31,10 @@ type RankedItem = {
   organization_name?: string;
   logins?: number;
   report_downloads?: number;
+  camera_views?: number;
   camera_sessions?: number;
+  camera_smart_sessions?: number;
+  camera_accesses?: number;
   total_events?: number;
   count?: number;
   total?: number;
@@ -105,13 +111,84 @@ function getRankedItemTotal(item: RankedItem) {
   return Number(item.total_events ?? item.count ?? item.total ?? item.value ?? 0);
 }
 
+function getCameraAccessTotal(item: RankedItem) {
+  if (item.camera_accesses != null) return Number(item.camera_accesses);
+  const cameraViews = Number(item.camera_views ?? 0);
+  const cameraSessions = Number(item.camera_sessions ?? 0);
+  const smartSessions = Number(item.camera_smart_sessions ?? 0);
+  return cameraViews + cameraSessions + smartSessions;
+}
+
+function getSummaryCameraAccessTotal(summary: UsageSummary | null | undefined) {
+  const explicitTotal = Number(summary?.totals?.camera_accesses ?? NaN);
+  if (Number.isFinite(explicitTotal)) return explicitTotal;
+  return (
+    Number(summary?.totals?.camera_views ?? 0) +
+    Number(summary?.totals?.camera_sessions ?? 0) +
+    Number(summary?.totals?.camera_smart_sessions ?? 0)
+  );
+}
+
 function rankedItemBreakdown(item: RankedItem) {
   const parts = [
     `${niceNumber(item.logins ?? 0)} logins`,
     `${niceNumber(item.report_downloads ?? 0)} downloads`,
-    `${niceNumber(item.camera_sessions ?? 0)} câmeras`,
+    `${niceNumber(getCameraAccessTotal(item))} acessos câmera`,
   ];
   return parts.join(" • ");
+}
+
+function paginateItems<T>(items: T[], page: number, pageSize: number) {
+  const safePage = Math.max(1, page);
+  const start = (safePage - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}
+
+const USERS_PAGE_SIZE = 3;
+const ORGANIZATIONS_PAGE_SIZE = 3;
+const REPORT_DOWNLOADS_PAGE_SIZE = 5;
+
+function PaginationControls({
+  page,
+  totalPages,
+  onPrev,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div
+      className="pageControls"
+      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}
+    >
+      <button
+        type="button"
+        className="btnGhost"
+        onClick={onPrev}
+        disabled={page <= 1}
+        style={{ opacity: page <= 1 ? 0.5 : 1 }}
+      >
+        Anterior
+      </button>
+      <div style={{ fontSize: 12, opacity: 0.75 }}>
+        Página {page} de {totalPages}
+      </div>
+      <button
+        type="button"
+        className="btnGhost"
+        onClick={onNext}
+        disabled={page >= totalPages}
+        style={{ opacity: page >= totalPages ? 0.5 : 1 }}
+      >
+        Próxima
+      </button>
+    </div>
+  );
 }
 
 function MetricCard({
@@ -184,6 +261,9 @@ export function AdminUsageDashboardPanel({
   const [reportDownloads, setReportDownloads] = useState<ReportDownloadItem[]>([]);
   const [reportSearch, setReportSearch] = useState("");
   const [downloadingReportKey, setDownloadingReportKey] = useState<string | null>(null);
+  const [usersPage, setUsersPage] = useState(1);
+  const [organizationsPage, setOrganizationsPage] = useState(1);
+  const [downloadsPage, setDownloadsPage] = useState(1);
 
   const summaryUrl = useMemo(() => `${apiBase}/admin/dashboard/usage/summary`, [apiBase]);
   const topUsersUrl = useMemo(() => `${apiBase}/admin/dashboard/usage/top-users`, [apiBase]);
@@ -231,6 +311,8 @@ export function AdminUsageDashboardPanel({
         item.report?.name,
         item.report?.report_type,
         item.event_id,
+        item.selection_hash,
+        item.file_hash,
       ]
         .map((value) => String(value || "").toLowerCase())
         .join(" ");
@@ -269,10 +351,36 @@ export function AdminUsageDashboardPanel({
     );
   }, [topOrganizations, organizationSearch]);
 
-  const featuredUsers = filteredUsers.slice(0, 3);
-  const featuredOrganizations = filteredOrganizations.slice(0, 3);
-  const remainingUsers = filteredUsers.slice(3);
-  const remainingOrganizations = filteredOrganizations.slice(3);
+  const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PAGE_SIZE));
+  const organizationsTotalPages = Math.max(1, Math.ceil(filteredOrganizations.length / ORGANIZATIONS_PAGE_SIZE));
+  const downloadsTotalPages = Math.max(1, Math.ceil(filteredReportDownloads.length / REPORT_DOWNLOADS_PAGE_SIZE));
+  const paginatedUsers = paginateItems(filteredUsers, Math.min(usersPage, usersTotalPages), USERS_PAGE_SIZE);
+  const paginatedOrganizations = paginateItems(filteredOrganizations, Math.min(organizationsPage, organizationsTotalPages), ORGANIZATIONS_PAGE_SIZE);
+  const paginatedReportDownloads = paginateItems(filteredReportDownloads, Math.min(downloadsPage, downloadsTotalPages), REPORT_DOWNLOADS_PAGE_SIZE);
+
+  useEffect(() => {
+    setUsersPage(1);
+  }, [userSearch, topUsers, from, to]);
+
+  useEffect(() => {
+    setOrganizationsPage(1);
+  }, [organizationSearch, topOrganizations, from, to]);
+
+  useEffect(() => {
+    setDownloadsPage(1);
+  }, [reportSearch, reportDownloads, from, to]);
+
+  useEffect(() => {
+    if (usersPage > usersTotalPages) setUsersPage(usersTotalPages);
+  }, [usersPage, usersTotalPages]);
+
+  useEffect(() => {
+    if (organizationsPage > organizationsTotalPages) setOrganizationsPage(organizationsTotalPages);
+  }, [organizationsPage, organizationsTotalPages]);
+
+  useEffect(() => {
+    if (downloadsPage > downloadsTotalPages) setDownloadsPage(downloadsTotalPages);
+  }, [downloadsPage, downloadsTotalPages]);
 
   function reportDownloadKey(item: ReportDownloadItem, index: number) {
     return item.event_id || item.report?.id || item.file_hash || `download-${index}`;
@@ -335,7 +443,7 @@ export function AdminUsageDashboardPanel({
     { label: "Atividades", value: niceNumber(getSummaryTotal(summary, "events")), hint: "Trilha normalizada do uso" },
     { label: "Sessões", value: niceNumber(getSummaryTotal(summary, "sessions")), hint: "Logins efetivos no período", tone: "aqua" as const },
     { label: "Downloads", value: niceNumber(getSummaryTotal(summary, "report_downloads")), hint: "Relatórios exportados", tone: "gold" as const },
-    { label: "Acessos câmera", value: niceNumber(getSummaryTotal(summary, "camera_sessions")), hint: "Uso de câmera inteligente", tone: "violet" as const },
+    { label: "Acessos câmera", value: niceNumber(getSummaryCameraAccessTotal(summary)), hint: "Câmeras e Super Câmeras Inteligentes", tone: "violet" as const },
     { label: "Usuários ativos", value: niceNumber(getSummaryTotal(summary, "distinct_users")), hint: "Pessoas distintas no recorte" },
     { label: "Organizações", value: niceNumber(getSummaryTotal(summary, "distinct_organizations")), hint: "Entes com atividade no período" },
   ];
@@ -394,7 +502,7 @@ export function AdminUsageDashboardPanel({
                 <button
                   onClick={load}
                   disabled={loading}
-                  style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 999, border: "0", background: "linear-gradient(90deg, #56ccf2, #2f80ed)", color: "#fff", fontWeight: 900, cursor: "pointer" }}
+                  style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 999, border: "0", background: "#2596be", color: "#fff", fontWeight: 900, cursor: "pointer" }}
                 >
                   {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                   Atualizar
@@ -413,9 +521,26 @@ export function AdminUsageDashboardPanel({
         ))}
       </div>
 
+      <div
+        style={{
+          padding: "12px 14px",
+          borderRadius: 18,
+          border: "1px solid rgba(10,40,75,0.08)",
+          background: "linear-gradient(180deg, rgba(248,250,252,0.98), rgba(241,245,249,0.92))",
+          color: "#0f172a",
+        }}
+      >
+        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>
+          LEITURA DOS DADOS
+        </div>
+        <div style={{ marginTop: 6, fontSize: 13, color: "rgba(15,23,42,0.74)" }}>
+          Usuários e Organizações mostram um ranking geral de atividade e não acompanham o período selecionado acima. O filtro de data afeta os cards-resumo e os downloads de relatórios.
+        </div>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
         <div style={{ display: "grid", gridTemplateRows: "auto auto auto", padding: 16, borderRadius: 24, background: "rgba(255,255,255,0.92)", border: "1px solid rgba(10,40,75,0.08)" }}>
-          <SectionTitle title="Usuários" subtitle="Top 3 em destaque com lista completa e filtro" />
+          <SectionTitle title="Usuários" subtitle="Ranking geral independente do período" />
           <div style={{ position: "relative", marginBottom: 12 }}>
             <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(15,23,42,0.45)" }} />
             <input
@@ -425,34 +550,17 @@ export function AdminUsageDashboardPanel({
               style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 34px", borderRadius: 14, border: "1px solid rgba(10,40,75,0.12)", background: "rgba(255,255,255,0.96)", color: "#0f172a" }}
             />
           </div>
-          <div style={{ display: "grid", gap: 8, maxHeight: 206, overflow: "auto", paddingRight: 4 }}>
-            {featuredUsers.map((item, index) => (
-              <div key={`featured-user-${item.id || item.user_id || index}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 18, background: "rgba(248,250,252,0.98)", color: "#0f172a", border: "1px solid rgba(15,23,42,0.06)" }}>
-                <div style={{ width: 34, height: 34, borderRadius: 999, display: "grid", placeItems: "center", fontWeight: 900, background: "#0a284b", color: "#fff" }}>
-                  {index + 1}
-                </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 900, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {item.full_name || item.name || item.email || "Usuário"}
-                  </div>
-                  <div style={{ fontSize: 12, color: "rgba(15,23,42,0.64)" }}>{rankedItemBreakdown(item)}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 950, color: "#0a284b" }}>{niceNumber(getRankedItemTotal(item))}</div>
-                  <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, color: "rgba(15,23,42,0.50)" }}>atividades</div>
-                </div>
-              </div>
-            ))}
-            {remainingUsers.map((item, index) => (
-              <div key={item.id || item.user_id || index} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 16, background: "rgba(248,250,252,0.95)", border: "1px solid rgba(15,23,42,0.06)" }}>
-                <div style={{ width: 30, height: 30, borderRadius: 999, display: "grid", placeItems: "center", fontWeight: 900, background: "rgba(10,40,75,0.08)", color: "#0a284b" }}>
-                  {index + 4}
+          <div style={{ display: "grid", gap: 8, minHeight: 206, paddingRight: 4 }}>
+            {paginatedUsers.map((item, index) => (
+              <div key={item.id || item.user_id || index} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 18, background: "rgba(248,250,252,0.98)", border: "1px solid rgba(15,23,42,0.06)" }}>
+                <div style={{ width: 34, height: 34, borderRadius: 999, display: "grid", placeItems: "center", fontWeight: 900, background: ((Math.min(usersPage, usersTotalPages) - 1) * USERS_PAGE_SIZE + index + 1) <= 3 ? "#0a284b" : "rgba(10,40,75,0.08)", color: ((Math.min(usersPage, usersTotalPages) - 1) * USERS_PAGE_SIZE + index + 1) <= 3 ? "#fff" : "#0a284b" }}>
+                  {(Math.min(usersPage, usersTotalPages) - 1) * USERS_PAGE_SIZE + index + 1}
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: 900, fontSize: 13, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {item.full_name || item.name || item.email || "Usuário"}
                   </div>
-                  <div style={{ fontSize: 12, color: "rgba(15,23,42,0.64)" }}>{item.email || item.organization_name || "sem detalhe"}</div>
+                  <div style={{ fontSize: 12, color: "rgba(15,23,42,0.64)" }}>{rankedItemBreakdown(item)}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontWeight: 950, color: "#0a284b" }}>{niceNumber(getRankedItemTotal(item))}</div>
@@ -462,10 +570,16 @@ export function AdminUsageDashboardPanel({
             ))}
             {!filteredUsers.length && !loading && <div style={{ fontSize: 13, color: "rgba(15,23,42,0.60)" }}>Nenhum usuário encontrado.</div>}
           </div>
+          <PaginationControls
+            page={Math.min(usersPage, usersTotalPages)}
+            totalPages={usersTotalPages}
+            onPrev={() => setUsersPage((page) => Math.max(1, page - 1))}
+            onNext={() => setUsersPage((page) => Math.min(usersTotalPages, page + 1))}
+          />
         </div>
 
         <div style={{ display: "grid", gridTemplateRows: "auto auto auto", padding: 16, borderRadius: 24, background: "rgba(255,255,255,0.92)", border: "1px solid rgba(10,40,75,0.08)" }}>
-          <SectionTitle title="Organizações" subtitle="Top 3 em destaque com lista completa e filtro" />
+          <SectionTitle title="Organizações" subtitle="Ranking geral independente do período" />
           <div style={{ position: "relative", marginBottom: 12 }}>
             <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(15,23,42,0.45)" }} />
             <input
@@ -475,28 +589,11 @@ export function AdminUsageDashboardPanel({
               style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 34px", borderRadius: 14, border: "1px solid rgba(10,40,75,0.12)", background: "rgba(255,255,255,0.96)", color: "#0f172a" }}
             />
           </div>
-          <div style={{ display: "grid", gap: 8, maxHeight: 206, overflow: "auto", paddingRight: 4 }}>
-            {featuredOrganizations.map((item, index) => (
-              <div key={`featured-org-${item.id || item.organization_id || index}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 18, background: "rgba(248,250,252,0.98)", color: "#0f172a", border: "1px solid rgba(15,23,42,0.06)" }}>
-                <div style={{ width: 34, height: 34, borderRadius: 999, display: "grid", placeItems: "center", fontWeight: 900, background: "#0a284b", color: "#fff" }}>
-                  {index + 1}
-                </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 900, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {item.organization_name || item.name || "Organização"}
-                  </div>
-                  <div style={{ fontSize: 12, color: "rgba(15,23,42,0.64)" }}>{rankedItemBreakdown(item)}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 950, color: "#0a284b" }}>{niceNumber(getRankedItemTotal(item))}</div>
-                  <div style={{ marginTop: 2, fontSize: 10, fontWeight: 800, color: "rgba(15,23,42,0.50)" }}>atividades</div>
-                </div>
-              </div>
-            ))}
-            {remainingOrganizations.map((item, index) => (
-              <div key={item.id || item.organization_id || index} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 16, background: "rgba(248,250,252,0.95)", border: "1px solid rgba(15,23,42,0.06)" }}>
-                <div style={{ width: 30, height: 30, borderRadius: 999, display: "grid", placeItems: "center", fontWeight: 900, background: "rgba(10,40,75,0.08)", color: "#0a284b" }}>
-                  {index + 4}
+          <div style={{ display: "grid", gap: 8, minHeight: 206, paddingRight: 4 }}>
+            {paginatedOrganizations.map((item, index) => (
+              <div key={item.id || item.organization_id || index} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 18, background: "rgba(248,250,252,0.98)", border: "1px solid rgba(15,23,42,0.06)" }}>
+                <div style={{ width: 34, height: 34, borderRadius: 999, display: "grid", placeItems: "center", fontWeight: 900, background: ((Math.min(organizationsPage, organizationsTotalPages) - 1) * ORGANIZATIONS_PAGE_SIZE + index + 1) <= 3 ? "#0a284b" : "rgba(10,40,75,0.08)", color: ((Math.min(organizationsPage, organizationsTotalPages) - 1) * ORGANIZATIONS_PAGE_SIZE + index + 1) <= 3 ? "#fff" : "#0a284b" }}>
+                  {(Math.min(organizationsPage, organizationsTotalPages) - 1) * ORGANIZATIONS_PAGE_SIZE + index + 1}
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: 900, fontSize: 13, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -512,6 +609,12 @@ export function AdminUsageDashboardPanel({
             ))}
             {!filteredOrganizations.length && !loading && <div style={{ fontSize: 13, color: "rgba(15,23,42,0.60)" }}>Nenhuma organização encontrada.</div>}
           </div>
+          <PaginationControls
+            page={Math.min(organizationsPage, organizationsTotalPages)}
+            totalPages={organizationsTotalPages}
+            onPrev={() => setOrganizationsPage((page) => Math.max(1, page - 1))}
+            onNext={() => setOrganizationsPage((page) => Math.min(organizationsTotalPages, page + 1))}
+          />
         </div>
       </div>
 
@@ -542,8 +645,8 @@ export function AdminUsageDashboardPanel({
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: 8, maxHeight: 420, overflow: "auto" }}>
-          {filteredReportDownloads.map((item, index) => {
+        <div style={{ display: "grid", gap: 8, minHeight: 420 }}>
+          {paginatedReportDownloads.map((item, index) => {
             const key = reportDownloadKey(item, index);
             const isDownloading = downloadingReportKey === key;
 
@@ -600,7 +703,7 @@ export function AdminUsageDashboardPanel({
                     padding: "10px 14px",
                     borderRadius: 14,
                     border: "0",
-                    background: "linear-gradient(90deg, #0a284b, #2f80ed)",
+                    background: "#0a284b",
                     color: "#fff",
                     fontWeight: 900,
                     cursor: "pointer",
@@ -619,6 +722,12 @@ export function AdminUsageDashboardPanel({
             <div style={{ fontSize: 13, color: "rgba(15,23,42,0.60)" }}>Nenhum download encontrado com esse filtro.</div>
           )}
         </div>
+        <PaginationControls
+          page={Math.min(downloadsPage, downloadsTotalPages)}
+          totalPages={downloadsTotalPages}
+          onPrev={() => setDownloadsPage((page) => Math.max(1, page - 1))}
+          onNext={() => setDownloadsPage((page) => Math.min(downloadsTotalPages, page + 1))}
+        />
       </div>
 
     </div>
