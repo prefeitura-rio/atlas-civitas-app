@@ -521,23 +521,6 @@ export function AdminUsageDashboardPanel({
         ))}
       </div>
 
-      <div
-        style={{
-          padding: "12px 14px",
-          borderRadius: 18,
-          border: "1px solid rgba(10,40,75,0.08)",
-          background: "linear-gradient(180deg, rgba(248,250,252,0.98), rgba(241,245,249,0.92))",
-          color: "#0f172a",
-        }}
-      >
-        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>
-          LEITURA DOS DADOS
-        </div>
-        <div style={{ marginTop: 6, fontSize: 13, color: "rgba(15,23,42,0.74)" }}>
-          Usuários e Organizações mostram um ranking geral de atividade e não acompanham o período selecionado acima. O filtro de data afeta os cards-resumo e os downloads de relatórios.
-        </div>
-      </div>
-
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
         <div style={{ display: "grid", gridTemplateRows: "auto auto auto", padding: 16, borderRadius: 24, background: "rgba(255,255,255,0.92)", border: "1px solid rgba(10,40,75,0.08)" }}>
           <SectionTitle title="Usuários" subtitle="Ranking geral independente do período" />
