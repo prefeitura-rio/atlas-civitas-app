@@ -443,7 +443,7 @@ export function AdminUsageDashboardPanel({
     { label: "Atividades", value: niceNumber(getSummaryTotal(summary, "events")), hint: "Trilha normalizada do uso" },
     { label: "Sessões", value: niceNumber(getSummaryTotal(summary, "sessions")), hint: "Logins efetivos no período", tone: "aqua" as const },
     { label: "Downloads", value: niceNumber(getSummaryTotal(summary, "report_downloads")), hint: "Relatórios exportados", tone: "gold" as const },
-    { label: "Acessos câmera", value: niceNumber(getSummaryCameraAccessTotal(summary)), hint: "Câmeras e Super Câmeras Inteligentes", tone: "violet" as const },
+    { label: "Streaming", value: niceNumber(getSummaryCameraAccessTotal(summary)), hint: "Câmeras e Super Câmeras Inteligentes", tone: "violet" as const },
     { label: "Usuários ativos", value: niceNumber(getSummaryTotal(summary, "distinct_users")), hint: "Pessoas distintas no recorte" },
     { label: "Organizações", value: niceNumber(getSummaryTotal(summary, "distinct_organizations")), hint: "Entes com atividade no período" },
   ];
@@ -523,7 +523,7 @@ export function AdminUsageDashboardPanel({
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
         <div style={{ display: "grid", gridTemplateRows: "auto auto auto", padding: 16, borderRadius: 24, background: "rgba(255,255,255,0.92)", border: "1px solid rgba(10,40,75,0.08)" }}>
-          <SectionTitle title="Usuários" subtitle="Ranking geral independente do período" />
+          <SectionTitle title="Usuários" subtitle="Ranking de top usuários" />
           <div style={{ position: "relative", marginBottom: 12 }}>
             <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(15,23,42,0.45)" }} />
             <input
@@ -562,7 +562,7 @@ export function AdminUsageDashboardPanel({
         </div>
 
         <div style={{ display: "grid", gridTemplateRows: "auto auto auto", padding: 16, borderRadius: 24, background: "rgba(255,255,255,0.92)", border: "1px solid rgba(10,40,75,0.08)" }}>
-          <SectionTitle title="Organizações" subtitle="Ranking geral independente do período" />
+          <SectionTitle title="Organizações" subtitle="Ranking de top organizações" />
           <div style={{ position: "relative", marginBottom: 12 }}>
             <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(15,23,42,0.45)" }} />
             <input
