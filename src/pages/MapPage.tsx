@@ -1486,6 +1486,15 @@ export default function MapPage() {
   const me = auth.user;
   const hasFeature = auth.hasFeature;
   const hasAnyFeature = (...codes: string[]) => codes.some((code) => hasFeature(code));
+  const hasAnyFeatureAlias = (...codes: string[]) =>
+    codes.some((code) => hasFeature(code) || hasFeature(`${code}_com_extracao_dados`) || hasFeature(`${code}_sem_extracao_dados`));
+  const canExtractRispData = hasFeature("risp_com_extracao_dados") || hasFeature("risp");
+  const canExtractAispData = hasFeature("aisp_com_extracao_dados") || hasFeature("aisp");
+  const canExtractCispData = hasFeature("cisp_com_extracao_dados") || hasFeature("cisp");
+  const canExtractSecurityAreaData = (kind: SecurityAreaKind) =>
+    (kind === "risp" && canExtractRispData) ||
+    (kind === "aisp" && canExtractAispData) ||
+    (kind === "cisp" && canExtractCispData);
 
   const canViewCameras = hasFeature("cameras");
   const canViewCamerasIntel = hasFeature("cameras_inteligentes");
@@ -1493,9 +1502,9 @@ export default function MapPage() {
   const canViewRadares = hasFeature("radares");
   const canViewBairros = hasAnyFeature("bairros_com_extracao_dados", "bairros_sem_extracao_dados");
   const canExtractBairroData = hasFeature("bairros_com_extracao_dados");
-  const canViewRisp = hasFeature("risp");
-  const canViewAisp = hasFeature("aisp");
-  const canViewCisp = hasFeature("cisp");
+  const canViewRisp = hasAnyFeatureAlias("risp");
+  const canViewAisp = hasAnyFeatureAlias("aisp");
+  const canViewCisp = hasAnyFeatureAlias("cisp");
   const canUseGps = hasFeature("gps");
   const canUseAreaDraw = hasFeature("desenhar_area");
   const authorizedReportLayers = useMemo(
@@ -1609,7 +1618,6 @@ export default function MapPage() {
   );
   const hasAuthorizedReportLayers = authorizedReportLayers.length > 0;
   const canRequestBairroReport = canExtractBairroData && activeReportLayers.length > 0;
-  const canRequestAreaReport = canUseAreaDraw && activeReportLayers.length > 0;
 
   const [loadingBairros, setLoadingBairros] = useState(false);
   const [bairrosGeo, setBairrosGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
@@ -1641,6 +1649,11 @@ export default function MapPage() {
   const [areaDrawPolygons, setAreaDrawPolygons] = useState<AreaDrawPolygonPoints[]>([]);
   const [areaReportLoading, setAreaReportLoading] = useState(false);
   const [areaReportMsg, setAreaReportMsg] = useState<string | null>(null);
+  const canRequestAreaReport =
+    canUseAreaDraw &&
+    activeReportLayers.length > 0 &&
+    selectedSecurityArea !== null &&
+    canExtractSecurityAreaData(selectedSecurityArea.kind);
 
   function clearSelectedSecurityArea() {
     setSelectedSecurityArea(null);
@@ -1652,7 +1665,7 @@ export default function MapPage() {
   function selectSecurityArea(area: { kind: SecurityAreaKind; code: string }) {
     setSelectedSecurityArea(area);
     setSelectedSecurityStatsState({ key: "", stats: null });
-    setSelectedSecuritySummaryLoading(area.kind === "risp");
+    setSelectedSecuritySummaryLoading(canExtractSecurityAreaData(area.kind));
     setSecurityAreaReportMsg(null);
     setSelectedBairro("");
     setBairroReportMsg(null);
@@ -5568,6 +5581,12 @@ export default function MapPage() {
   const selectedSecurityFeature = useMemo(() => {
     if (!selectedSecurityArea) return null;
 
+    const canExtractSelectedSecurityArea =
+      (selectedSecurityArea.kind === "risp" && canExtractRispData) ||
+      (selectedSecurityArea.kind === "aisp" && canExtractAispData) ||
+      (selectedSecurityArea.kind === "cisp" && canExtractCispData);
+    if (!canExtractSelectedSecurityArea) return null;
+
     const collection =
       selectedSecurityArea.kind === "risp"
         ? rispGeo
@@ -5582,7 +5601,7 @@ export default function MapPage() {
     );
 
     return mergeSecurityAreaFeatures(matches);
-  }, [selectedSecurityArea, rispGeo, aispGeo, cispGeo]);
+  }, [selectedSecurityArea, rispGeo, aispGeo, cispGeo, canExtractRispData, canExtractAispData, canExtractCispData]);
 
   const selectedSecurityStatsKey = selectedSecurityArea
     ? `${selectedSecurityArea.kind}:${selectedSecurityArea.code}`
@@ -5604,28 +5623,7 @@ export default function MapPage() {
       setSelectedSecuritySummaryLoading(false);
     };
 
-    if (selectedSecurityArea.kind === "risp") {
-      setSelectedSecurityStatsState({ key, stats: null });
-      setSelectedSecuritySummaryLoading(true);
-
-      const timer = window.setTimeout(() => {
-        finish(
-          buildGeometryStats(
-            selectedSecurityFeature.geometry,
-            cameras,
-            camerasIntel,
-            camerasLpr,
-            radares
-          )
-        );
-      }, 0);
-
-      return () => {
-        cancelled = true;
-        window.clearTimeout(timer);
-      };
-    }
-
+    setSelectedSecuritySummaryLoading(false);
     finish(
       buildGeometryStats(
         selectedSecurityFeature.geometry,
