@@ -1649,11 +1649,7 @@ export default function MapPage() {
   const [areaDrawPolygons, setAreaDrawPolygons] = useState<AreaDrawPolygonPoints[]>([]);
   const [areaReportLoading, setAreaReportLoading] = useState(false);
   const [areaReportMsg, setAreaReportMsg] = useState<string | null>(null);
-  const canRequestAreaReport =
-    canUseAreaDraw &&
-    activeReportLayers.length > 0 &&
-    selectedSecurityArea !== null &&
-    canExtractSecurityAreaData(selectedSecurityArea.kind);
+  const canRequestAreaReport = canUseAreaDraw && activeReportLayers.length > 0;
 
   function clearSelectedSecurityArea() {
     setSelectedSecurityArea(null);
@@ -2572,7 +2568,7 @@ export default function MapPage() {
         source: SOURCES.bairros,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
-          "fill-color": "#22c55e",
+          "fill-color": "#ef4444",
           "fill-opacity": 0.04,
         },
       });
@@ -2585,7 +2581,7 @@ export default function MapPage() {
         source: SOURCES.bairros_lines,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
-          "line-color": "#22c55e",
+          "line-color": "#dc2626",
           "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2.4, 11, 3.8, 14, 5.2],
           "line-opacity": 1,
           "line-blur": 0.25,
@@ -2656,7 +2652,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "fill-color": "#22c55e",
+          "fill-color": "#ef4444",
           "fill-opacity": 0.16,
         },
       });
@@ -2670,7 +2666,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "line-color": "#14532d",
+          "line-color": "#b91c1c",
           "line-width": 3.5,
           "line-opacity": 1,
         },
@@ -2735,7 +2731,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "fill-color": "#3b82f6",
+          "fill-color": "#ef4444",
           "fill-opacity": 0.16,
         },
       });
@@ -2749,7 +2745,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "line-color": "#1d4ed8",
+          "line-color": "#b91c1c",
           "line-width": 3.5,
           "line-opacity": 1,
         },
@@ -2778,7 +2774,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "fill-color": "#f59e0b",
+          "fill-color": "#ef4444",
           "fill-opacity": 0.16,
         },
       });
@@ -2792,7 +2788,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "line-color": "#b45309",
+          "line-color": "#b91c1c",
           "line-width": 3.5,
           "line-opacity": 1,
         },

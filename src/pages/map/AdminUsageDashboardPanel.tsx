@@ -467,7 +467,7 @@ export function AdminUsageDashboardPanel({
           <div style={{ maxWidth: 760 }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 11px", borderRadius: 999, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.14)", fontSize: 12, fontWeight: 800 }}>
               <ShieldCheck size={14} />
-              Analíticos de uso
+              Métricas de uso
             </div>
             <div style={{ marginTop: 14, fontSize: isMobile ? 28 : 40, lineHeight: 1.02, fontWeight: 950, letterSpacing: "-0.04em" }}>
               Centro de inteligência operacional
@@ -671,7 +671,17 @@ export function AdminUsageDashboardPanel({
 
                 <div style={{ minWidth: 0, fontSize: 12, color: "rgba(15,23,42,0.68)" }}>
                   <div>Dia do download {item.downloaded_at ? new Date(item.downloaded_at).toLocaleDateString("pt-BR") : "-"}</div>
-                  <div style={{ marginTop: 4 }}>Rastreio: {item.selection_hash || "-"}</div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      maxWidth: "100%",
+                      overflowWrap: "anywhere",
+                      wordBreak: "break-word",
+                      whiteSpace: "normal",
+                    }}
+                  >
+                    Rastreio: {item.selection_hash || "-"}
+                  </div>
                 </div>
 
                 <button

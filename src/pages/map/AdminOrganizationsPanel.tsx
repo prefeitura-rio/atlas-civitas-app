@@ -97,7 +97,6 @@ const BAIROS_FEATURE_FAMILY = "bairros";
 const RISP_FEATURE_FAMILY = "risp";
 const AISP_FEATURE_FAMILY = "aisp";
 const CISP_FEATURE_FAMILY = "cisp";
-const CAMERAS_FEATURE_CODES = ["cameras", "cameras_inteligentes", "cameras_lpr"] as const;
 const LAYERS_FEATURE_CODES = ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"] as const;
 const EXTRACTION_WITH_CODES = [
   "bairros_com_extracao_dados",
@@ -131,16 +130,6 @@ const CISP_FEATURE_CODES = ["cisp_com_extracao_dados", "cisp_sem_extracao_dados"
 
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeLooseText(value: unknown) {
-  return clean(value)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[-\s]+/g, "_")
-    .replace(/__+/g, "_")
-    .replace(/^_+|_+$/g, "");
 }
 
 function sameFeatureCodes(a: string[], b: string[]) {
@@ -207,13 +196,6 @@ function getFeatureDisplayName(code: string, fallback = "") {
       return part.charAt(0).toUpperCase() + part.slice(1);
     })
     .join(" ");
-}
-
-function isBairrosFeature(feature: Pick<FeatureCatalogItem, "code" | "name"> | string) {
-  const code = typeof feature === "string" ? feature : feature.code;
-  const name = typeof feature === "string" ? "" : feature.name;
-  const haystack = `${normalizeLooseText(code)} ${normalizeLooseText(name)}`;
-  return haystack.includes(BAIROS_FEATURE_FAMILY);
 }
 
 function normalizeCatalogValues(value: unknown, fallback: string[]) {
@@ -821,82 +803,200 @@ export function AdminOrganizationsPanel({
             )}
 
             {[
-              { title: "Camadas", items: layersItems, columns: "repeat(3, minmax(0, 1fr))" },
-              { title: "Sem extração de dados", items: extractionWithoutItems, columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" },
-              { title: "Com extração de dados", items: extractionWithItems, columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" },
-              { title: "Ferramentas", items: toolsItems, columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" },
-            ].map((section) => (
+              {
+                key: "layers",
+                columns: "1fr",
+                sections: [{ title: "Camadas", items: layersItems, columns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))" }],
+              },
+                {
+                  key: "extraction",
+                  columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                  sections: [
+                  { title: "Sem extração de dados", items: extractionWithoutItems, columns: "1fr" },
+                  { title: "Com extração de dados", items: extractionWithItems, columns: "1fr", tone: "danger" },
+                  ],
+                },
+              {
+                key: "tools",
+                columns: "1fr",
+                sections: [{ title: "Ferramentas", items: toolsItems, columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" }],
+              },
+            ].map((group) => (
               <div
-                key={section.title}
+                key={group.key}
                 style={{
-                  padding: 8,
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.08)",
-                  background: "rgba(248,250,252,0.86)",
                   display: "grid",
                   gap: 10,
+                  gridTemplateColumns: group.columns,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                  <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.78)" }}>{section.title}</div>
-                  <div style={{ fontSize: 11, opacity: 0.72 }}>
-                    {catalogLoading ? "Carregando catálogo..." : `${section.items.filter((item) => form.feature_codes.includes(item.code)).length} selecionada(s)`}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    gridTemplateColumns: section.columns,
-                  }}
-                >
-                  {section.items.map((feature) => {
-                    const active = form.feature_codes.includes(feature.code);
-                    const icon = FEATURE_CARD_ICONS[feature.code] || (isBairrosFeature(feature) ? { kind: "lucide", Icon: Building2 } : undefined);
-                    return (
-                      <button
-                        key={feature.code}
-                        type="button"
-                        onClick={() => toggleFeature(feature.code)}
+                {group.sections.map((section) => (
+                  <div
+                    key={section.title}
+                    style={{
+                      padding: 8,
+                      borderRadius: 14,
+                      border:
+                        section.title === "Ferramentas"
+                          ? "1px solid rgba(0,0,0,0.08)"
+                          : group.key === "extraction"
+                            ? "1px solid rgba(0,0,0,0.08)"
+                            : "1px solid rgba(0,0,0,0.08)",
+                      background:
+                        group.key === "extraction"
+                          ? section.tone === "danger"
+                            ? "linear-gradient(180deg, rgba(254,242,242,0.96) 0%, rgba(255,241,241,0.88) 100%)"
+                            : "rgba(248,250,252,0.86)"
+                          : "rgba(248,250,252,0.86)",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div
                         style={{
-                          textAlign: "left",
-                          padding: isMobile ? "11px 13px" : "11px 12px",
-                          borderRadius: 10,
-                          border: active ? "1px solid rgba(37,99,235,0.32)" : "1px solid rgba(0,0,0,0.10)",
-                          background: active ? "rgba(219,234,254,0.82)" : "rgba(255,255,255,0.92)",
-                          color: "rgba(15,23,42,0.88)",
-                          cursor: "pointer",
-                          display: "grid",
-                          gap: 0,
+                          fontSize: 12,
+                          fontWeight: 900,
+                          color:
+                            group.key === "extraction"
+                              ? section.tone === "danger"
+                                ? "#991b1b"
+                                : "rgba(0,0,0,0.78)"
+                              : "rgba(0,0,0,0.78)",
                         }}
                       >
-                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span
-                            style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 999,
-                              border: "1px solid rgba(15,23,42,0.10)",
-                              background: "rgba(255,255,255,0.88)",
-                              display: "grid",
-                              placeItems: "center",
-                              flex: "0 0 auto",
-                              color: active ? "#0f172a" : "rgba(15,23,42,0.68)",
-                            }}
-                          >
-                            {icon?.kind === "image" ? (
-                              <img src={icon.src} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                        {section.title}
+                      </div>
+                      <div style={{ fontSize: 11, opacity: 0.72 }}>
+                        {catalogLoading ? "Carregando catálogo..." : `${section.items.filter((item) => form.feature_codes.includes(item.code)).length} selecionada(s)`}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 6,
+                        gridTemplateColumns: section.columns,
+                      }}
+                    >
+                      {section.items.map((feature) => {
+                        const active = form.feature_codes.includes(feature.code);
+                        const icon = FEATURE_CARD_ICONS[feature.code] || { kind: "lucide", Icon: Building2 };
+                        const isDesenharArea = feature.code === "desenhar_area";
+                        return (
+                          <div
+                            key={feature.code}
+                            style={
+                              isMobile && isDesenharArea
+                                ? {
+                                    display: "grid",
+                                    gap: 4,
+                                    gridTemplateRows: "12px 48px",
+                                    width: "100%",
+                                  }
+                                : { position: "relative", overflow: "visible", width: "100%" }
+                            }
+                            >
+                            {isMobile && isDesenharArea ? (
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 900,
+                                  color: "#991b1b",
+                                  lineHeight: 1.1,
+                                  whiteSpace: "nowrap",
+                                  pointerEvents: "none",
+                                  alignSelf: "end",
+                                }}
+                              >
+                                Com extração de dados
+                              </div>
                             ) : (
-                              <icon.Icon size={11} strokeWidth={2.1} />
+                              isDesenharArea && (
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    left: 2,
+                                    top: -16,
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                    color: "#991b1b",
+                                    lineHeight: 1.1,
+                                    whiteSpace: "nowrap",
+                                    pointerEvents: "none",
+                                  }}
+                                >
+                                  Com extração de dados
+                                </div>
+                              )
                             )}
-                          </span>
-                          <span style={{ fontSize: isMobile ? 12.5 : 12, fontWeight: 900 }}>{feature.name}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleFeature(feature.code)}
+                              style={{
+                                position: "relative",
+                                textAlign: "left",
+                                width: "100%",
+                                minWidth: 0,
+                                boxSizing: "border-box",
+                                padding: isMobile ? "11px 13px" : "11px 12px",
+                                height: 48,
+                                borderRadius: 10,
+                                border: isDesenharArea
+                                  ? active
+                                    ? "1px solid rgba(185,28,28,0.34)"
+                                    : "1px solid rgba(220,38,38,0.12)"
+                                  : active
+                                    ? group.key === "extraction"
+                                      ? section.tone === "danger"
+                                        ? "1px solid rgba(185,28,28,0.34)"
+                                        : "1px solid rgba(37,99,235,0.32)"
+                                      : "1px solid rgba(37,99,235,0.32)"
+                                    : "1px solid rgba(0,0,0,0.10)",
+                                background: active
+                                  ? isDesenharArea
+                                    ? "rgba(254,226,226,0.90)"
+                                    : group.key === "extraction" && section.tone === "danger"
+                                      ? "rgba(254,226,226,0.92)"
+                                      : "rgba(219,234,254,0.82)"
+                                  : isDesenharArea
+                                    ? "linear-gradient(180deg, rgba(254,242,242,0.96) 0%, rgba(255,241,241,0.88) 100%)"
+                                    : "rgba(255,255,255,0.92)",
+                                color: "rgba(15,23,42,0.88)",
+                                cursor: "pointer",
+                                display: "grid",
+                                gap: 0,
+                              }}
+                            >
+                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span
+                                  style={{
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius: 999,
+                                    border: "1px solid rgba(15,23,42,0.10)",
+                                    background: "rgba(255,255,255,0.88)",
+                                    display: "grid",
+                                    placeItems: "center",
+                                    flex: "0 0 auto",
+                                    color: active ? "#0f172a" : "rgba(15,23,42,0.68)",
+                                  }}
+                                >
+                                  {icon.kind === "image" ? (
+                                    <img src={icon.src} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                                  ) : (
+                                    <icon.Icon size={11} strokeWidth={2.1} />
+                                  )}
+                                </span>
+                                <span style={{ fontSize: isMobile ? 12.5 : 12, fontWeight: 900, lineHeight: 1.1 }}>{feature.name}</span>
+                              </span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
