@@ -362,13 +362,6 @@ function escapeHtml(s: string) {
     .replaceAll("'", "&#039;");
 }
 
-function normalizeExternalUrl(value: unknown) {
-  if (typeof value !== "string") return "";
-  const raw = value.trim();
-  if (!raw) return "";
-  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-}
-
 function normalizeSessionUrl(value: unknown) {
   if (typeof value !== "string") return "";
   const raw = value.trim();
@@ -980,8 +973,7 @@ async function upsertMapImage(map: mapboxgl.Map, id: string, url: string) {
 
 function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
   return list.map((c) => {
-    const rawStreamingUrl = ((c as any).streaming_url ?? c.stream_url ?? "").toString().trim();
-    const streamingUrl = normalizeExternalUrl(rawStreamingUrl);
+    const cameraId = cleanString((c as any).camera_id || c.id);
 
     return {
       type: "Feature",
@@ -989,14 +981,12 @@ function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
       properties: {
         kind: "camera",
         id: c.id ?? "",
-        camera_id: c.id ?? "",
+        camera_id: cameraId,
         code: c.code,
         name: c.name,
         zona_camera: (c as any).zona_camera ?? (c as any).zone ?? "",
         sistema_origem: (c as any).sistema_origem ?? "",
         responsavel: (c as any).responsavel ?? "",
-        streaming_url: streamingUrl,
-        streaming_url_raw: rawStreamingUrl,
         city: c.city,
         uf: c.uf,
         address: c.address || "",
@@ -3221,9 +3211,9 @@ export default function MapPage() {
       };
     }
 
-    function bindSmartCameraPopupActions() {
-      if (!popup?.isOpen()) return;
-      const popupEl = popup.getElement();
+    function bindSmartCameraPopupActions(targetPopup: mapboxgl.Popup | null = popup) {
+      if (!targetPopup?.isOpen()) return;
+      const popupEl = targetPopup.getElement();
       if (!popupEl) return;
 
       popupEl.querySelectorAll<HTMLButtonElement>("[data-smart-camera-stream]").forEach((btn) => {
@@ -3313,7 +3303,6 @@ export default function MapPage() {
           cameraId: cleanString(p.camera_id || p.id),
           title: (p.name || "Câmera sem nome").toString(),
           meta: `Zona: ${(p.zona_camera || "-").toString()}`,
-          streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
         };
       }
       if (kind === "camera_intel") {
@@ -3334,7 +3323,6 @@ export default function MapPage() {
             p.direction,
             "-"
           )}`,
-          streamingUrl: "",
         };
       }
       if (kind === "radar") {
@@ -3345,7 +3333,6 @@ export default function MapPage() {
             p.sentido,
             "-"
           )}`,
-          streamingUrl: "",
         };
       }
       return null;
@@ -3435,10 +3422,10 @@ export default function MapPage() {
                     info.externalCameraId || ""
                   )}" data-smart-camera-duration="480" title="Abrir streaming completo">Abrir streaming</button>`
                 : ""
-              : hasStreamingAccessRef.current && info.streamingUrl && info.cameraId
+              : hasStreamingAccessRef.current && info.cameraId
               ? `<button type="button" class="cameraPopupStreamLink stackPopupStreamLink" data-camera-stream data-camera-id="${escapeHtml(
                   info.cameraId
-                )}" data-camera-duration="0">Streaming</button>`
+                )}" data-camera-duration="0">Abrir streaming</button>`
               : "";
 
           return `
@@ -3485,13 +3472,6 @@ export default function MapPage() {
           </div>
         `)
         .addTo(map);
-
-      stack.forEach((feature) => {
-        const info = getPoiInfo(feature);
-        if (info?.kind === "camera" && info.cameraId) {
-          trackCommonCameraPopupView(info.cameraId);
-        }
-      });
 
       bindPopupCloseButton();
       bindSmartCameraPopupActions();
@@ -3723,16 +3703,19 @@ export default function MapPage() {
       stopAreaPointDrag();
     });
 
-    map.on("mouseenter", LAYERS.cameras_points, (e) => {
+    function showCommonCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
       setCursorPointer();
       clearHoverPreviewTimer();
+      clearHoverPreviewCloseTimer();
+      clearHoverPreviewCountdownTimer();
       if (!hasStreamingAccessRef.current) return;
       const f: any = e.features?.[0];
       if (!f) return;
 
       const p = f.properties || {};
-      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
-      if (!streamingUrl) return;
+      const cameraId = cleanString(p.camera_id || p.id);
+      if (!cameraId) return;
+      const requestGeneration = hoverPreviewGenerationRef.current;
       const coords = (f.geometry as any).coordinates as [number, number];
       const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
       const navSafeTop = 96;
@@ -3741,34 +3724,101 @@ export default function MapPage() {
       const isNearTop = pointY < minTop + previewHeight;
       const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
       const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
+      const playerAspectRatio = 16 / 9;
+      // O player da Tixxi confunde iframes menores que a janela com DevTools aberto
+      // e apaga o próprio vídeo. Mantemos um viewport interno do tamanho da tela e
+      // o reduzimos apenas visualmente para caber no preview.
+      const playerViewportWidth = Math.ceil(
+        Math.max(
+          1600,
+          window.outerWidth || 0,
+          window.screen?.width || 0,
+          (window.outerHeight || 0) * playerAspectRatio,
+          (window.screen?.height || 0) * playerAspectRatio
+        )
+      );
+      const playerViewportHeight = Math.ceil(playerViewportWidth / playerAspectRatio);
+      const playerPreviewScale = 360 / playerViewportWidth;
 
-      hoverPreviewTimerRef.current = window.setTimeout(() => {
-        trackCommonCameraPopupView(cleanString(p.camera_id || p.id));
+      hoverPreviewTimerRef.current = window.setTimeout(async () => {
         hoverPreviewPopup
           ?.setLngLat(coords)
           .setOffset(isNearTop ? [0, offsetY] : 14)
           .setHTML(`
             <div style="width:360px;background:#000;">
-              <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
-                <iframe
-                  src="${escapeHtml(streamingUrl)}"
-                  title="Preview câmera"
-                  loading="lazy"
-                  referrerpolicy="no-referrer"
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                  scrolling="no"
-                  style="position:absolute;top:0;left:0;width:1600px;height:900px;border:0;background:#000;transform:scale(0.225);transform-origin:top left;"
-                ></iframe>
-              </div>
-              <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
-                Para abrir a imagem maior, clique na c&acirc;mera e abra o link.
+              <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:12px;letter-spacing:.02em;">
+                Abrindo preview...
               </div>
             </div>
           `)
           .addTo(map);
         centerMobilePopup(hoverPreviewPopup);
+
+        try {
+          let session: Awaited<ReturnType<typeof requestCommonCameraSession>>;
+          try {
+            session = await requestCommonCameraSession(cameraId, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
+          } catch (error) {
+            if (!shouldRetryCommonCameraSession(error)) throw error;
+            session = await requestCommonCameraSession(cameraId, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
+          }
+          if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+
+          hoverPreviewPopup
+            ?.setLngLat(coords)
+            .setOffset(isNearTop ? [0, offsetY] : 14)
+            .setHTML(`
+              <div style="width:360px;background:#000;">
+                <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
+                  <iframe
+                    src="${escapeHtml(session.sessionUrl)}"
+                    title="Preview streaming"
+                    loading="lazy"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowfullscreen
+                    referrerpolicy="no-referrer"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                    scrolling="no"
+                    style="position:absolute;top:0;left:0;width:${playerViewportWidth}px;height:${playerViewportHeight}px;border:0;background:#000;transform:scale(${playerPreviewScale});transform-origin:top left;"
+                  ></iframe>
+                  <div class="smartPreviewCountdown" data-smart-preview-countdown>
+                    ${SMART_CAMERA_PREVIEW_DURATION_SECONDS}s
+                  </div>
+                </div>
+                <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
+                  Para abrir o streaming maior, clique na c&acirc;mera e abra o link.
+                </div>
+              </div>
+          `)
+          centerMobilePopup(hoverPreviewPopup);
+          startSmartCameraPreviewCountdown(requestGeneration, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
+
+          clearHoverPreviewCloseTimer();
+          hoverPreviewCloseTimerRef.current = window.setTimeout(() => {
+            if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+            hoverPreviewPopupRef.current?.remove();
+            clearHoverPreviewCloseTimer();
+            clearHoverPreviewCountdownTimer();
+          }, SMART_CAMERA_PREVIEW_DURATION_SECONDS * 1000);
+        } catch (error) {
+          if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+          clearHoverPreviewCountdownTimer();
+          hoverPreviewPopup
+            ?.setLngLat(coords)
+            .setOffset(isNearTop ? [0, offsetY] : 14)
+            .setHTML(`
+              <div style="width:360px;background:#000;">
+                <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
+                  Streaming indispon&iacute;vel. Tente abrir o streaming pela lista ou pela pop-up da câmera.
+                </div>
+              </div>
+            `)
+            .addTo(map);
+        }
       }, 120);
-    });
+    }
+
+    map.on("mouseenter", LAYERS.cameras_points, showCommonCameraHoverPreview);
 
     map.on("mouseleave", LAYERS.cameras_points, () => {
       setCursorDefault();
@@ -3920,7 +3970,6 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
-      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
       const allowStreaming = hasStreamingAccessRef.current;
       setSelectionRing(coords[0], coords[1]);
       if (openStackedPopupIfNeeded(coords)) return;
@@ -3959,7 +4008,7 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${allowStreaming && streamingUrl && cleanString(p.camera_id || p.id)
+              ${allowStreaming && cleanString(p.camera_id || p.id)
                 ? `<button type="button" class="cameraPopupStreamLink" data-camera-stream data-camera-id="${escapeHtml(
                     cleanString(p.camera_id || p.id)
                   )}" data-camera-duration="0">Abrir streaming</button>`
@@ -3968,10 +4017,9 @@ export default function MapPage() {
           </div>
         `)
         .addTo(map);
-      trackCommonCameraPopupView(cleanString(p.camera_id || p.id));
       bindPopupCloseButton();
       bindSmartCameraPopupActions();
-      if (allowStreaming && streamingUrl) centerMobilePopup();
+      if (allowStreaming) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
@@ -4789,6 +4837,22 @@ export default function MapPage() {
     });
   }
 
+  function shouldRetryCommonCameraSession(error: unknown) {
+    const rawMessage = String((error as any)?.message || "").trim();
+    const match = rawMessage.match(/^(\d{3})\s*-\s*(.*)$/);
+    const status = match ? Number(match[1]) : null;
+
+    if ([403, 404, 409, 423, 425, 429, 502, 503].includes(Number(status))) return true;
+
+    const normalized = rawMessage.toLowerCase();
+    return (
+      normalized.includes("expir") ||
+      normalized.includes("playback") ||
+      normalized.includes("sessão") ||
+      normalized.includes("session")
+    );
+  }
+
   async function openSmartCameraStreamWindow(source: SmartCameraSessionSource, durationSeconds: number) {
     if (!hasSmartCameraStreamingAccessRef.current) {
       await Swal.fire({
@@ -4871,7 +4935,18 @@ export default function MapPage() {
     }
 
     try {
-      const session = await requestCommonCameraSession(trimmedCameraId, durationSeconds);
+      await requestCommonCameraView(trimmedCameraId).catch((error) => {
+        console.warn("Falha ao registrar visualização da câmera.", error);
+      });
+
+      let session: Awaited<ReturnType<typeof requestCommonCameraSession>>;
+      try {
+        session = await requestCommonCameraSession(trimmedCameraId, durationSeconds);
+      } catch (error) {
+        if (!shouldRetryCommonCameraSession(error)) throw error;
+        session = await requestCommonCameraSession(trimmedCameraId, durationSeconds);
+      }
+
       if (streamWindow && !streamWindow.closed) {
         streamWindow.location.href = session.sessionUrl;
       } else {
@@ -4888,15 +4963,6 @@ export default function MapPage() {
         confirmButtonText: "Entendi",
       });
     }
-  }
-
-  function trackCommonCameraPopupView(cameraId: string) {
-    const trimmedCameraId = cleanString(cameraId);
-    if (!trimmedCameraId) return;
-
-    void requestCommonCameraView(trimmedCameraId).catch((error) => {
-      console.warn("Falha ao registrar visualização da câmera.", error);
-    });
   }
 
   async function loadCamerasLpr() {
@@ -7590,7 +7656,6 @@ export default function MapPage() {
                 {listMode === "cameras" &&
                   (listItems as Camera[]).map((c) => {
                     const iconSrc = getPoiIconSource(mapBaseStyle, "camera");
-                    const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
                     return (
                       <div
                         key={c.code}
@@ -7631,7 +7696,7 @@ export default function MapPage() {
                                   [c.city, c.uf].filter(Boolean).join(" - ") ||
                                   "-"}
                               </span>
-                              {hasStreamingAccess && streamUrl && c.id && (
+                              {hasStreamingAccess && c.id && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -7656,7 +7721,7 @@ export default function MapPage() {
                     const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
                     const smartId = cleanString(c.id);
                     const showSmartStreamButton =
-                      hasSmartCameraStreamingAccess && Boolean(smartId) && !Boolean(smartId && unavailableSmartCameraIds[smartId]);
+                      hasSmartCameraStreamingAccess && Boolean(smartId) && !unavailableSmartCameraIds[smartId];
                     return (
                       <div
                         key={smartId || c.code}
@@ -8470,10 +8535,9 @@ export default function MapPage() {
                     }
                   }}
                 >
-                  {listMode === "cameras" &&
+                {listMode === "cameras" &&
                     (listItems as Camera[]).map((c) => {
                       const iconSrc = getPoiIconSource(mapBaseStyle, "camera");
-                      const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
                       return (
                         <div
                           key={c.code}
@@ -8512,7 +8576,7 @@ export default function MapPage() {
                                     [c.city, c.uf].filter(Boolean).join(" - ") ||
                                     "-"}
                                 </span>
-                                {hasStreamingAccess && streamUrl && c.id && (
+                                {hasStreamingAccess && c.id && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -8537,7 +8601,7 @@ export default function MapPage() {
                       const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
                       const smartId = cleanString(c.id);
                       const showSmartStreamButton =
-                        hasSmartCameraStreamingAccess && Boolean(smartId) && !Boolean(smartId && unavailableSmartCameraIds[smartId]);
+                        hasSmartCameraStreamingAccess && Boolean(smartId) && !unavailableSmartCameraIds[smartId];
                       return (
                         <div
                           key={smartId || c.code}

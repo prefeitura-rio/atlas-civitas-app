@@ -50,10 +50,6 @@ function normalizeIdLike(value: unknown) {
   return normalized || null;
 }
 
-function formatMatriculaLabel(value: unknown) {
-  return normalizeNullableText(value) || "sem matrícula";
-}
-
 function randomIndex(max: number) {
   if (max <= 0) return 0;
   if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
@@ -1139,7 +1135,7 @@ export function AdminUsersPanel({
                     <div>
                       {user.is_active ? "ATIVO" : "INATIVO"}
                       {user.cpf ? ` • CPF: ${user.cpf}` : ""}
-                      {` • Matrícula: ${formatMatriculaLabel(user.matricula)}`}
+                      {user.matricula ? ` • Matrícula: ${user.matricula}` : ""}
                     </div>
                     {(user.orgao || user.organization_name || user.unidade) && (
                       <div>

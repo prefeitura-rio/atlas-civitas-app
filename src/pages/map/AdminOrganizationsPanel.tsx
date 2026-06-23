@@ -806,20 +806,20 @@ export function AdminOrganizationsPanel({
               {
                 key: "layers",
                 columns: "1fr",
-                sections: [{ title: "Camadas", items: layersItems, columns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))" }],
+                sections: [{ key: "layers", title: "Camadas", items: layersItems, columns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))" }],
               },
                 {
                   key: "extraction",
                   columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
                   sections: [
-                  { title: "Sem extração de dados", items: extractionWithoutItems, columns: "1fr" },
-                  { title: "Com extração de dados", items: extractionWithItems, columns: "1fr", tone: "danger" },
+                  { key: "without-extraction", title: "Sem extração de dados", items: extractionWithoutItems, columns: "1fr" },
+                  { key: "with-extraction", title: "Com extração de dados", items: extractionWithItems, columns: "1fr", tone: "danger" },
                   ],
                 },
               {
                 key: "tools",
                 columns: "1fr",
-                sections: [{ title: "Ferramentas", items: toolsItems, columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" }],
+                sections: [{ key: "tools", title: "Ferramentas", items: toolsItems, columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" }],
               },
             ].map((group) => (
               <div
@@ -867,7 +867,10 @@ export function AdminOrganizationsPanel({
                       >
                         {section.title}
                       </div>
-                      <div style={{ fontSize: 11, opacity: 0.72 }}>
+                      <div
+                        data-testid={`organization-section-count-${group.key}-${section.key}`}
+                        style={{ fontSize: 11, opacity: 0.72 }}
+                      >
                         {catalogLoading ? "Carregando catálogo..." : `${section.items.filter((item) => form.feature_codes.includes(item.code)).length} selecionada(s)`}
                       </div>
                     </div>
@@ -933,6 +936,10 @@ export function AdminOrganizationsPanel({
                             <button
                               type="button"
                               onClick={() => toggleFeature(feature.code)}
+                              data-testid={`organization-feature-${feature.code}`}
+                              data-feature-code={feature.code}
+                              data-active={active ? "true" : "false"}
+                              aria-pressed={active}
                               style={{
                                 position: "relative",
                                 textAlign: "left",

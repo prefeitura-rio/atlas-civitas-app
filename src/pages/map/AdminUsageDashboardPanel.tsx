@@ -529,7 +529,7 @@ export function AdminUsageDashboardPanel({
             <input
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
-              placeholder="Filtrar por nome, email ou organização..."
+              placeholder="Filtrar por nome do usuáro"
               style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 34px", borderRadius: 14, border: "1px solid rgba(10,40,75,0.12)", background: "rgba(255,255,255,0.96)", color: "#0f172a" }}
             />
           </div>
@@ -568,7 +568,7 @@ export function AdminUsageDashboardPanel({
             <input
               value={organizationSearch}
               onChange={(e) => setOrganizationSearch(e.target.value)}
-              placeholder="Filtrar por nome da organização..."
+              placeholder="Filtrar por nome da organização"
               style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 34px", borderRadius: 14, border: "1px solid rgba(10,40,75,0.12)", background: "rgba(255,255,255,0.96)", color: "#0f172a" }}
             />
           </div>

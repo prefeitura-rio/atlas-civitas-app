@@ -11,8 +11,6 @@ export type Camera = {
   address: string;
   city: string;
   uf: string;
-  streaming_url?: string | null;
-  stream_url?: string | null;
   is_active: boolean;
 };
 
@@ -25,7 +23,6 @@ export type CameraIntel = {
   responsavel?: string | null;
   direction?: string | null;
   external_camera_id?: string | null;
-  streaming_url?: string | null;
   is_active?: boolean;
   source_file?: string | null;
   last_seen_at?: string | null;
