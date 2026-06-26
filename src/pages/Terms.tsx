@@ -267,9 +267,23 @@ export default function Terms({
           align-items: center;
           gap: 10px;
           margin-top: 14px;
+          position: relative;
         }
         .termsRowDisabled {
           opacity: 0.62;
+          cursor: not-allowed;
+        }
+        .termsCheckboxInput {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 18px;
+          height: 18px;
+          margin: 0;
+          opacity: 0.0001;
+          cursor: pointer;
+        }
+        .termsCheckboxInput:disabled {
           cursor: not-allowed;
         }
         .termsCheck {
@@ -354,7 +368,7 @@ export default function Terms({
       <div className="termsCard">
         <h1 className="termsTitle">TERMOS E CONDIÇÕES</h1>
 
-        <div className="termsBody" ref={termsBodyRef}>
+        <div className="termsBody" ref={termsBodyRef} data-testid="terms-scroll-container">
           {pdfLoading && <div className="termsLoading">Carregando documento...</div>}
           {!pdfLoading && pdfLoadErr && (
             <div className="termsError">
@@ -388,17 +402,22 @@ export default function Terms({
           <div className="termsHint">Role até o final do documento para habilitar o aceite.</div>
         )}
 
-        <label className={`termsRow ${!scrolledToEnd ? "termsRowDisabled" : ""}`}>
-          <span className="termsCheck" data-checked={agree ? "true" : "false"}>
-            {agree ? "✓" : ""}
-          </span>
+        <label
+          className={`termsRow ${!scrolledToEnd ? "termsRowDisabled" : ""}`}
+          data-testid="terms-agree-row"
+          data-scrolled-to-end={scrolledToEnd ? "true" : "false"}
+        >
           <input
             type="checkbox"
             checked={agree}
             onChange={(e) => setAgree(e.target.checked)}
             disabled={!pdfReady || !scrolledToEnd}
-            style={{ display: "none" }}
+            className="termsCheckboxInput"
+            aria-label="Concordo com os termos e condições"
           />
+          <span className="termsCheck" data-checked={agree ? "true" : "false"}>
+            {agree ? "✓" : ""}
+          </span>
           <span>Concordo com os termos e condições</span>
         </label>
 
@@ -407,6 +426,7 @@ export default function Terms({
           type="button"
           onClick={handleAccept}
           disabled={!canSubmit}
+          data-testid="terms-accept-button"
         >
           {submitting ? "Aceitando..." : "Aceitar"}
         </button>

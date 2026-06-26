@@ -2,7 +2,16 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
-import type { FeatureCollection, Feature, Point, Polygon, MultiPolygon, GeometryCollection } from "geojson";
+import type {
+  FeatureCollection,
+  Feature,
+  Point,
+  Polygon,
+  MultiPolygon,
+  LineString,
+  MultiLineString,
+  GeometryCollection,
+} from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
 import Swal from "sweetalert2";
 import {
@@ -55,6 +64,7 @@ import { AdminOrganizationsPanel } from "./map/AdminOrganizationsPanel";
 import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
 import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
+import { AdminUsageDashboardPanel } from "./map/AdminUsageDashboardPanel";
 import {
   cleanString,
   firstNonEmptyString,
@@ -68,15 +78,17 @@ import {
 type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
-type AdminTab = "users" | "organizations" | "logs" | "cameras" | "radares";
+type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "radares";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
+type AreaDrawPolygonPoints = Array<[number, number]>;
 
 const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
   { key: "users", label: "Usuários" },
   { key: "organizations", label: "Organizações" },
   { key: "cameras", label: "Câmeras" },
   { key: "radares", label: "Radares" },
+  { key: "usage", label: "Métricas" },
   { key: "logs", label: "Logs" },
 ];
 
@@ -126,6 +138,7 @@ const SOURCES = {
   selection: "src-selection",
   area_draw: "src-area-draw",
   bairros: "src-bairros",
+  bairros_lines: "src-bairros-lines",
   risp: "src-risp",
   aisp: "src-aisp",
   cisp: "src-cisp",
@@ -349,13 +362,6 @@ function escapeHtml(s: string) {
     .replaceAll("'", "&#039;");
 }
 
-function normalizeExternalUrl(value: unknown) {
-  if (typeof value !== "string") return "";
-  const raw = value.trim();
-  if (!raw) return "";
-  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-}
-
 function normalizeSessionUrl(value: unknown) {
   if (typeof value !== "string") return "";
   const raw = value.trim();
@@ -389,7 +395,8 @@ function loadImagePromise(map: mapboxgl.Map, url: string) {
   });
 }
 
-type BairrosFeature = Feature<Polygon | MultiPolygon, { NOME?: string } & Record<string, any>>;
+type BairrosFeature = Feature<Polygon | MultiPolygon, { NOME?: string; nome?: string } & Record<string, any>>;
+type BairrosLineFeature = Feature<LineString | MultiLineString, { NOME?: string; nome?: string } & Record<string, any>>;
 type SecurityAreaFeature = Feature<Polygon | MultiPolygon, { name?: string | number } & Record<string, any>>;
 type GeometryStats = {
   cameras: number;
@@ -404,6 +411,251 @@ type GeometrySelectionIds = {
   radar: string[];
 };
 type PolygonalGeometry = Polygon | MultiPolygon;
+
+function closeLinearRing(ring: number[][]) {
+  if (!ring.length) return ring;
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first?.[0] === last?.[0] && first?.[1] === last?.[1]) return ring;
+  return [...ring, [...first]];
+}
+
+function sameCoordinate(a: number[] | undefined, b: number[] | undefined) {
+  if (!a || !b) return false;
+  return Math.abs(Number(a[0]) - Number(b[0])) < 1e-10 && Math.abs(Number(a[1]) - Number(b[1])) < 1e-10;
+}
+
+function isValidLngLat(position: number[] | undefined): position is number[] {
+  return Number.isFinite(Number(position?.[0])) && Number.isFinite(Number(position?.[1]));
+}
+
+function splitRingIntoLineStrings(rawRing: number[][]) {
+  const ring = rawRing.filter(isValidLngLat);
+  if (ring.length < 2) return [];
+  return [ring.length >= 3 ? closeLinearRing(ring) : ring];
+}
+
+function geometryToLineStrings(geometry: Polygon | MultiPolygon | null | undefined) {
+  if (!geometry) return [];
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.flatMap((polygon) => polygon.flatMap((ring) => splitRingIntoLineStrings(ring)));
+}
+
+function buildBairrosLineGeoData(
+  data: FeatureCollection<Polygon | MultiPolygon, any>
+): FeatureCollection<LineString | MultiLineString, any> {
+  const features = (data.features || [])
+    .map((feature) => {
+      const lineStrings = geometryToLineStrings(feature.geometry);
+      if (!lineStrings.length) return null;
+
+      const properties = { ...(feature.properties || {}) };
+      const nome =
+        (typeof properties.NOME === "string" && properties.NOME.trim()) ||
+        (typeof properties.nome === "string" && properties.nome.trim()) ||
+        "";
+
+      if (nome) {
+        properties.NOME = nome;
+        properties.nome = nome;
+      }
+
+      const geometry =
+        lineStrings.length === 1
+          ? ({ type: "LineString", coordinates: lineStrings[0] } as LineString)
+          : ({ type: "MultiLineString", coordinates: lineStrings } as MultiLineString);
+
+      return {
+        ...feature,
+        geometry,
+        properties,
+      };
+    })
+    .filter((feature): feature is BairrosLineFeature => !!feature);
+
+  return {
+    type: "FeatureCollection",
+    features,
+  };
+}
+
+function splitRawRingIntoClosedRings(rawRing: number[][]) {
+  const rings: number[][][] = [];
+  let current: number[][] = [];
+
+  for (let i = 0; i < rawRing.length; i++) {
+    const position = rawRing[i];
+    current.push(position);
+
+    if (current.length >= 4 && sameCoordinate(position, current[0])) {
+      rings.push(current);
+      current = [];
+    }
+  }
+
+  if (current.length >= 3) {
+    rings.push(closeLinearRing(current));
+  }
+
+  return rings;
+}
+
+function getRingSamplePoint(ring: number[][]): [number, number] | null {
+  for (const position of ring) {
+    const lng = Number(position?.[0]);
+    const lat = Number(position?.[1]);
+    if (Number.isFinite(lng) && Number.isFinite(lat)) return [lng, lat];
+  }
+  return null;
+}
+
+function getRingSignedArea(ring: number[][]) {
+  let area = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const current = ring[i];
+    const next = ring[i + 1];
+    area += Number(current?.[0]) * Number(next?.[1]) - Number(next?.[0]) * Number(current?.[1]);
+  }
+  return area / 2;
+}
+
+function getRingOrientation(ring: number[][]) {
+  const area = getRingSignedArea(ring);
+  if (Math.abs(area) < 1e-12) return 0;
+  return area > 0 ? 1 : -1;
+}
+
+function splitPolygonRingsIntoPolygons(rings: number[][][]) {
+  const polygons: number[][][][] = [];
+  const exteriorOrientations: number[] = [];
+
+  for (const rawRing of rings) {
+    const closedRings = splitRawRingIntoClosedRings(rawRing);
+
+    for (const closedRing of closedRings) {
+      const ring = closeLinearRing(closedRing);
+      if (ring.length < 4) continue;
+
+      const sample = getRingSamplePoint(ring);
+      const orientation = getRingOrientation(ring);
+      let parentIndex = -1;
+
+      if (sample && orientation !== 0) {
+        parentIndex = polygons.findIndex(
+          (polygon, index) =>
+            polygon[0] &&
+            exteriorOrientations[index] !== 0 &&
+            orientation !== exteriorOrientations[index] &&
+            pointInRing(sample, polygon[0])
+        );
+      }
+
+      if (parentIndex >= 0) {
+        polygons[parentIndex].push(ring);
+      } else {
+        polygons.push([ring]);
+        exteriorOrientations.push(orientation);
+      }
+    }
+  }
+
+  return polygons;
+}
+
+function normalizeBairroGeometry(geometry: Polygon | MultiPolygon | null | undefined): Polygon | MultiPolygon | null {
+  if (!geometry) return null;
+
+  const polygons =
+    geometry.type === "Polygon"
+      ? splitPolygonRingsIntoPolygons(geometry.coordinates)
+      : geometry.coordinates.flatMap((polygon) => splitPolygonRingsIntoPolygons(polygon));
+
+  if (!polygons.length) return null;
+  return polygons.length === 1
+    ? ({ type: "Polygon", coordinates: polygons[0] } as Polygon)
+    : ({ type: "MultiPolygon", coordinates: polygons } as MultiPolygon);
+}
+
+function mergePolygonalGeometries(geometries: Array<Polygon | MultiPolygon>): Polygon | MultiPolygon | null {
+  const coordinates = geometries.flatMap((geometry) => geometryToMultiPolygonCoordinates(geometry));
+  if (!coordinates.length) return null;
+  return coordinates.length === 1
+    ? ({ type: "Polygon", coordinates: coordinates[0] } as Polygon)
+    : ({ type: "MultiPolygon", coordinates } as MultiPolygon);
+}
+
+function normalizeBairrosGeoData(
+  data: FeatureCollection<Polygon | MultiPolygon, any>
+): FeatureCollection<Polygon | MultiPolygon, any> {
+  const grouped = new Map<string, Feature<Polygon | MultiPolygon, any>[]>();
+  const passthrough: Feature<Polygon | MultiPolygon, any>[] = [];
+
+  for (const feature of data.features || []) {
+    const geometry = normalizeBairroGeometry(feature.geometry);
+    if (!geometry) continue;
+
+    const properties = { ...(feature.properties || {}) };
+    const nome =
+      (typeof properties.NOME === "string" && properties.NOME.trim()) ||
+      (typeof properties.nome === "string" && properties.nome.trim()) ||
+      "";
+
+    if (!nome) {
+      passthrough.push({ ...feature, geometry });
+      continue;
+    }
+
+    properties.NOME = nome;
+    properties.nome = nome;
+
+    const nextFeature = {
+      ...feature,
+      geometry,
+      properties,
+    };
+
+    const current = grouped.get(nome);
+    if (current) {
+      current.push(nextFeature);
+    } else {
+      grouped.set(nome, [nextFeature]);
+    }
+  }
+
+  const merged = Array.from(grouped.entries()).map(([nome, features]) => {
+    const geometries = features
+      .map((feature) => feature.geometry)
+      .filter((geometry): geometry is Polygon | MultiPolygon => !!geometry);
+    const geometry = mergePolygonalGeometries(geometries);
+    const base = features[0];
+
+    if (!geometry) return null;
+
+    return {
+      ...base,
+      geometry,
+      properties: {
+        ...base.properties,
+        NOME: nome,
+        nome,
+        bairro_parts: features.length,
+      },
+    };
+  }).filter((feature): feature is Feature<Polygon | MultiPolygon, any> => !!feature);
+
+  return {
+    ...data,
+    features: [...passthrough, ...merged],
+  };
+}
+
+function getBairroFeatureName(properties: Record<string, any> | null | undefined): string {
+  return (
+    (typeof properties?.NOME === "string" && properties.NOME.trim()) ||
+    (typeof properties?.nome === "string" && properties.nome.trim()) ||
+    ""
+  );
+}
 
 function emptyGeometrySelectionIds(): GeometrySelectionIds {
   return {
@@ -726,21 +978,20 @@ async function upsertMapImage(map: mapboxgl.Map, id: string, url: string) {
 
 function camerasToFeatures(list: Camera[]): Feature<Point, any>[] {
   return list.map((c) => {
-    const rawStreamingUrl = ((c as any).streaming_url ?? c.stream_url ?? "").toString().trim();
-    const streamingUrl = normalizeExternalUrl(rawStreamingUrl);
+    const cameraId = cleanString((c as any).camera_id || c.id);
 
     return {
       type: "Feature",
       geometry: { type: "Point", coordinates: [c.lng, c.lat] },
       properties: {
         kind: "camera",
+        id: c.id ?? "",
+        camera_id: cameraId,
         code: c.code,
         name: c.name,
         zona_camera: (c as any).zona_camera ?? (c as any).zone ?? "",
         sistema_origem: (c as any).sistema_origem ?? "",
         responsavel: (c as any).responsavel ?? "",
-        streaming_url: streamingUrl,
-        streaming_url_raw: rawStreamingUrl,
         city: c.city,
         uf: c.uf,
         address: c.address || "",
@@ -1172,31 +1423,45 @@ function featureCoordKey(feature: Feature<Point, any>): string | null {
   return poiCoordKey(lng, lat);
 }
 
-function makeAreaDrawGeoJSON(points: Array<[number, number]>) {
+function makeAreaDrawGeoJSON(
+  polygons: AreaDrawPolygonPoints[],
+  currentPoints: AreaDrawPolygonPoints
+) {
   const features: Feature<any, any>[] = [];
 
-  if (points.length >= 3) {
-    const ring = [...points, points[0]];
+  polygons.forEach((points, polygonIndex) => {
+    if (points.length >= 3) {
+      const ring = [...points, points[0]];
+      features.push({
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: [ring] },
+        properties: { kind: "area_polygon_completed", polygon_index: polygonIndex },
+      } as any);
+    }
+  });
+
+  if (currentPoints.length >= 3) {
+    const ring = [...currentPoints, currentPoints[0]];
     features.push({
       type: "Feature",
       geometry: { type: "Polygon", coordinates: [ring] },
-      properties: { kind: "area_polygon" },
+      properties: { kind: "area_polygon_current" },
     } as any);
   }
 
-  if (points.length >= 2) {
+  if (currentPoints.length >= 2) {
     features.push({
       type: "Feature",
-      geometry: { type: "LineString", coordinates: points },
-      properties: { kind: "area_line" },
+      geometry: { type: "LineString", coordinates: currentPoints },
+      properties: { kind: "area_line_current" },
     } as any);
   }
 
-  points.forEach((pt, index) => {
+  currentPoints.forEach((pt, index) => {
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: pt },
-      properties: { kind: "area_point", point_index: index },
+      properties: { kind: "area_point_current", point_index: index },
     } as any);
   });
 
@@ -1215,15 +1480,26 @@ export default function MapPage() {
   const authLoading = auth.loading;
   const me = auth.user;
   const hasFeature = auth.hasFeature;
+  const hasAnyFeature = (...codes: string[]) => codes.some((code) => hasFeature(code));
+  const hasAnyFeatureAlias = (...codes: string[]) =>
+    codes.some((code) => hasFeature(code) || hasFeature(`${code}_com_extracao_dados`) || hasFeature(`${code}_sem_extracao_dados`));
+  const canExtractRispData = hasFeature("risp_com_extracao_dados") || hasFeature("risp");
+  const canExtractAispData = hasFeature("aisp_com_extracao_dados") || hasFeature("aisp");
+  const canExtractCispData = hasFeature("cisp_com_extracao_dados") || hasFeature("cisp");
+  const canExtractSecurityAreaData = (kind: SecurityAreaKind) =>
+    (kind === "risp" && canExtractRispData) ||
+    (kind === "aisp" && canExtractAispData) ||
+    (kind === "cisp" && canExtractCispData);
 
   const canViewCameras = hasFeature("cameras");
   const canViewCamerasIntel = hasFeature("cameras_inteligentes");
   const canViewCamerasLpr = hasFeature("cameras_lpr");
   const canViewRadares = hasFeature("radares");
-  const canViewBairros = hasFeature("bairros");
-  const canViewRisp = hasFeature("risp");
-  const canViewAisp = hasFeature("aisp");
-  const canViewCisp = hasFeature("cisp");
+  const canViewBairros = hasAnyFeature("bairros_com_extracao_dados", "bairros_sem_extracao_dados");
+  const canExtractBairroData = hasFeature("bairros_com_extracao_dados");
+  const canViewRisp = hasAnyFeatureAlias("risp");
+  const canViewAisp = hasAnyFeatureAlias("aisp");
+  const canViewCisp = hasAnyFeatureAlias("cisp");
   const canUseGps = hasFeature("gps");
   const canUseAreaDraw = hasFeature("desenhar_area");
   const authorizedReportLayers = useMemo(
@@ -1238,6 +1514,7 @@ export default function MapPage() {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const areaDrawModeRef = useRef(false);
   const areaDrawPointsRef = useRef<Array<[number, number]>>([]);
+  const areaDrawPolygonsRef = useRef<AreaDrawPolygonPoints[]>([]);
   const draggingAreaPointIndexRef = useRef<number | null>(null);
   const areaPointDragMovedRef = useRef(false);
   const areaPointDragSnapshotRef = useRef<Array<[number, number]> | null>(null);
@@ -1335,11 +1612,13 @@ export default function MapPage() {
     [hasFeature, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
   );
   const hasAuthorizedReportLayers = authorizedReportLayers.length > 0;
-  const canRequestBairroReport = canViewBairros && activeReportLayers.length > 0;
-  const canRequestAreaReport = canUseAreaDraw && activeReportLayers.length > 0;
+  const canRequestBairroReport = canExtractBairroData && activeReportLayers.length > 0;
 
   const [loadingBairros, setLoadingBairros] = useState(false);
   const [bairrosGeo, setBairrosGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
+  const [bairrosLinesGeo, setBairrosLinesGeo] = useState<FeatureCollection<LineString | MultiLineString, any> | null>(
+    null
+  );
   const [bairrosErr, setBairrosErr] = useState<string | null>(null);
   const [rispGeo, setRispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
   const [aispGeo, setAispGeo] = useState<FeatureCollection<Polygon | MultiPolygon, any> | null>(null);
@@ -1362,8 +1641,10 @@ export default function MapPage() {
   const [areaDrawMode, setAreaDrawMode] = useState(false);
   const [areaToolsOpen, setAreaToolsOpen] = useState(false);
   const [areaDrawPoints, setAreaDrawPoints] = useState<Array<[number, number]>>([]);
+  const [areaDrawPolygons, setAreaDrawPolygons] = useState<AreaDrawPolygonPoints[]>([]);
   const [areaReportLoading, setAreaReportLoading] = useState(false);
   const [areaReportMsg, setAreaReportMsg] = useState<string | null>(null);
+  const canRequestAreaReport = canUseAreaDraw && activeReportLayers.length > 0;
 
   function clearSelectedSecurityArea() {
     setSelectedSecurityArea(null);
@@ -1375,7 +1656,7 @@ export default function MapPage() {
   function selectSecurityArea(area: { kind: SecurityAreaKind; code: string }) {
     setSelectedSecurityArea(area);
     setSelectedSecurityStatsState({ key: "", stats: null });
-    setSelectedSecuritySummaryLoading(area.kind === "risp");
+    setSelectedSecuritySummaryLoading(canExtractSecurityAreaData(area.kind));
     setSecurityAreaReportMsg(null);
     setSelectedBairro("");
     setBairroReportMsg(null);
@@ -1388,6 +1669,10 @@ export default function MapPage() {
   useEffect(() => {
     areaDrawPointsRef.current = areaDrawPoints;
   }, [areaDrawPoints]);
+
+  useEffect(() => {
+    areaDrawPolygonsRef.current = areaDrawPolygons;
+  }, [areaDrawPolygons]);
 
   useEffect(() => {
     showBairrosRef.current = showBairros;
@@ -1969,6 +2254,13 @@ export default function MapPage() {
       });
     }
 
+    if (!map.getSource(SOURCES.bairros_lines)) {
+      map.addSource(SOURCES.bairros_lines, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+    }
+
     if (!map.getSource(SOURCES.risp)) {
       map.addSource(SOURCES.risp, {
         type: "geojson",
@@ -2185,7 +2477,11 @@ export default function MapPage() {
         id: LAYERS.area_draw_fill,
         type: "fill",
         source: SOURCES.area_draw,
-        filter: ["==", ["get", "kind"], "area_polygon"],
+        filter: [
+          "any",
+          ["==", ["get", "kind"], "area_polygon_completed"],
+          ["==", ["get", "kind"], "area_polygon_current"],
+        ],
         paint: {
           "fill-color": "#38bdf8",
           "fill-opacity": 0.18,
@@ -2198,7 +2494,12 @@ export default function MapPage() {
         id: LAYERS.area_draw_line,
         type: "line",
         source: SOURCES.area_draw,
-        filter: ["any", ["==", ["get", "kind"], "area_line"], ["==", ["get", "kind"], "area_polygon"]],
+        filter: [
+          "any",
+          ["==", ["get", "kind"], "area_line_current"],
+          ["==", ["get", "kind"], "area_polygon_current"],
+          ["==", ["get", "kind"], "area_polygon_completed"],
+        ],
         paint: {
           "line-color": "#0ea5e9",
           "line-width": 2.5,
@@ -2212,7 +2513,7 @@ export default function MapPage() {
         id: LAYERS.area_draw_points,
         type: "circle",
         source: SOURCES.area_draw,
-        filter: ["==", ["get", "kind"], "area_point"],
+        filter: ["==", ["get", "kind"], "area_point_current"],
         paint: {
           "circle-radius": 6,
           "circle-color": "#e0f2fe",
@@ -2222,14 +2523,22 @@ export default function MapPage() {
       });
     }
 
+    for (const layerId of [LAYERS.bairros_line, LAYERS.bairros_selected_line]) {
+      const layer = map.getLayer(layerId) as mapboxgl.AnyLayer | undefined;
+      if (layer && "source" in layer && layer.source !== SOURCES.bairros_lines) {
+        map.removeLayer(layerId);
+      }
+    }
+
     if (!map.getLayer(LAYERS.bairros_fill)) {
       map.addLayer({
         id: LAYERS.bairros_fill,
         type: "fill",
         source: SOURCES.bairros,
         paint: {
-          "fill-color": "#22c55e",
-          "fill-opacity": 0,
+          "fill-color": "#38bdf8",
+          // Mantem a camada clicavel sem esconder o mapa base.
+          "fill-opacity": 0.01,
         },
       });
     }
@@ -2238,10 +2547,11 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.bairros_line,
         type: "line",
-        source: SOURCES.bairros,
+        source: SOURCES.bairros_lines,
         paint: {
-          "line-color": "#9d18e1",
-          "line-width": 2.5,
+          "line-color": "#38bdf8",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 11, 1.8, 14, 2.6],
+          "line-opacity": 0.95,
         },
       });
     }
@@ -2253,8 +2563,8 @@ export default function MapPage() {
         source: SOURCES.bairros,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
-          "fill-color": "#34d399",
-          "fill-opacity": 0.18,
+          "fill-color": "#ef4444",
+          "fill-opacity": 0.04,
         },
       });
     }
@@ -2263,13 +2573,20 @@ export default function MapPage() {
       map.addLayer({
         id: LAYERS.bairros_selected_line,
         type: "line",
-        source: SOURCES.bairros,
+        source: SOURCES.bairros_lines,
         filter: ["==", ["get", "NOME"], ""],
         paint: {
-          "line-color": "#9d18e1",
-          "line-width": 3.5,
+          "line-color": "#dc2626",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2.4, 11, 3.8, 14, 5.2],
+          "line-opacity": 1,
+          "line-blur": 0.25,
         },
       });
+    }
+
+    if (map.getLayer(LAYERS.bairros_fill)) map.setPaintProperty(LAYERS.bairros_fill, "fill-opacity", 0.01);
+    if (map.getLayer(LAYERS.bairros_selected_fill)) {
+      map.setPaintProperty(LAYERS.bairros_selected_fill, "fill-opacity", 0.04);
     }
 
     if (!map.getLayer(LAYERS.risp_fill)) {
@@ -2330,7 +2647,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "fill-color": "#22c55e",
+          "fill-color": "#ef4444",
           "fill-opacity": 0.16,
         },
       });
@@ -2344,7 +2661,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "line-color": "#14532d",
+          "line-color": "#b91c1c",
           "line-width": 3.5,
           "line-opacity": 1,
         },
@@ -2409,7 +2726,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "fill-color": "#3b82f6",
+          "fill-color": "#ef4444",
           "fill-opacity": 0.16,
         },
       });
@@ -2423,7 +2740,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "line-color": "#1d4ed8",
+          "line-color": "#b91c1c",
           "line-width": 3.5,
           "line-opacity": 1,
         },
@@ -2452,7 +2769,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "fill-color": "#f59e0b",
+          "fill-color": "#ef4444",
           "fill-opacity": 0.16,
         },
       });
@@ -2466,7 +2783,7 @@ export default function MapPage() {
         layout: { visibility: "none" },
         filter: ["==", ["to-string", ["get", "name"]], ""],
         paint: {
-          "line-color": "#b45309",
+          "line-color": "#b91c1c",
           "line-width": 3.5,
           "line-opacity": 1,
         },
@@ -2510,6 +2827,19 @@ export default function MapPage() {
     }
 
     applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
+
+    for (const id of [
+      LAYERS.bairros_fill,
+      LAYERS.bairros_line,
+      LAYERS.bairros_selected_fill,
+      LAYERS.bairros_selected_line,
+    ]) {
+      if (map.getLayer(id)) {
+        try {
+          map.moveLayer(id);
+        } catch {}
+      }
+    }
 
     // Garante que pontos e o cone do GPS fiquem acima dos bairros
     const aboveBairros = [
@@ -2563,10 +2893,14 @@ export default function MapPage() {
     }
   }
 
-  function updateAreaDrawData(map: mapboxgl.Map, points: Array<[number, number]>) {
+  function updateAreaDrawData(
+    map: mapboxgl.Map,
+    polygons: AreaDrawPolygonPoints[],
+    currentPoints: AreaDrawPolygonPoints
+  ) {
     const src: any = map.getSource(SOURCES.area_draw);
     if (!src || typeof src.setData !== "function") return;
-    src.setData(makeAreaDrawGeoJSON(points));
+    src.setData(makeAreaDrawGeoJSON(polygons, currentPoints));
   }
 
   function updateBairrosData(
@@ -2574,6 +2908,14 @@ export default function MapPage() {
     data: FeatureCollection<Polygon | MultiPolygon, any>
   ) {
     const src: any = map.getSource(SOURCES.bairros);
+    if (src && typeof src.setData === "function") src.setData(data);
+  }
+
+  function updateBairrosLineData(
+    map: mapboxgl.Map,
+    data: FeatureCollection<LineString | MultiLineString, any>
+  ) {
+    const src: any = map.getSource(SOURCES.bairros_lines);
     if (src && typeof src.setData === "function") src.setData(data);
   }
 
@@ -2675,6 +3017,7 @@ export default function MapPage() {
 
     updatePoisData(map, poisGeo);
     if (bairrosGeo) updateBairrosData(map, bairrosGeo);
+    if (bairrosLinesGeo) updateBairrosLineData(map, bairrosLinesGeo);
     if (rispGeo) updateRispData(map, rispGeo);
     if (aispGeo) updateAispData(map, aispGeo);
     if (cispGeo) updateCispData(map, cispGeo);
@@ -2713,7 +3056,7 @@ export default function MapPage() {
 
     updateGpsData(map, gps, gpsOnRef.current);
     updateSearchPin(map, searchPin);
-    updateAreaDrawData(map, areaDrawPoints);
+    updateAreaDrawData(map, areaDrawPolygonsRef.current, areaDrawPointsRef.current);
     applyCodeColors(map, rispColorExpr, aispColorExpr, cispColorExpr);
   }
 
@@ -2873,9 +3216,9 @@ export default function MapPage() {
       };
     }
 
-    function bindSmartCameraPopupActions() {
-      if (!popup?.isOpen()) return;
-      const popupEl = popup.getElement();
+    function bindSmartCameraPopupActions(targetPopup: mapboxgl.Popup | null = popup) {
+      if (!targetPopup?.isOpen()) return;
+      const popupEl = targetPopup.getElement();
       if (!popupEl) return;
 
       popupEl.querySelectorAll<HTMLButtonElement>("[data-smart-camera-stream]").forEach((btn) => {
@@ -2890,6 +3233,15 @@ export default function MapPage() {
             },
             Number.isFinite(duration) ? duration : SMART_CAMERA_STREAM_DURATION_SECONDS
           );
+        };
+      });
+
+      popupEl.querySelectorAll<HTMLButtonElement>("[data-camera-stream]").forEach((btn) => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const duration = Number(btn.dataset.cameraDuration || 0);
+          void openCommonCameraStreamWindow(btn.dataset.cameraId || "", Number.isFinite(duration) ? duration : 0);
         };
       });
     }
@@ -2953,9 +3305,9 @@ export default function MapPage() {
       if (kind === "camera") {
         return {
           kind,
+          cameraId: cleanString(p.camera_id || p.id),
           title: (p.name || "Câmera sem nome").toString(),
           meta: `Zona: ${(p.zona_camera || "-").toString()}`,
-          streamingUrl: normalizeExternalUrl((p.streaming_url || p.stream_url || "").toString()),
         };
       }
       if (kind === "camera_intel") {
@@ -2976,7 +3328,6 @@ export default function MapPage() {
             p.direction,
             "-"
           )}`,
-          streamingUrl: "",
         };
       }
       if (kind === "radar") {
@@ -2987,7 +3338,6 @@ export default function MapPage() {
             p.sentido,
             "-"
           )}`,
-          streamingUrl: "",
         };
       }
       return null;
@@ -3077,8 +3427,10 @@ export default function MapPage() {
                     info.externalCameraId || ""
                   )}" data-smart-camera-duration="480" title="Abrir streaming completo">Abrir streaming</button>`
                 : ""
-              : hasStreamingAccessRef.current && info.streamingUrl
-              ? `<a class="cameraPopupStreamLink stackPopupStreamLink" href="${escapeHtml(info.streamingUrl)}" target="_blank" rel="noreferrer">Streaming</a>`
+              : hasStreamingAccessRef.current && info.cameraId
+              ? `<button type="button" class="cameraPopupStreamLink stackPopupStreamLink" data-camera-stream data-camera-id="${escapeHtml(
+                  info.cameraId
+                )}" data-camera-duration="0">Abrir streaming</button>`
               : "";
 
           return `
@@ -3283,6 +3635,10 @@ export default function MapPage() {
 
     map.on("click", LAYERS.area_draw_line, (e) => {
       if (suppressAreaDrawClickRef.current) return;
+      const feature: any = e.features?.[0];
+      if (feature?.properties?.kind !== "area_line_current" && feature?.properties?.kind !== "area_polygon_current") {
+        return;
+      }
       if (areaDrawPointsRef.current.length < 2) return;
 
       const lng = Number(e.lngLat?.lng);
@@ -3344,7 +3700,7 @@ export default function MapPage() {
       areaPointDragMovedRef.current = true;
       const nextPoints = replaceAreaDrawPoint(areaDrawPointsRef.current, dragIndex, [lng, lat]);
       areaDrawPointsRef.current = nextPoints;
-      updateAreaDrawData(map, nextPoints);
+      updateAreaDrawData(map, areaDrawPolygonsRef.current, nextPoints);
       map.getCanvas().style.cursor = "grabbing";
     });
 
@@ -3352,16 +3708,19 @@ export default function MapPage() {
       stopAreaPointDrag();
     });
 
-    map.on("mouseenter", LAYERS.cameras_points, (e) => {
+    function showCommonCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
       setCursorPointer();
       clearHoverPreviewTimer();
+      clearHoverPreviewCloseTimer();
+      clearHoverPreviewCountdownTimer();
       if (!hasStreamingAccessRef.current) return;
       const f: any = e.features?.[0];
       if (!f) return;
 
       const p = f.properties || {};
-      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
-      if (!streamingUrl) return;
+      const cameraId = cleanString(p.camera_id || p.id);
+      if (!cameraId) return;
+      const requestGeneration = hoverPreviewGenerationRef.current;
       const coords = (f.geometry as any).coordinates as [number, number];
       const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
       const navSafeTop = 96;
@@ -3370,33 +3729,101 @@ export default function MapPage() {
       const isNearTop = pointY < minTop + previewHeight;
       const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
       const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
+      const playerAspectRatio = 16 / 9;
+      // O player da Tixxi confunde iframes menores que a janela com DevTools aberto
+      // e apaga o próprio vídeo. Mantemos um viewport interno do tamanho da tela e
+      // o reduzimos apenas visualmente para caber no preview.
+      const playerViewportWidth = Math.ceil(
+        Math.max(
+          1600,
+          window.outerWidth || 0,
+          window.screen?.width || 0,
+          (window.outerHeight || 0) * playerAspectRatio,
+          (window.screen?.height || 0) * playerAspectRatio
+        )
+      );
+      const playerViewportHeight = Math.ceil(playerViewportWidth / playerAspectRatio);
+      const playerPreviewScale = 360 / playerViewportWidth;
 
-      hoverPreviewTimerRef.current = window.setTimeout(() => {
-      hoverPreviewPopup
+      hoverPreviewTimerRef.current = window.setTimeout(async () => {
+        hoverPreviewPopup
           ?.setLngLat(coords)
           .setOffset(isNearTop ? [0, offsetY] : 14)
           .setHTML(`
             <div style="width:360px;background:#000;">
-              <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
-                <iframe
-                  src="${escapeHtml(streamingUrl)}"
-                  title="Preview câmera"
-                  loading="lazy"
-                  referrerpolicy="no-referrer"
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                  scrolling="no"
-                  style="position:absolute;top:0;left:0;width:1600px;height:900px;border:0;background:#000;transform:scale(0.225);transform-origin:top left;"
-                ></iframe>
-              </div>
-              <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
-                Para abrir a imagem maior, clique na c&acirc;mera e abra o link.
+              <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:12px;letter-spacing:.02em;">
+                Abrindo preview...
               </div>
             </div>
           `)
           .addTo(map);
         centerMobilePopup(hoverPreviewPopup);
+
+        try {
+          let session: Awaited<ReturnType<typeof requestCommonCameraSession>>;
+          try {
+            session = await requestCommonCameraSession(cameraId, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
+          } catch (error) {
+            if (!shouldRetryCommonCameraSession(error)) throw error;
+            session = await requestCommonCameraSession(cameraId, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
+          }
+          if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+
+          hoverPreviewPopup
+            ?.setLngLat(coords)
+            .setOffset(isNearTop ? [0, offsetY] : 14)
+            .setHTML(`
+              <div style="width:360px;background:#000;">
+                <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
+                  <iframe
+                    src="${escapeHtml(session.sessionUrl)}"
+                    title="Preview streaming"
+                    loading="lazy"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowfullscreen
+                    referrerpolicy="no-referrer"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                    scrolling="no"
+                    style="position:absolute;top:0;left:0;width:${playerViewportWidth}px;height:${playerViewportHeight}px;border:0;background:#000;transform:scale(${playerPreviewScale});transform-origin:top left;"
+                  ></iframe>
+                  <div class="smartPreviewCountdown" data-smart-preview-countdown>
+                    ${SMART_CAMERA_PREVIEW_DURATION_SECONDS}s
+                  </div>
+                </div>
+                <div style="padding:6px 8px;color:#fff;font-size:11px;line-height:1.3;opacity:.92;">
+                  Para abrir o streaming maior, clique na c&acirc;mera e abra o link.
+                </div>
+              </div>
+          `)
+          centerMobilePopup(hoverPreviewPopup);
+          startSmartCameraPreviewCountdown(requestGeneration, SMART_CAMERA_PREVIEW_DURATION_SECONDS);
+
+          clearHoverPreviewCloseTimer();
+          hoverPreviewCloseTimerRef.current = window.setTimeout(() => {
+            if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+            hoverPreviewPopupRef.current?.remove();
+            clearHoverPreviewCloseTimer();
+            clearHoverPreviewCountdownTimer();
+          }, SMART_CAMERA_PREVIEW_DURATION_SECONDS * 1000);
+        } catch (error) {
+          if (requestGeneration !== hoverPreviewGenerationRef.current) return;
+          clearHoverPreviewCountdownTimer();
+          hoverPreviewPopup
+            ?.setLngLat(coords)
+            .setOffset(isNearTop ? [0, offsetY] : 14)
+            .setHTML(`
+              <div style="width:360px;background:#000;">
+                <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
+                  Streaming indispon&iacute;vel. Tente abrir o streaming pela lista ou pela pop-up da câmera.
+                </div>
+              </div>
+            `)
+            .addTo(map);
+        }
       }, 120);
-    });
+    }
+
+    map.on("mouseenter", LAYERS.cameras_points, showCommonCameraHoverPreview);
 
     map.on("mouseleave", LAYERS.cameras_points, () => {
       setCursorDefault();
@@ -3565,7 +3992,6 @@ export default function MapPage() {
 
       const p = f.properties || {};
       const coords = (f.geometry as any).coordinates as [number, number];
-      const streamingUrl = normalizeExternalUrl(p.streaming_url || p.stream_url || "");
       const allowStreaming = hasStreamingAccessRef.current;
       setSelectionRing(coords[0], coords[1]);
       if (openStackedPopupIfNeeded(coords)) return;
@@ -3604,15 +4030,18 @@ export default function MapPage() {
             </div>
 
             <div class="cameraPopupStreamBlock">
-              ${allowStreaming && streamingUrl
-                ? `<a class="cameraPopupStreamLink" href="${escapeHtml(streamingUrl)}" target="_blank" rel="noreferrer">Abrir streaming</a>`
+              ${allowStreaming && cleanString(p.camera_id || p.id)
+                ? `<button type="button" class="cameraPopupStreamLink" data-camera-stream data-camera-id="${escapeHtml(
+                    cleanString(p.camera_id || p.id)
+                  )}" data-camera-duration="0">Abrir streaming</button>`
                 : ""}
             </div>
           </div>
         `)
         .addTo(map);
       bindPopupCloseButton();
-      if (allowStreaming && streamingUrl) centerMobilePopup();
+      bindSmartCameraPopupActions();
+      if (allowStreaming) centerMobilePopup();
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
@@ -3845,6 +4274,57 @@ export default function MapPage() {
         ],
       });
       if (!features || features.length === 0) {
+        let clickedBairro = "";
+
+        if (showBairrosRef.current) {
+          const bairroLayers = [
+            LAYERS.bairros_selected_fill,
+            LAYERS.bairros_selected_line,
+            LAYERS.bairros_fill,
+            LAYERS.bairros_line,
+          ];
+          const renderedBairroFeatures = map.queryRenderedFeatures(e.point, { layers: bairroLayers });
+          const bairroFeature = renderedBairroFeatures.find((f: any) => {
+            return getBairroFeatureName(f?.properties).length > 0;
+          }) as any;
+          clickedBairro = getBairroFeatureName(bairroFeature?.properties);
+
+          if (!clickedBairro) {
+            const lng = Number(e.lngLat?.lng);
+            const lat = Number(e.lngLat?.lat);
+            const data = bairrosGeoRef.current;
+            if (Number.isFinite(lng) && Number.isFinite(lat) && data?.features?.length) {
+              const point: [number, number] = [lng, lat];
+              for (const feature of data.features as BairrosFeature[]) {
+                const nome = getBairroFeatureName(feature.properties);
+                if (!nome || !feature.geometry) continue;
+                const bbox = getGeometryBbox(feature.geometry);
+                if (!bbox) continue;
+                if (
+                  point[0] < bbox.minX ||
+                  point[0] > bbox.maxX ||
+                  point[1] < bbox.minY ||
+                  point[1] > bbox.maxY
+                ) {
+                  continue;
+                }
+                if (pointInGeometry(point, feature.geometry)) {
+                  clickedBairro = nome;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (clickedBairro) {
+          clearSelectedSecurityArea();
+          setSelectedBairro(clickedBairro);
+          setBairroQuery("");
+          setBairroReportMsg(null);
+          return;
+        }
+
         const codeFeature = map
           .queryRenderedFeatures(e.point, {
             layers: [
@@ -3887,58 +4367,6 @@ export default function MapPage() {
             selectSecurityArea(geometryMatch);
             return;
           }
-        }
-
-        let clickedBairro = "";
-
-        if (showBairrosRef.current) {
-          const bairroLayers = [
-            LAYERS.bairros_selected_fill,
-            LAYERS.bairros_selected_line,
-            LAYERS.bairros_fill,
-            LAYERS.bairros_line,
-          ];
-          const renderedBairroFeatures = map.queryRenderedFeatures(e.point, { layers: bairroLayers });
-          const bairroFeature = renderedBairroFeatures.find((f: any) => {
-            const nome = f?.properties?.NOME;
-            return typeof nome === "string" && nome.trim().length > 0;
-          }) as any;
-          clickedBairro = (bairroFeature?.properties?.NOME || "").toString().trim();
-
-          if (!clickedBairro) {
-            const lng = Number(e.lngLat?.lng);
-            const lat = Number(e.lngLat?.lat);
-            const data = bairrosGeoRef.current;
-            if (Number.isFinite(lng) && Number.isFinite(lat) && data?.features?.length) {
-              const point: [number, number] = [lng, lat];
-              for (const feature of data.features as BairrosFeature[]) {
-                const nome = (feature.properties?.NOME || "").trim();
-                if (!nome || !feature.geometry) continue;
-                const bbox = getGeometryBbox(feature.geometry);
-                if (!bbox) continue;
-                if (
-                  point[0] < bbox.minX ||
-                  point[0] > bbox.maxX ||
-                  point[1] < bbox.minY ||
-                  point[1] > bbox.maxY
-                ) {
-                  continue;
-                }
-                if (pointInGeometry(point, feature.geometry)) {
-                  clickedBairro = nome;
-                  break;
-                }
-              }
-            }
-          }
-        }
-
-        if (clickedBairro) {
-          clearSelectedSecurityArea();
-          setSelectedBairro(clickedBairro);
-          setBairroQuery("");
-          setBairroReportMsg(null);
-          return;
         }
 
         if (showBairrosRef.current) {
@@ -3998,7 +4426,12 @@ export default function MapPage() {
     if (!canViewBairros) {
       setLoadingBairros(false);
       setBairrosGeo(null);
+      setBairrosLinesGeo(null);
       setBairrosErr(null);
+      return;
+    }
+
+    if (authLoading || !accessToken) {
       return;
     }
 
@@ -4007,35 +4440,81 @@ export default function MapPage() {
       setLoadingBairros(true);
       setBairrosErr(null);
 
-      const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
-      const candidates = [
-        `${baseUrl}GeojsonBairros.geojson`,
-        "/GeojsonBairros.geojson",
-        "./GeojsonBairros.geojson",
-      ];
+      try {
+        const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(
+          `${API_BASE}/bairros/geojson`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+        if (!active) return;
+        setBairrosGeo(normalizeBairrosGeoData(data));
+        setBairrosLinesGeo(buildBairrosLineGeoData(data));
+        setLoadingBairros(false);
+      } catch (e) {
+        console.warn("Falha ao carregar bairros da API. Tentando fallback local.", e);
 
-      for (const url of candidates) {
-        try {
-          const data = await fetchJson<FeatureCollection<Polygon | MultiPolygon, any>>(url);
-          if (!active) return;
-          setBairrosGeo(data);
-          setLoadingBairros(false);
-          return;
-        } catch (e) {
-          console.warn("Falha ao carregar bairros de", url, e);
+        const baseUrl = (import.meta as any).env?.BASE_URL?.toString() || "/";
+        const candidates = [
+          `${baseUrl}GeojsonBairros.geojson`,
+          "/GeojsonBairros.geojson",
+          "./GeojsonBairros.geojson",
+        ];
+
+        for (const url of candidates) {
+          try {
+            const fallbackRes = await fetch(url);
+            if (!fallbackRes.ok) {
+              throw new Error(`${fallbackRes.status} - ${fallbackRes.statusText || "Erro"}`);
+            }
+            const fallbackData = (await fallbackRes.json()) as FeatureCollection<Polygon | MultiPolygon, any>;
+            if (!active) return;
+            setBairrosGeo(normalizeBairrosGeoData(fallbackData));
+            setBairrosLinesGeo(buildBairrosLineGeoData(fallbackData));
+            setBairrosErr(null);
+            setLoadingBairros(false);
+            return;
+          } catch (fallbackError) {
+            console.warn("Falha ao carregar fallback local de bairros em", url, fallbackError);
+          }
         }
-      }
 
-      if (!active) return;
-      setBairrosErr("Não foi possível carregar o GeoJSON dos bairros.");
-      setLoadingBairros(false);
+        if (!active) return;
+        setBairrosErr("Não foi possível carregar os bairros pela API nem pelo arquivo local.");
+        setBairrosLinesGeo(null);
+        setLoadingBairros(false);
+      }
     }
 
     loadBairros();
     return () => {
       active = false;
     };
-  }, [canViewBairros]);
+  }, [accessToken, authLoading, canViewBairros]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !canViewBairros || !bairrosGeo || !bairrosLinesGeo) return;
+
+    const syncBairros = () => {
+      ensureSourcesAndLayers(map);
+      updateBairrosData(map, bairrosGeo);
+      updateBairrosLineData(map, bairrosLinesGeo);
+      applyBairrosVisibility(map, showBairros, selectedBairro);
+    };
+
+    if (map.isStyleLoaded()) {
+      syncBairros();
+      return;
+    }
+
+    map.once("load", syncBairros);
+    return () => {
+      map.off("load", syncBairros);
+    };
+  }, [bairrosGeo, bairrosLinesGeo, canViewBairros, showBairros, selectedBairro]);
 
   useEffect(() => {
     if (!canViewRisp) {
@@ -4341,6 +4820,61 @@ export default function MapPage() {
     };
   }
 
+  async function requestCommonCameraSession(cameraId: string, durationSeconds: number) {
+    const trimmedCameraId = cleanString(cameraId);
+    if (!trimmedCameraId) {
+      throw new Error("ID da câmera indisponível.");
+    }
+
+    const data = await fetchJson<any>(`${API_BASE}/cameras/${encodeURIComponent(trimmedCameraId)}/session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ durationSeconds }),
+    });
+
+    const sessionUrl = normalizeSessionUrl(data?.session_url);
+    if (!sessionUrl) {
+      throw new Error("O backend não retornou uma URL de sessão válida.");
+    }
+
+    return {
+      ...data,
+      sessionUrl,
+    };
+  }
+
+  async function requestCommonCameraView(cameraId: string) {
+    const trimmedCameraId = cleanString(cameraId);
+    if (!trimmedCameraId) return;
+
+    await fetchJson<any>(`${API_BASE}/cameras/${encodeURIComponent(trimmedCameraId)}/view`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+  }
+
+  function shouldRetryCommonCameraSession(error: unknown) {
+    const rawMessage = String((error as any)?.message || "").trim();
+    const match = rawMessage.match(/^(\d{3})\s*-\s*(.*)$/);
+    const status = match ? Number(match[1]) : null;
+
+    if ([403, 404, 409, 423, 425, 429, 502, 503].includes(Number(status))) return true;
+
+    const normalized = rawMessage.toLowerCase();
+    return (
+      normalized.includes("expir") ||
+      normalized.includes("playback") ||
+      normalized.includes("sessão") ||
+      normalized.includes("session")
+    );
+  }
+
   async function openSmartCameraStreamWindow(source: SmartCameraSessionSource, durationSeconds: number) {
     if (!hasSmartCameraStreamingAccessRef.current) {
       await Swal.fire({
@@ -4388,6 +4922,66 @@ export default function MapPage() {
         icon: "warning",
         title: "Streaming indisponível",
         text: getSmartCameraSessionErrorMessage(error, "stream"),
+        confirmButtonText: "Entendi",
+      });
+    }
+  }
+
+  async function openCommonCameraStreamWindow(cameraId: string, durationSeconds: number) {
+    if (!hasStreamingAccessRef.current) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: "Seu perfil não pode abrir streaming desta câmera.",
+        confirmButtonText: "Entendi",
+      });
+      return;
+    }
+
+    const trimmedCameraId = cleanString(cameraId);
+    if (!trimmedCameraId) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: "Esta câmera não possui um ID válido para streaming.",
+        confirmButtonText: "Entendi",
+      });
+      return;
+    }
+
+    const streamWindow = window.open("about:blank", "_blank");
+    if (streamWindow) {
+      try {
+        streamWindow.opener = null;
+      } catch {}
+    }
+
+    try {
+      await requestCommonCameraView(trimmedCameraId).catch((error) => {
+        console.warn("Falha ao registrar visualização da câmera.", error);
+      });
+
+      let session: Awaited<ReturnType<typeof requestCommonCameraSession>>;
+      try {
+        session = await requestCommonCameraSession(trimmedCameraId, durationSeconds);
+      } catch (error) {
+        if (!shouldRetryCommonCameraSession(error)) throw error;
+        session = await requestCommonCameraSession(trimmedCameraId, durationSeconds);
+      }
+
+      if (streamWindow && !streamWindow.closed) {
+        streamWindow.location.href = session.sessionUrl;
+      } else {
+        window.location.href = session.sessionUrl;
+      }
+    } catch (error) {
+      if (streamWindow) {
+        streamWindow.close();
+      }
+      await Swal.fire({
+        icon: "warning",
+        title: "Streaming indisponível",
+        text: String((error as any)?.message || "Não foi possível abrir o streaming da câmera."),
         confirmButtonText: "Entendi",
       });
     }
@@ -4554,6 +5148,7 @@ export default function MapPage() {
     setBairroReportMsg("Solicitando geração do relatório...");
     try {
       const payload = {
+        name: `Relatório Bairro ${selectedBairro} - ${new Date().toISOString()}`,
         bairro: selectedBairro,
         geometry: selectedBairroFeature.geometry,
         selected_ids: selectedBairroReportSelectionIds,
@@ -4593,18 +5188,33 @@ export default function MapPage() {
     }
   }
 
-  function areaGeometryFromPoints(points: Array<[number, number]>): Polygon | null {
-    if (points.length < 3) return null;
-    const ring = [...points, points[0]];
+  function areaGeometryFromPolygons(
+    polygons: AreaDrawPolygonPoints[],
+    currentPoints: AreaDrawPolygonPoints
+  ): PolygonalGeometry | null {
+    const validPolygons = [...polygons];
+    if (currentPoints.length >= 3 && !areaDrawHasSelfIntersection(currentPoints)) {
+      validPolygons.push(currentPoints);
+    }
+    if (!validPolygons.length) return null;
+    if (validPolygons.length === 1) {
+      const ring = [...validPolygons[0], validPolygons[0][0]];
+      return {
+        type: "Polygon",
+        coordinates: [ring],
+      };
+    }
     return {
-      type: "Polygon",
-      coordinates: [ring],
+      type: "MultiPolygon",
+      coordinates: validPolygons.map((points) => [[...points, points[0]]]),
     };
   }
 
   function clearAreaDrawing() {
     areaDrawPointsRef.current = [];
+    areaDrawPolygonsRef.current = [];
     setAreaDrawPoints([]);
+    setAreaDrawPolygons([]);
     setAreaReportMsg(null);
   }
 
@@ -4624,6 +5234,24 @@ export default function MapPage() {
     setAreaReportMsg(null);
   }
 
+  function finalizeCurrentAreaPolygon() {
+    if (areaDrawPointsRef.current.length < 3) {
+      setAreaReportMsg("Adicione pelo menos 3 pontos para concluir este polígono.");
+      return;
+    }
+    if (areaDrawHasSelfIntersection(areaDrawPointsRef.current)) {
+      setAreaReportMsg("A área não pode se cruzar. Ajuste os pontos antes de concluir o polígono.");
+      return;
+    }
+
+    const nextPolygons = [...areaDrawPolygonsRef.current, [...areaDrawPointsRef.current]];
+    areaDrawPolygonsRef.current = nextPolygons;
+    areaDrawPointsRef.current = [];
+    setAreaDrawPolygons(nextPolygons);
+    setAreaDrawPoints([]);
+    setAreaReportMsg("Polígono concluído. Você pode iniciar outro desenho.");
+  }
+
   async function downloadAreaReport() {
     if (!canRequestAreaReport) {
       setAreaReportMsg(
@@ -4633,13 +5261,13 @@ export default function MapPage() {
       );
       return;
     }
-    const geometry = areaGeometryFromPoints(areaDrawPoints);
+    const geometry = areaGeometryFromPolygons(areaDrawPolygons, areaDrawPoints);
     if (!geometry) {
-      setAreaReportMsg("Desenhe uma área com pelo menos 3 pontos.");
+      setAreaReportMsg("Desenhe pelo menos um polígono com 3 pontos.");
       return;
     }
     if (areaDrawHasSelfIntersection(areaDrawPoints)) {
-      setAreaReportMsg("A área não pode se cruzar. Ajuste os pontos antes de gerar o PDF.");
+      setAreaReportMsg("O polígono em edição não pode se cruzar. Ajuste os pontos antes de gerar o PDF.");
       return;
     }
 
@@ -4894,7 +5522,7 @@ export default function MapPage() {
     if (!bairrosGeo?.features?.length) return [];
     const names = new Set<string>();
     for (const f of bairrosGeo.features as BairrosFeature[]) {
-      const nome = (f.properties?.NOME || "").trim();
+      const nome = getBairroFeatureName(f.properties);
       if (nome) names.add(nome);
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -4953,9 +5581,26 @@ export default function MapPage() {
 
   const selectedBairroFeature = useMemo(() => {
     if (!selectedBairro || !bairrosGeo) return null;
-    return (bairrosGeo.features as BairrosFeature[]).find(
-      (f) => (f.properties?.NOME || "").trim() === selectedBairro
-    ) || null;
+    const matches = (bairrosGeo.features as BairrosFeature[]).filter(
+      (f) => getBairroFeatureName(f.properties) === selectedBairro
+    );
+    if (!matches.length) return null;
+    if (matches.length === 1) return matches[0];
+
+    const geometries = matches
+      .map((feature) => feature.geometry)
+      .filter((geometry): geometry is Polygon | MultiPolygon => !!geometry);
+    const geometry = mergePolygonalGeometries(geometries);
+    if (!geometry) return null;
+
+    return {
+      ...matches[0],
+      geometry,
+      properties: {
+        ...matches[0].properties,
+        bairro_parts: matches.length,
+      },
+    };
   }, [bairrosGeo, selectedBairro]);
 
   const selectedBairroStats = useMemo(() => {
@@ -5020,6 +5665,12 @@ export default function MapPage() {
   const selectedSecurityFeature = useMemo(() => {
     if (!selectedSecurityArea) return null;
 
+    const canExtractSelectedSecurityArea =
+      (selectedSecurityArea.kind === "risp" && canExtractRispData) ||
+      (selectedSecurityArea.kind === "aisp" && canExtractAispData) ||
+      (selectedSecurityArea.kind === "cisp" && canExtractCispData);
+    if (!canExtractSelectedSecurityArea) return null;
+
     const collection =
       selectedSecurityArea.kind === "risp"
         ? rispGeo
@@ -5034,7 +5685,7 @@ export default function MapPage() {
     );
 
     return mergeSecurityAreaFeatures(matches);
-  }, [selectedSecurityArea, rispGeo, aispGeo, cispGeo]);
+  }, [selectedSecurityArea, rispGeo, aispGeo, cispGeo, canExtractRispData, canExtractAispData, canExtractCispData]);
 
   const selectedSecurityStatsKey = selectedSecurityArea
     ? `${selectedSecurityArea.kind}:${selectedSecurityArea.code}`
@@ -5056,28 +5707,7 @@ export default function MapPage() {
       setSelectedSecuritySummaryLoading(false);
     };
 
-    if (selectedSecurityArea.kind === "risp") {
-      setSelectedSecurityStatsState({ key, stats: null });
-      setSelectedSecuritySummaryLoading(true);
-
-      const timer = window.setTimeout(() => {
-        finish(
-          buildGeometryStats(
-            selectedSecurityFeature.geometry,
-            cameras,
-            camerasIntel,
-            camerasLpr,
-            radares
-          )
-        );
-      }, 0);
-
-      return () => {
-        cancelled = true;
-        window.clearTimeout(timer);
-      };
-    }
-
+    setSelectedSecuritySummaryLoading(false);
     finish(
       buildGeometryStats(
         selectedSecurityFeature.geometry,
@@ -5172,24 +5802,26 @@ export default function MapPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!bairrosGeo) return;
+    if (!bairrosGeo || !bairrosLinesGeo) return;
 
     if (map.isStyleLoaded()) {
       ensureSourcesAndLayers(map);
       updateBairrosData(map, bairrosGeo);
+      updateBairrosLineData(map, bairrosLinesGeo);
       return;
     }
 
     const handleLoad = () => {
       ensureSourcesAndLayers(map);
       updateBairrosData(map, bairrosGeo);
+      updateBairrosLineData(map, bairrosLinesGeo);
     };
     map.once("load", handleLoad);
     return () => {
       map.off("load", handleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bairrosGeo]);
+  }, [bairrosGeo, bairrosLinesGeo]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5353,7 +5985,7 @@ export default function MapPage() {
     if (!selectedBairro || !bairrosGeo) return;
 
     const feature = (bairrosGeo.features as BairrosFeature[]).find(
-      (f) => (f.properties?.NOME || "").trim() === selectedBairro
+      (f) => getBairroFeatureName(f.properties) === selectedBairro
     );
     if (!feature || !feature.geometry) return;
 
@@ -5419,19 +6051,19 @@ export default function MapPage() {
     if (!map) return;
     if (map.isStyleLoaded()) {
       ensureSourcesAndLayers(map);
-      updateAreaDrawData(map, areaDrawPoints);
+      updateAreaDrawData(map, areaDrawPolygons, areaDrawPoints);
       return;
     }
     const handleLoad = () => {
       ensureSourcesAndLayers(map);
-      updateAreaDrawData(map, areaDrawPoints);
+      updateAreaDrawData(map, areaDrawPolygons, areaDrawPoints);
     };
     map.once("load", handleLoad);
     return () => {
       map.off("load", handleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areaDrawPoints]);
+  }, [areaDrawPolygons, areaDrawPoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5829,16 +6461,25 @@ export default function MapPage() {
     }
   }, [panel, activeAdminTab]);
 
-  const panelWidth = panel === "admin" ? 860 : panel === "civitas" ? 1120 : 560;
+  const panelWidth =
+    panel === "admin"
+      ? activeAdminTab === "usage"
+        ? 1240
+        : 860
+      : panel === "civitas"
+        ? 1120
+        : 560;
   const panelSideInset = 16;
   const panelShiftRight = panel === "civitas" ? 190 : 0;
   const panelMaxHeight =
     panel === "admin"
-      ? activeAdminTab === "organizations"
-        ? "84vh"
-        : activeAdminTab === "users" && adminUsersOrgOpen
-        ? "84vh"
-        : "74vh"
+      ? activeAdminTab === "usage"
+        ? "82vh"
+        : activeAdminTab === "organizations"
+          ? "84vh"
+          : activeAdminTab === "users" && adminUsersOrgOpen
+            ? "84vh"
+            : "74vh"
       : "56vh";
   const currentListOption =
     availableListModes.find(({ mode }) => mode === listMode) ||
@@ -5867,6 +6508,10 @@ export default function MapPage() {
     : "";
   const canRequestSecurityAreaReport =
     !!selectedSecurityFeature?.geometry && activeReportLayers.length > 0;
+  const totalAreaPolygonCount =
+    areaDrawPolygons.length + (areaDrawPoints.length >= 3 ? 1 : 0);
+  const totalAreaPointCount =
+    areaDrawPolygons.reduce((total, points) => total + points.length, 0) + areaDrawPoints.length;
 
   const renderGeometrySummaryCard = ({
     title,
@@ -6238,6 +6883,7 @@ export default function MapPage() {
         }}
       >
         {showBairros &&
+          canExtractBairroData &&
           selectedBairro &&
           selectedBairroStats &&
           renderGeometrySummaryCard({
@@ -6421,7 +7067,15 @@ export default function MapPage() {
               <button
                 className={`dockChip ${showBairros ? "dockChipOn" : ""}`}
                 onClick={() => {
-                  setShowBairros((v) => !v);
+                  setShowBairros((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setSelectedBairro("");
+                      setBairroQuery("");
+                      setBairroReportMsg(null);
+                    }
+                    return next;
+                  });
                   bumpDockAutoHide();
                 }}
                 title={showBairros ? "Bairros ON" : "Bairros OFF"}
@@ -6507,6 +7161,11 @@ export default function MapPage() {
                 ) : null}
                 {loadingBairros && <div className="dockNote">Carregando bairros...</div>}
                 {bairrosErr && <div className="dockNote">{bairrosErr}</div>}
+                {!canExtractBairroData && selectedBairro && (
+                  <div className="dockNote">
+                    Esta camada exibe somente o contorno do bairro, sem resumo e sem download de PDF.
+                  </div>
+                )}
               </div>
             )}
 
@@ -6516,7 +7175,9 @@ export default function MapPage() {
                 onClick={() => {
                   if (areaDrawMode) {
                     setAreaDrawMode(false);
+                    areaDrawPolygonsRef.current = [];
                     setAreaDrawPoints([]);
+                    setAreaDrawPolygons([]);
                     setAreaToolsOpen(false);
                     setAreaReportMsg(null);
                     return;
@@ -6559,7 +7220,10 @@ export default function MapPage() {
                   </div>
                 </div>
                 <div className="dockNote" style={{ margin: 0 }}>
-                  Pontos da área: {areaDrawPoints.length}
+                  Polígonos: {totalAreaPolygonCount} • Pontos: {totalAreaPointCount}
+                </div>
+                <div className="dockNote" style={{ margin: 0 }}>
+                  Polígono em edição: {areaDrawPoints.length} ponto(s)
                 </div>
                 {areaDrawPoints.length >= 3 && areaDrawMode && (
                   <div className="dockNote" style={{ margin: 0, fontSize: 10 }}>
@@ -6570,7 +7234,13 @@ export default function MapPage() {
                   <button
                     className="btnGhost"
                     onClick={toggleAreaDrawing}
-                    style={{ borderRadius: 10, fontWeight: 800 }}
+                    style={{
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      background: areaDrawMode ? "rgba(239, 68, 68, 0.16)" : undefined,
+                      borderColor: areaDrawMode ? "rgba(239, 68, 68, 0.35)" : undefined,
+                      color: areaDrawMode ? "#b91c1c" : undefined,
+                    }}
                   >
                     {areaDrawMode ? "Parar desenho" : "Desenhar área"}
                   </button>
@@ -6584,19 +7254,40 @@ export default function MapPage() {
                   </button>
                   <button
                     className="btnGhost"
-                    onClick={clearAreaDrawing}
-                    disabled={areaDrawPoints.length === 0 || areaReportLoading}
-                    style={{ borderRadius: 10, opacity: areaDrawPoints.length === 0 || areaReportLoading ? 0.5 : 1 }}
+                    onClick={finalizeCurrentAreaPolygon}
+                    disabled={areaDrawPoints.length < 3 || areaReportLoading}
+                    style={{
+                      borderRadius: 10,
+                      opacity: areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1,
+                      background: "rgba(34, 197, 94, 0.14)",
+                      borderColor: "rgba(34, 197, 94, 0.32)",
+                      color: "#166534",
+                    }}
                   >
-                    Limpar área
+                    Novo polígono
+                  </button>
+                  <button
+                    className="btnGhost"
+                    onClick={clearAreaDrawing}
+                    disabled={(areaDrawPoints.length === 0 && areaDrawPolygons.length === 0) || areaReportLoading}
+                    style={{
+                      borderRadius: 10,
+                      opacity:
+                        (areaDrawPoints.length === 0 && areaDrawPolygons.length === 0) || areaReportLoading ? 0.5 : 1,
+                    }}
+                  >
+                    Limpar tudo
                   </button>
                   <button
                     className="btnGhost"
                     onClick={downloadAreaReport}
-                    disabled={!canRequestAreaReport || areaDrawPoints.length < 3 || areaReportLoading}
+                    disabled={!canRequestAreaReport || totalAreaPolygonCount === 0 || areaReportLoading}
                     style={{
                       borderRadius: 10,
-                      opacity: !canRequestAreaReport || areaDrawPoints.length < 3 || areaReportLoading ? 0.5 : 1,
+                      opacity: !canRequestAreaReport || totalAreaPolygonCount === 0 || areaReportLoading ? 0.5 : 1,
+                      background: "rgba(56, 189, 248, 0.16)",
+                      borderColor: "rgba(56, 189, 248, 0.35)",
+                      color: "#075985",
                     }}
                   >
                     {areaReportLoading ? "Gerando..." : "Baixar PDF"}
@@ -6987,7 +7678,6 @@ export default function MapPage() {
                 {listMode === "cameras" &&
                   (listItems as Camera[]).map((c) => {
                     const iconSrc = getPoiIconSource(mapBaseStyle, "camera");
-                    const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
                     return (
                       <div
                         key={c.code}
@@ -7028,16 +7718,18 @@ export default function MapPage() {
                                   [c.city, c.uf].filter(Boolean).join(" - ") ||
                                   "-"}
                               </span>
-                              {hasStreamingAccess && streamUrl && (
-                                <a
-                                  href={streamUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
+                              {hasStreamingAccess && c.id && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    void openCommonCameraStreamWindow(c.id || "", 0);
+                                  }}
                                   className="listStreamPill listStreamPill--camera"
                                 >
                                   Abrir streaming
-                                </a>
+                                </button>
                               )}
                             </div>
                           </div>
@@ -7051,7 +7743,7 @@ export default function MapPage() {
                     const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
                     const smartId = cleanString(c.id);
                     const showSmartStreamButton =
-                      hasSmartCameraStreamingAccess && Boolean(smartId) && !Boolean(smartId && unavailableSmartCameraIds[smartId]);
+                      hasSmartCameraStreamingAccess && Boolean(smartId) && !unavailableSmartCameraIds[smartId];
                     return (
                       <div
                         key={smartId || c.code}
@@ -7479,6 +8171,9 @@ export default function MapPage() {
                     onOrgDropdownOpenChange={setAdminUsersOrgOpen}
                   />
                 )}
+                {activeAdminTab === "usage" && (
+                  <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+                )}
                 {activeAdminTab === "organizations" && (
                   <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
                 )}
@@ -7862,10 +8557,9 @@ export default function MapPage() {
                     }
                   }}
                 >
-                  {listMode === "cameras" &&
+                {listMode === "cameras" &&
                     (listItems as Camera[]).map((c) => {
                       const iconSrc = getPoiIconSource(mapBaseStyle, "camera");
-                      const streamUrl = normalizeExternalUrl((c as any).streaming_url ?? c.stream_url ?? "");
                       return (
                         <div
                           key={c.code}
@@ -7904,16 +8598,18 @@ export default function MapPage() {
                                     [c.city, c.uf].filter(Boolean).join(" - ") ||
                                     "-"}
                                 </span>
-                                {hasStreamingAccess && streamUrl && (
-                                  <a
-                                    href={streamUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
+                                {hasStreamingAccess && c.id && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      void openCommonCameraStreamWindow(c.id || "", 0);
+                                    }}
                                     className="listStreamPill listStreamPill--camera"
                                   >
                                     Abrir streaming
-                                  </a>
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -7927,7 +8623,7 @@ export default function MapPage() {
                       const iconSrc = getPoiIconSource(mapBaseStyle, "camera_intel");
                       const smartId = cleanString(c.id);
                       const showSmartStreamButton =
-                        hasSmartCameraStreamingAccess && Boolean(smartId) && !Boolean(smartId && unavailableSmartCameraIds[smartId]);
+                        hasSmartCameraStreamingAccess && Boolean(smartId) && !unavailableSmartCameraIds[smartId];
                       return (
                         <div
                           key={smartId || c.code}
@@ -8416,6 +9112,9 @@ export default function MapPage() {
                     isMobile={isMobile}
                     onOrgDropdownOpenChange={setAdminUsersOrgOpen}
                   />
+                )}
+                {activeAdminTab === "usage" && (
+                  <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
                 )}
                 {activeAdminTab === "organizations" && (
                   <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />

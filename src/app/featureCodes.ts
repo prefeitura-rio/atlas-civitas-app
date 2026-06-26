@@ -5,6 +5,10 @@ const FEATURE_CODE_ALIASES: Record<string, string> = {
   camera_lpr: "cameras_lpr",
   lpr: "cameras_lpr",
   radar: "radares",
+  bairros: "bairros_com_extracao_dados",
+  bairro: "bairros_com_extracao_dados",
+  bairros_com_extracao: "bairros_com_extracao_dados",
+  bairros_sem_extracao: "bairros_sem_extracao_dados",
 };
 
 function cleanString(value: unknown) {
