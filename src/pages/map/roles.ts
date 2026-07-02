@@ -1,4 +1,4 @@
-export const USER_ROLES = ["admin", "user"] as const;
+export const USER_ROLES = ["admin", "manager", "user", "user_stream"] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 
@@ -18,6 +18,8 @@ export function normalizeRole(value: unknown): UserRole {
 export function roleLabel(role: unknown): string {
   const normalized = normalizeRole(role);
   if (normalized === "admin") return "Administrador";
+  if (normalized === "manager") return "Gestor";
+  if (normalized === "user_stream") return "Usuário com streaming";
   return "Usuário sem streaming";
 }
 
@@ -25,6 +27,21 @@ export function isAdminRole(role: unknown): boolean {
   return normalizeRole(role) === "admin";
 }
 
+export function isManagerRole(role: unknown): boolean {
+  return normalizeRole(role) === "manager";
+}
+
+export function canAccessAdminBackoffice(role: unknown): boolean {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "manager";
+}
+
 export function canAccessStreaming(role: unknown): boolean {
-  return normalizeRole(role) === "admin";
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "manager" || normalized === "user_stream";
+}
+
+export function canAccessSmartCameraStreaming(role: unknown): boolean {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "manager" || normalized === "user_stream";
 }

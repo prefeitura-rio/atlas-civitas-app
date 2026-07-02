@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { AdminOrganization, FeatureCatalogItem } from "./types";
 import { fetchJson, inputStyle } from "./shared";
+import { normalizeFeatureCode, normalizeFeatureCodes } from "../../app/featureCodes";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
@@ -27,7 +28,14 @@ const FEATURE_DISPLAY_NAMES: Record<string, string> = {
   cameras_inteligentes: "Super Câmeras Inteligentes",
   cameras_lpr: "Câmeras LPR",
   radares: "Radares",
-  bairros: "Bairros",
+  bairros_com_extracao_dados: "Bairros com extração de dados",
+  bairros_sem_extracao_dados: "Bairros sem extração de dados",
+  risp_com_extracao_dados: "RISP com extração de dados",
+  risp_sem_extracao_dados: "RISP sem extração de dados",
+  aisp_com_extracao_dados: "AISP com extração de dados",
+  aisp_sem_extracao_dados: "AISP sem extração de dados",
+  cisp_com_extracao_dados: "CISP com extração de dados",
+  cisp_sem_extracao_dados: "CISP sem extração de dados",
   risp: "RISP",
   aisp: "AISP",
   cisp: "CISP",
@@ -40,7 +48,14 @@ const FEATURE_CARD_ICONS: Partial<Record<string, FeatureCardIconConfig>> = {
   cameras_inteligentes: { kind: "image", src: cameraIntelIcon },
   cameras_lpr: { kind: "image", src: cameraLprIcon },
   radares: { kind: "image", src: radarIcon },
-  bairros: { kind: "lucide", Icon: Building2 },
+  bairros_com_extracao_dados: { kind: "lucide", Icon: Building2 },
+  bairros_sem_extracao_dados: { kind: "lucide", Icon: Building2 },
+  risp_com_extracao_dados: { kind: "lucide", Icon: Shield },
+  risp_sem_extracao_dados: { kind: "lucide", Icon: Shield },
+  aisp_com_extracao_dados: { kind: "lucide", Icon: ShieldAlert },
+  aisp_sem_extracao_dados: { kind: "lucide", Icon: ShieldAlert },
+  cisp_com_extracao_dados: { kind: "lucide", Icon: ShieldCheck },
+  cisp_sem_extracao_dados: { kind: "lucide", Icon: ShieldCheck },
   risp: { kind: "lucide", Icon: Shield },
   aisp: { kind: "lucide", Icon: ShieldAlert },
   cisp: { kind: "lucide", Icon: ShieldCheck },
@@ -53,10 +68,14 @@ const FALLBACK_FEATURE_CATALOG: FeatureCatalogItem[] = [
   { code: "cameras_inteligentes", name: "Super Câmeras Inteligentes", category: "layer" },
   { code: "cameras_lpr", name: "Câmeras LPR", category: "layer" },
   { code: "radares", name: "Radares", category: "layer" },
-  { code: "bairros", name: "Bairros", category: "layer" },
-  { code: "risp", name: "RISP", category: "layer" },
-  { code: "aisp", name: "AISP", category: "layer" },
-  { code: "cisp", name: "CISP", category: "layer" },
+  { code: "bairros_com_extracao_dados", name: "Bairros com extração de dados", category: "layer" },
+  { code: "bairros_sem_extracao_dados", name: "Bairros sem extração de dados", category: "layer" },
+  { code: "risp_com_extracao_dados", name: "RISP com extração de dados", category: "layer" },
+  { code: "risp_sem_extracao_dados", name: "RISP sem extração de dados", category: "layer" },
+  { code: "aisp_com_extracao_dados", name: "AISP com extração de dados", category: "layer" },
+  { code: "aisp_sem_extracao_dados", name: "AISP sem extração de dados", category: "layer" },
+  { code: "cisp_com_extracao_dados", name: "CISP com extração de dados", category: "layer" },
+  { code: "cisp_sem_extracao_dados", name: "CISP sem extração de dados", category: "layer" },
   { code: "gps", name: "GPS", category: "tool" },
   { code: "desenhar_area", name: "Desenhar Área", category: "tool" },
 ];
@@ -74,6 +93,24 @@ const FALLBACK_ORGANIZATION_TYPES = [
 ];
 
 const FALLBACK_JURISDICTION_LEVELS = ["Federal", "Estadual", "Municipal", "Privada"];
+const BAIROS_FEATURE_FAMILY = "bairros";
+const RISP_FEATURE_FAMILY = "risp";
+const AISP_FEATURE_FAMILY = "aisp";
+const CISP_FEATURE_FAMILY = "cisp";
+const LAYERS_FEATURE_CODES = ["cameras", "cameras_inteligentes", "cameras_lpr", "radares"] as const;
+const EXTRACTION_WITH_CODES = [
+  "bairros_com_extracao_dados",
+  "risp_com_extracao_dados",
+  "aisp_com_extracao_dados",
+  "cisp_com_extracao_dados",
+] as const;
+const EXTRACTION_WITHOUT_CODES = [
+  "bairros_sem_extracao_dados",
+  "risp_sem_extracao_dados",
+  "aisp_sem_extracao_dados",
+  "cisp_sem_extracao_dados",
+] as const;
+const TOOLS_FEATURE_CODES = ["gps", "desenhar_area"] as const;
 
 type OrganizationForm = {
   name: string;
@@ -83,29 +120,37 @@ type OrganizationForm = {
   feature_codes: string[];
 };
 
+const BAIRROS_FEATURE_CODES = [
+  "bairros_com_extracao_dados",
+  "bairros_sem_extracao_dados",
+] as const;
+const RISP_FEATURE_CODES = ["risp_com_extracao_dados", "risp_sem_extracao_dados"] as const;
+const AISP_FEATURE_CODES = ["aisp_com_extracao_dados", "aisp_sem_extracao_dados"] as const;
+const CISP_FEATURE_CODES = ["cisp_com_extracao_dados", "cisp_sem_extracao_dados"] as const;
+
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeFeatureCodes(value: unknown) {
-  if (!Array.isArray(value)) return [];
-
-  const seen = new Set<string>();
-  const next: string[] = [];
-
-  for (const item of value) {
-    const code = clean(item).toLowerCase();
-    if (!code || seen.has(code)) continue;
-    seen.add(code);
-    next.push(code);
-  }
-
-  return next;
 }
 
 function sameFeatureCodes(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
   return a.every((code, index) => code === b[index]);
+}
+
+function isBairrosFeatureCode(code: string) {
+  return BAIRROS_FEATURE_CODES.includes(code as (typeof BAIRROS_FEATURE_CODES)[number]);
+}
+
+function isRispFeatureCode(code: string) {
+  return RISP_FEATURE_CODES.includes(code as (typeof RISP_FEATURE_CODES)[number]);
+}
+
+function isAispFeatureCode(code: string) {
+  return AISP_FEATURE_CODES.includes(code as (typeof AISP_FEATURE_CODES)[number]);
+}
+
+function isCispFeatureCode(code: string) {
+  return CISP_FEATURE_CODES.includes(code as (typeof CISP_FEATURE_CODES)[number]);
 }
 
 function normalizeOrganization(raw: any, idx = 0): AdminOrganization {
@@ -123,7 +168,7 @@ function normalizeOrganization(raw: any, idx = 0): AdminOrganization {
 }
 
 function normalizeFeatureCatalogItem(raw: any, idx = 0): FeatureCatalogItem {
-  const code = clean(raw?.code || raw?.feature_code || raw?.id || `feature-${idx}`).toLowerCase();
+  const code = normalizeFeatureCode(raw?.code || raw?.feature_code || raw?.id || `feature-${idx}`);
   const rawName = clean(raw?.name || raw?.label || code || `Feature ${idx + 1}`);
   return {
     code,
@@ -134,7 +179,7 @@ function normalizeFeatureCatalogItem(raw: any, idx = 0): FeatureCatalogItem {
 }
 
 function getFeatureDisplayName(code: string, fallback = "") {
-  const normalized = clean(code).toLowerCase();
+  const normalized = normalizeFeatureCode(code);
   if (!normalized) return clean(fallback) || "-";
 
   const mapped = FEATURE_DISPLAY_NAMES[normalized];
@@ -182,10 +227,18 @@ function formatDateTime(value?: string | null) {
   return date.toLocaleString("pt-BR");
 }
 
-function formatCategoryLabel(value: string) {
-  if (value === "layer") return "Camadas";
-  if (value === "tool") return "Ferramentas";
-  return value ? value.replace(/_/g, " ") : "Outros";
+function featureCodesFromCatalog(codes: readonly string[], catalog: FeatureCatalogItem[]) {
+  const wanted = new Set(codes);
+  return catalog.filter((item) => wanted.has(item.code));
+}
+
+function featureFamilyKey(code: string) {
+  const normalized = normalizeFeatureCode(code);
+  if (isBairrosFeatureCode(normalized)) return BAIROS_FEATURE_FAMILY;
+  if (normalized === "risp" || isRispFeatureCode(normalized)) return RISP_FEATURE_FAMILY;
+  if (normalized === "aisp" || isAispFeatureCode(normalized)) return AISP_FEATURE_FAMILY;
+  if (normalized === "cisp" || isCispFeatureCode(normalized)) return CISP_FEATURE_FAMILY;
+  return "";
 }
 
 function sortFeatureCodes(codes: string[], catalog: FeatureCatalogItem[]) {
@@ -195,6 +248,21 @@ function sortFeatureCodes(codes: string[], catalog: FeatureCatalogItem[]) {
     if (diff !== 0) return diff;
     return a.localeCompare(b, "pt-BR");
   });
+}
+
+function normalizeExclusiveFeatureCodes(codes: string[], catalog: FeatureCatalogItem[]) {
+  const next: string[] = [];
+  const seenFamilies = new Set<string>();
+
+  for (const code of sortFeatureCodes(codes, catalog)) {
+    const family = featureFamilyKey(code);
+
+    if (family && seenFamilies.has(family)) continue;
+    if (family) seenFamilies.add(family);
+    next.push(code);
+  }
+
+  return next;
 }
 
 function getInitialForm(): OrganizationForm {
@@ -271,21 +339,14 @@ export function AdminOrganizationsPanel({
   const jurisdictionLevelWrapRef = useRef<HTMLDivElement | null>(null);
 
   const catalogItems = useMemo(() => {
-    const source = featureCatalog.length ? featureCatalog : FALLBACK_FEATURE_CATALOG;
+    const source = featureCatalog.length ? [...featureCatalog, ...FALLBACK_FEATURE_CATALOG] : FALLBACK_FEATURE_CATALOG;
     return source.filter((item, index, array) => array.findIndex((candidate) => candidate.code === item.code) === index);
   }, [featureCatalog]);
 
-  const catalogByCategory = useMemo(() => {
-    const grouped = new Map<string, FeatureCatalogItem[]>();
-
-    for (const item of catalogItems) {
-      const current = grouped.get(item.category) || [];
-      current.push(item);
-      grouped.set(item.category, current);
-    }
-
-    return Array.from(grouped.entries());
-  }, [catalogItems]);
+  const layersItems = useMemo(() => featureCodesFromCatalog(LAYERS_FEATURE_CODES, catalogItems), [catalogItems]);
+  const extractionWithItems = useMemo(() => featureCodesFromCatalog(EXTRACTION_WITH_CODES, catalogItems), [catalogItems]);
+  const extractionWithoutItems = useMemo(() => featureCodesFromCatalog(EXTRACTION_WITHOUT_CODES, catalogItems), [catalogItems]);
+  const toolsItems = useMemo(() => featureCodesFromCatalog(TOOLS_FEATURE_CODES, catalogItems), [catalogItems]);
 
   const organizationTypeOptions = useMemo(
     () => withCurrentValue(organizationTypes, form.organization_type),
@@ -304,13 +365,16 @@ export function AdminOrganizationsPanel({
   function toggleFeature(code: string) {
     setForm((prev) => {
       const exists = prev.feature_codes.includes(code);
-      const nextCodes = exists
-        ? prev.feature_codes.filter((item) => item !== code)
-        : [...prev.feature_codes, code];
+      const family = featureFamilyKey(code);
+      let nextCodes = exists ? prev.feature_codes.filter((item) => item !== code) : [...prev.feature_codes, code];
+
+      if (!exists && family) {
+        nextCodes = nextCodes.filter((item) => featureFamilyKey(item) !== family || item === code);
+      }
 
       return {
         ...prev,
-        feature_codes: sortFeatureCodes(nextCodes, catalogItems),
+        feature_codes: normalizeExclusiveFeatureCodes(nextCodes, catalogItems),
       };
     });
   }
@@ -333,7 +397,7 @@ export function AdminOrganizationsPanel({
       organization_type: clean(org.organization_type),
       acronym: clean(org.acronym),
       jurisdiction_level: clean(org.jurisdiction_level),
-      feature_codes: sortFeatureCodes(normalizeFeatureCodes(org.feature_codes), catalogItems),
+      feature_codes: normalizeExclusiveFeatureCodes(normalizeFeatureCodes(org.feature_codes), catalogItems),
     };
     setId(clean(org.id) || null);
     setForm(normalized);
@@ -480,7 +544,7 @@ export function AdminOrganizationsPanel({
       organization_type: clean(form.organization_type),
       acronym: clean(form.acronym),
       jurisdiction_level: clean(form.jurisdiction_level),
-      feature_codes: sortFeatureCodes(normalizeFeatureCodes(form.feature_codes), catalogItems),
+      feature_codes: normalizeExclusiveFeatureCodes(normalizeFeatureCodes(form.feature_codes), catalogItems),
     };
 
     if (!editingId) {
@@ -731,94 +795,215 @@ export function AdminOrganizationsPanel({
             </div>
           )}
 
-          <div
-            style={{
-              marginTop: 10,
-              padding: 8,
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.08)",
-              background: "rgba(248,250,252,0.86)",
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.78)" }}>Features habilitadas</div>
-              <div style={{ fontSize: 11, opacity: 0.72 }}>
-                {catalogLoading ? "Carregando catálogo..." : `${form.feature_codes.length} selecionada(s)`}
-              </div>
-            </div>
-
+          <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
             {catalogErr && (
               <div style={{ fontSize: 11, color: "#92400e" }}>
                 {catalogErr}. Usando catálogo local para edição.
               </div>
             )}
 
-            {catalogByCategory.map(([category, categoryItems]) => (
-              <div key={category} style={{ display: "grid", gap: 5 }}>
-                <div style={{ fontSize: 10, fontWeight: 900, color: "rgba(15,23,42,0.74)" }}>
-                  {formatCategoryLabel(category)}
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-                  }}
-                >
-                  {categoryItems.map((feature) => {
-                    const active = form.feature_codes.includes(feature.code);
-                    const icon = FEATURE_CARD_ICONS[feature.code];
-                    return (
-                      <button
-                        key={feature.code}
-                        type="button"
-                        onClick={() => toggleFeature(feature.code)}
+            {[
+              {
+                key: "layers",
+                columns: "1fr",
+                sections: [{ key: "layers", title: "Camadas", items: layersItems, columns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))" }],
+              },
+                {
+                  key: "extraction",
+                  columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                  sections: [
+                  { key: "without-extraction", title: "Sem extração de dados", items: extractionWithoutItems, columns: "1fr" },
+                  { key: "with-extraction", title: "Com extração de dados", items: extractionWithItems, columns: "1fr", tone: "danger" },
+                  ],
+                },
+              {
+                key: "tools",
+                columns: "1fr",
+                sections: [{ key: "tools", title: "Ferramentas", items: toolsItems, columns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" }],
+              },
+            ].map((group) => (
+              <div
+                key={group.key}
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  gridTemplateColumns: group.columns,
+                }}
+              >
+                {group.sections.map((section) => (
+                  <div
+                    key={section.title}
+                    style={{
+                      padding: 8,
+                      borderRadius: 14,
+                      border:
+                        section.title === "Ferramentas"
+                          ? "1px solid rgba(0,0,0,0.08)"
+                          : group.key === "extraction"
+                            ? "1px solid rgba(0,0,0,0.08)"
+                            : "1px solid rgba(0,0,0,0.08)",
+                      background:
+                        group.key === "extraction"
+                          ? section.tone === "danger"
+                            ? "linear-gradient(180deg, rgba(254,242,242,0.96) 0%, rgba(255,241,241,0.88) 100%)"
+                            : "rgba(248,250,252,0.86)"
+                          : "rgba(248,250,252,0.86)",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div
                         style={{
-                          textAlign: "left",
-                          padding: isMobile ? "11px 13px" : "11px 12px",
-                          borderRadius: 10,
-                          border: active ? "1px solid rgba(37,99,235,0.32)" : "1px solid rgba(0,0,0,0.10)",
-                          background: active ? "rgba(219,234,254,0.82)" : "rgba(255,255,255,0.92)",
-                          color: "rgba(15,23,42,0.88)",
-                          cursor: "pointer",
-                          display: "grid",
-                          gap: 0,
+                          fontSize: 12,
+                          fontWeight: 900,
+                          color:
+                            group.key === "extraction"
+                              ? section.tone === "danger"
+                                ? "#991b1b"
+                                : "rgba(0,0,0,0.78)"
+                              : "rgba(0,0,0,0.78)",
                         }}
                       >
-                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          {icon && (
-                            <span
+                        {section.title}
+                      </div>
+                      <div
+                        data-testid={`organization-section-count-${group.key}-${section.key}`}
+                        style={{ fontSize: 11, opacity: 0.72 }}
+                      >
+                        {catalogLoading ? "Carregando catálogo..." : `${section.items.filter((item) => form.feature_codes.includes(item.code)).length} selecionada(s)`}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 6,
+                        gridTemplateColumns: section.columns,
+                      }}
+                    >
+                      {section.items.map((feature) => {
+                        const active = form.feature_codes.includes(feature.code);
+                        const icon = FEATURE_CARD_ICONS[feature.code] || { kind: "lucide", Icon: Building2 };
+                        const isDesenharArea = feature.code === "desenhar_area";
+                        return (
+                          <div
+                            key={feature.code}
+                            style={
+                              isMobile && isDesenharArea
+                                ? {
+                                    display: "grid",
+                                    gap: 4,
+                                    gridTemplateRows: "12px 48px",
+                                    width: "100%",
+                                  }
+                                : { position: "relative", overflow: "visible", width: "100%" }
+                            }
+                            >
+                            {isMobile && isDesenharArea ? (
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 900,
+                                  color: "#991b1b",
+                                  lineHeight: 1.1,
+                                  whiteSpace: "nowrap",
+                                  pointerEvents: "none",
+                                  alignSelf: "end",
+                                }}
+                              >
+                                Com extração de dados
+                              </div>
+                            ) : (
+                              isDesenharArea && (
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    left: 2,
+                                    top: -16,
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                    color: "#991b1b",
+                                    lineHeight: 1.1,
+                                    whiteSpace: "nowrap",
+                                    pointerEvents: "none",
+                                  }}
+                                >
+                                  Com extração de dados
+                                </div>
+                              )
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => toggleFeature(feature.code)}
+                              data-testid={`organization-feature-${feature.code}`}
+                              data-feature-code={feature.code}
+                              data-active={active ? "true" : "false"}
+                              aria-pressed={active}
                               style={{
-                                width: 18,
-                                height: 18,
-                                borderRadius: 999,
-                                border: "1px solid rgba(15,23,42,0.10)",
-                                background: "rgba(255,255,255,0.88)",
+                                position: "relative",
+                                textAlign: "left",
+                                width: "100%",
+                                minWidth: 0,
+                                boxSizing: "border-box",
+                                padding: isMobile ? "11px 13px" : "11px 12px",
+                                height: 48,
+                                borderRadius: 10,
+                                border: isDesenharArea
+                                  ? active
+                                    ? "1px solid rgba(185,28,28,0.34)"
+                                    : "1px solid rgba(220,38,38,0.12)"
+                                  : active
+                                    ? group.key === "extraction"
+                                      ? section.tone === "danger"
+                                        ? "1px solid rgba(185,28,28,0.34)"
+                                        : "1px solid rgba(37,99,235,0.32)"
+                                      : "1px solid rgba(37,99,235,0.32)"
+                                    : "1px solid rgba(0,0,0,0.10)",
+                                background: active
+                                  ? isDesenharArea
+                                    ? "rgba(254,226,226,0.90)"
+                                    : group.key === "extraction" && section.tone === "danger"
+                                      ? "rgba(254,226,226,0.92)"
+                                      : "rgba(219,234,254,0.82)"
+                                  : isDesenharArea
+                                    ? "linear-gradient(180deg, rgba(254,242,242,0.96) 0%, rgba(255,241,241,0.88) 100%)"
+                                    : "rgba(255,255,255,0.92)",
+                                color: "rgba(15,23,42,0.88)",
+                                cursor: "pointer",
                                 display: "grid",
-                                placeItems: "center",
-                                flex: "0 0 auto",
-                                color: "rgba(15,23,42,0.72)",
+                                gap: 0,
                               }}
                             >
-                              {icon.kind === "image" ? (
-                                <img
-                                  src={icon.src}
-                                  alt=""
-                                  style={{ width: 11, height: 11, objectFit: "contain", opacity: 0.9 }}
-                                />
-                              ) : (
-                                <icon.Icon size={11} strokeWidth={2.1} />
-                              )}
-                            </span>
-                          )}
-                          <span style={{ fontSize: isMobile ? 12.5 : 12, fontWeight: 900 }}>{feature.name}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span
+                                  style={{
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius: 999,
+                                    border: "1px solid rgba(15,23,42,0.10)",
+                                    background: "rgba(255,255,255,0.88)",
+                                    display: "grid",
+                                    placeItems: "center",
+                                    flex: "0 0 auto",
+                                    color: active ? "#0f172a" : "rgba(15,23,42,0.68)",
+                                  }}
+                                >
+                                  {icon.kind === "image" ? (
+                                    <img src={icon.src} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.9 }} />
+                                  ) : (
+                                    <icon.Icon size={11} strokeWidth={2.1} />
+                                  )}
+                                </span>
+                                <span style={{ fontSize: isMobile ? 12.5 : 12, fontWeight: 900, lineHeight: 1.1 }}>{feature.name}</span>
+                              </span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>

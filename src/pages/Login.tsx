@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../app/auth";
 
-import civitasLogo from "@/assets/civitas_icon2.png";
+import civitasLogo from "@/assets/logo_civitasrio.png";
 import prefeituraLogo from "@/assets/prefeitura_icon.png";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -208,7 +208,7 @@ export default function Login() {
             src={prefeituraLogo}
             alt="Prefeitura do Rio"
             className="loginLogo"
-            style={{ height: 34, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
+            style={{ height: 44, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
 
@@ -217,7 +217,7 @@ export default function Login() {
             src={civitasLogo}
             alt="Civitas Rio"
             className="loginLogo"
-            style={{ height: 34, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
+            style={{ height: 44, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
           />
         </div>
         
@@ -239,31 +239,7 @@ export default function Login() {
             backdropFilter: "none",
           }}
         >
-          <div style={{ marginBottom: 38, textAlign: "center" }}>
-            <div
-              aria-label="ATLAS CIVITAS"
-              style={{
-                margin: "0 auto 6px",
-                display: "block",
-                fontSize: 36,
-                fontWeight: 900,
-                fontFamily: '"Cera Pro Medium", "Cera Pro", "Segoe UI", sans-serif',
-                textTransform: "uppercase",
-                letterSpacing: 1.2,
-                lineHeight: 1.1,
-                background: "linear-gradient(135deg, #00c0f3 0%, #00afe6 58%, #0096d0 100%)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              ATLAS CIVITAS
-            </div>
-            <p style={{ margin: "6px 0 0", opacity: 0.7, fontSize: 13 }}>
-              
-            </p>
-          </div>
+         
 
           {err && (
             <div style={{ marginBottom: 12 }}>

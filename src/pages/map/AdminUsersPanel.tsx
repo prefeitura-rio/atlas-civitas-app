@@ -9,7 +9,46 @@ const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWER = "abcdefghijklmnopqrstuvwxyz";
 const PASSWORD_CHARS = `${UPPER}${LOWER}`;
 const SUGGESTED_PASSWORD_SIZE = 10;
-type OrganizationOption = { name: string; organization_type: string };
+type OrganizationOption = {
+  id: string;
+  name: string;
+  organization_type: string;
+  jurisdiction_level: string;
+};
+
+type UserPayload = {
+  full_name: string;
+  email: string;
+  password?: string;
+  role?: UserRole;
+  organization_id?: string;
+  orgao?: string;
+  unidade?: string | null;
+  cpf?: string | null;
+  matricula?: string | null;
+};
+
+const ROLE_SELECT_OPTIONS: Array<{ value: UserRole; label: string }> = [
+  { value: "user", label: "Usuário sem streaming" },
+  { value: "user_stream", label: "Usuário com streaming" },
+  { value: "manager", label: "Gestor" },
+  { value: "admin", label: "Administrador" },
+];
+
+function canManagerTouchRole(nextRole: UserRole) {
+  return nextRole === "user" || nextRole === "user_stream";
+}
+
+function normalizeNullableText(value: unknown) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || null;
+}
+
+function normalizeIdLike(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const normalized = typeof value === "string" ? value.trim() : String(value).trim();
+  return normalized || null;
+}
 
 function randomIndex(max: number) {
   if (max <= 0) return 0;
@@ -100,87 +139,111 @@ function getUserExpirationBadge(expiresAt?: string | null) {
 export function AdminUsersPanel({
   apiBase,
   token,
+  viewerRole,
   isMobile,
   onOrgDropdownOpenChange,
 }: {
   apiBase: string;
   token: string;
+  viewerRole: UserRole;
   isMobile: boolean;
   onOrgDropdownOpenChange?: (open: boolean) => void;
 }) {
   const USERS_URL = `${apiBase}/users`;
   const ORGS_URL = `${apiBase}/organizations`;
 
-  const [loading, setLoading] = useState(false);
-  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingOrganizations, setLoadingOrganizations] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [items, setItems] = useState<AdminUser[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
 
-  const [id, setId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [cpf, setCpf] = useState("");
   const [matricula, setMatricula] = useState("");
-  const [unidade, setUnidade] = useState("");
-  const [orgao, setOrgao] = useState("");
+  const [organizationUnit, setOrganizationUnit] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("");
   const [password, setPassword] = useState("");
   const [suggestedPassword, setSuggestedPassword] = useState("");
   const [passwordCopied, setPasswordCopied] = useState(false);
-  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [role, setRole] = useState<UserRole>("user");
+  const [editingUserRole, setEditingUserRole] = useState<UserRole | null>(null);
   const [isActive, setIsActive] = useState(true);
-  const [roleOpen, setRoleOpen] = useState(false);
-  const [orgOpen, setOrgOpen] = useState(false);
-  const [orgSearch, setOrgSearch] = useState("");
-  const roleWrapRef = useRef<HTMLDivElement | null>(null);
-  const orgWrapRef = useRef<HTMLDivElement | null>(null);
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isOrganizationDropdownOpen, setIsOrganizationDropdownOpen] = useState(false);
+  const [organizationSearch, setOrganizationSearch] = useState("");
+  const roleDropdownRef = useRef<HTMLDivElement | null>(null);
+  const organizationDropdownRef = useRef<HTMLDivElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
-  const passwordCopiedTimerRef = useRef<number | null>(null);
+  const passwordCopyTimeoutRef = useRef<number | null>(null);
   const [userTab, setUserTab] = useState<"create" | "manage">("create");
-  const [manageFilter, setManageFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const [mobileCount, setMobileCount] = useState(ADMIN_PAGE_SIZE);
+  const [userSearch, setUserSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [visibleMobileUserCount, setVisibleMobileUserCount] = useState(ADMIN_PAGE_SIZE);
+  const isManagerViewer = viewerRole === "manager";
+  const roleSelectOptions = isManagerViewer
+    ? ROLE_SELECT_OPTIONS.filter(({ value }) => value === "user" || value === "user_stream")
+    : ROLE_SELECT_OPTIONS;
 
-  function resetForm() {
-    setId(null);
+  useEffect(() => {
+    if (!isManagerViewer) return;
+    if (canManagerTouchRole(role)) return;
+    setRole("user");
+  }, [isManagerViewer, role]);
+
+  function resetUserForm() {
+    setEditingUserId(null);
+    setEditingUserRole(null);
     setEmail("");
     setFullName("");
     setCpf("");
     setMatricula("");
-    setUnidade("");
-    setOrgao("");
+    setOrganizationUnit("");
+    setOrganizationName("");
+    setSelectedOrganizationId("");
     setPassword("");
     setSuggestedPassword("");
     setPasswordCopied(false);
     setRole("user");
     setIsActive(true);
-    setOrgOpen(false);
+    setIsRoleDropdownOpen(false);
+    setIsOrganizationDropdownOpen(false);
     setErr(null);
     setSuccess(null);
   }
 
-  async function load() {
+  async function loadUsers() {
     setErr(null);
-    setLoading(true);
+    setLoadingUsers(true);
     try {
       const data = await fetchJson<any>(USERS_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const list: AdminUser[] = Array.isArray(data) ? data : [];
+      const list: AdminUser[] = (Array.isArray(data) ? data : []).map((raw: any) => ({
+        ...raw,
+        cpf: normalizeNullableText(raw?.cpf),
+        matricula: normalizeNullableText(raw?.matricula),
+        orgao: normalizeNullableText(raw?.orgao || raw?.organization_name || raw?.organization?.name),
+        organization_id: normalizeIdLike(raw?.organization_id || raw?.organization?.id || raw?.org_id),
+        organization_name: normalizeNullableText(raw?.organization_name || raw?.organization?.name),
+      }));
 
-      setItems(list);
+      setUsers(list);
     } catch (e: any) {
       setErr(e?.message || "Erro ao carregar usuários");
     } finally {
-      setLoading(false);
+      setLoadingUsers(false);
     }
   }
 
   async function loadOrganizations() {
-    setLoadingOrgs(true);
+    setLoadingOrganizations(true);
     try {
       const data = await fetchJson<any>(ORGS_URL, {
         headers: { Authorization: `Bearer ${token}` },
@@ -194,43 +257,45 @@ export function AdminUsersPanel({
         ? data.results
         : [];
 
-      const normalized: OrganizationOption[] = list
+      const normalizedOrganizations: OrganizationOption[] = list
         .map((raw: any) => ({
+          id: normalizeIdLike(raw?.id || raw?.organization_id || raw?.uuid) || "",
           name: (raw?.name ?? "").toString().trim(),
           organization_type: (raw?.organization_type ?? "").toString().trim(),
+          jurisdiction_level: (raw?.jurisdiction_level ?? "").toString().trim(),
         }))
-        .filter((org: OrganizationOption) => org.name);
-      const dedup = Array.from(
-        new Map<string, OrganizationOption>(normalized.map((org) => [org.name, org])).values()
+        .filter((organization: OrganizationOption) => organization.id && organization.name);
+      const deduplicatedOrganizations = Array.from(
+        new Map<string, OrganizationOption>(normalizedOrganizations.map((organization) => [organization.id, organization])).values()
       ).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-      setOrganizations(dedup);
+      setOrganizations(deduplicatedOrganizations);
     } catch {
       // Não bloqueia tela de usuários se organizações falhar.
       setOrganizations([]);
     } finally {
-      setLoadingOrgs(false);
+      setLoadingOrganizations(false);
     }
   }
 
   useEffect(() => {
-    load();
+    loadUsers();
     loadOrganizations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    setPage(1);
-    setMobileCount(ADMIN_PAGE_SIZE);
-  }, [items.length, manageFilter]);
+    setCurrentPage(1);
+    setVisibleMobileUserCount(ADMIN_PAGE_SIZE);
+  }, [users.length, userSearch]);
 
   useEffect(() => {
     function handleDocClick(e: MouseEvent) {
       const target = e.target;
       if (!(target instanceof Node)) return;
-      const roleEl = roleWrapRef.current;
-      const orgEl = orgWrapRef.current;
-      if (roleEl && !roleEl.contains(target)) setRoleOpen(false);
-      if (orgEl && !orgEl.contains(target)) setOrgOpen(false);
+      const roleDropdown = roleDropdownRef.current;
+      const organizationDropdown = organizationDropdownRef.current;
+      if (roleDropdown && !roleDropdown.contains(target)) setIsRoleDropdownOpen(false);
+      if (organizationDropdown && !organizationDropdown.contains(target)) setIsOrganizationDropdownOpen(false);
     }
 
     document.addEventListener("mousedown", handleDocClick);
@@ -239,15 +304,15 @@ export function AdminUsersPanel({
 
   useEffect(() => {
     return () => {
-      if (!passwordCopiedTimerRef.current) return;
-      window.clearTimeout(passwordCopiedTimerRef.current);
-      passwordCopiedTimerRef.current = null;
+      if (!passwordCopyTimeoutRef.current) return;
+      window.clearTimeout(passwordCopyTimeoutRef.current);
+      passwordCopyTimeoutRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    onOrgDropdownOpenChange?.(orgOpen);
-  }, [orgOpen, onOrgDropdownOpenChange]);
+    onOrgDropdownOpenChange?.(isOrganizationDropdownOpen || isRoleDropdownOpen);
+  }, [isOrganizationDropdownOpen, isRoleDropdownOpen, onOrgDropdownOpenChange]);
 
   useEffect(() => {
     return () => {
@@ -255,31 +320,44 @@ export function AdminUsersPanel({
     };
   }, [onOrgDropdownOpenChange]);
 
-  function pick(u: AdminUser) {
+  function editUser(user: AdminUser) {
+    const nextRole = (user.role || "user").toLowerCase();
+    if (isManagerViewer && !canManagerTouchRole(isUserRole(nextRole) ? nextRole : "user")) {
+      setErr("Gestor não pode editar admin ou outro gestor.");
+      setSuccess(null);
+      return;
+    }
+
     setUserTab("create");
-    setId(u.id);
-    setEmail(u.email || "");
-    setFullName(u.full_name || "");
-    setCpf(formatCpf(u.cpf || ""));
-    setMatricula(u.matricula || "");
-    const nextOrgao = (u.orgao || "").toString();
-    const matchedOrg = organizations.find((org) => org.name === nextOrgao);
-    setOrgao(nextOrgao);
-    setUnidade((u.unidade || matchedOrg?.organization_type || "").toString());
+    setEditingUserId(user.id);
+    setEditingUserRole(isUserRole(nextRole) ? nextRole : "user");
+    setEmail(user.email || "");
+    setFullName(user.full_name || "");
+    setCpf(formatCpf(user.cpf || ""));
+    setMatricula(user.matricula || "");
+    const nextSelectedOrganizationId = normalizeIdLike(user.organization_id);
+    const nextOrganizationName = (user.orgao || user.organization_name || "").toString().trim();
+    const matchedOrganization =
+      organizations.find(
+        (organization) => nextSelectedOrganizationId && organization.id === nextSelectedOrganizationId
+      ) || organizations.find((organization) => nextOrganizationName && organization.name === nextOrganizationName);
+    setSelectedOrganizationId(nextSelectedOrganizationId || matchedOrganization?.id || "");
+    setOrganizationName(nextOrganizationName || matchedOrganization?.name || "");
+    setOrganizationUnit((user.unidade || matchedOrganization?.organization_type || "").toString());
     setPassword("");
     setSuggestedPassword("");
     setPasswordCopied(false);
-    const nextRole = (u.role || "user").toLowerCase();
     setRole(isUserRole(nextRole) ? nextRole : "user");
-    setIsActive(!!u.is_active);
+    setIsActive(!!user.is_active);
   }
 
   function refreshPasswordSuggestion() {
+    if (editingUserId) return;
     setSuggestedPassword(generateStrongPassword());
   }
 
   function applySuggestedPassword() {
-    if (!suggestedPassword) return;
+    if (!suggestedPassword || editingUserId) return;
     setPassword(suggestedPassword);
     setPasswordCopied(false);
     setErr(null);
@@ -307,8 +385,8 @@ export function AdminUsersPanel({
         document.body.removeChild(temp);
       }
       setPasswordCopied(true);
-      if (passwordCopiedTimerRef.current) window.clearTimeout(passwordCopiedTimerRef.current);
-      passwordCopiedTimerRef.current = window.setTimeout(() => {
+      if (passwordCopyTimeoutRef.current) window.clearTimeout(passwordCopyTimeoutRef.current);
+      passwordCopyTimeoutRef.current = window.setTimeout(() => {
         setPasswordCopied(false);
       }, 1500);
     } catch {
@@ -343,59 +421,75 @@ export function AdminUsersPanel({
     const normalizedCpf = normalizeCpf(cpf.trim());
     const trimmedMatricula = matricula.trim();
     const trimmedPassword = password.trim();
-    const trimmedOrgao = orgao.trim();
-    const selectedOrganization = organizations.find((org) => org.name === trimmedOrgao);
-    const organizationType = (selectedOrganization?.organization_type || unidade).trim();
+    const trimmedOrganizationName = organizationName.trim();
+    const selectedOrganizationOption =
+      organizations.find((organization) => organization.id === selectedOrganizationId.trim()) ||
+      organizations.find((organization) => organization.name === trimmedOrganizationName);
+    const selectedOrganizationUnit = (selectedOrganizationOption?.organization_type || organizationUnit).trim();
+    const resolvedOrganizationId = selectedOrganizationOption?.id || selectedOrganizationId.trim() || "";
+    const resolvedOrganizationName = trimmedOrganizationName || selectedOrganizationOption?.name || "";
+    const cpfForPayload = normalizedCpf || null;
+    const matriculaForPayload = trimmedMatricula || null;
+    const organizationUnitForPayload = selectedOrganizationUnit || null;
 
     if (!trimmedEmail) return setErr("Email é obrigatório.");
     if (!trimmedFullName || trimmedFullName.length < 3) return setErr("Nome completo inválido.");
-    if (!normalizedRole) return setErr("Role é obrigatório (admin/user).");
-    if (!isUserRole(normalizedRole)) return setErr("Role deve ser admin ou user.");
-    if (!trimmedMatricula) return setErr("Matrícula é obrigatória.");
-    if (!trimmedOrgao) return setErr("Órgão é obrigatório.");
-    if (!selectedOrganization) return setErr("Selecione um órgão válido da lista.");
-    if (!organizationType) return setErr("Tipo da organização é obrigatório.");
+    if (!normalizedRole) return setErr("Role é obrigatório (admin/manager/user/user_stream).");
+    if (!isUserRole(normalizedRole)) return setErr("Role deve ser admin, manager, user ou user_stream.");
+    if (isManagerViewer && editingUserRole && !canManagerTouchRole(editingUserRole)) {
+      return setErr("Gestor não pode criar ou editar admin ou outro gestor.");
+    }
+    if (isManagerViewer && !canManagerTouchRole(normalizedRole as UserRole)) {
+      return setErr("Gestor não pode criar ou editar admin ou outro gestor.");
+    }
+    if (!resolvedOrganizationId && !resolvedOrganizationName) return setErr("Órgão é obrigatório.");
+    if (!cpfForPayload && !matriculaForPayload) return setErr("Informe cpf ou matrícula.");
+    if (cpfForPayload && cpfForPayload.length !== 11) return setErr("CPF deve ter 11 dígitos.");
 
-    if (!id) {
-      if (normalizedCpf.length !== 11) return setErr("CPF deve ter 11 dígitos.");
+    if (!editingUserId) {
       if (!trimmedPassword || trimmedPassword.length < 8) return setErr("Senha mínima: 8 caracteres.");
-    } else if (trimmedPassword && trimmedPassword.length < 8) {
-      return setErr("Senha mínima: 8 caracteres.");
     }
 
-    const creating = !id;
+    const isCreatingUser = !editingUserId;
+    const organizationReferencePayload = resolvedOrganizationId
+      ? { organization_id: resolvedOrganizationId }
+      : resolvedOrganizationName
+      ? { orgao: resolvedOrganizationName }
+      : {};
+    const baseUserPayload = {
+      email: trimmedEmail,
+      full_name: trimmedFullName,
+      cpf: cpfForPayload,
+      matricula: matriculaForPayload,
+      unidade: organizationUnitForPayload,
+      ...organizationReferencePayload,
+    };
 
     try {
-      if (creating) {
+      if (isCreatingUser) {
+        const payload: UserPayload = {
+          ...baseUserPayload,
+          password: trimmedPassword,
+          role: normalizedRole as UserRole,
+        };
+
         await fetchJson(USERS_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            email: trimmedEmail,
-            full_name: trimmedFullName,
-            cpf: normalizedCpf,
-            matricula: trimmedMatricula,
-            unidade: organizationType || null,
-            orgao: trimmedOrgao,
-            password: trimmedPassword,
-            role: normalizedRole,
-          }),
+          body: JSON.stringify(payload),
         });
       } else {
-        const payload: any = { is_active: isActive };
-        if (trimmedEmail) payload.email = trimmedEmail;
-        if (trimmedFullName) payload.full_name = trimmedFullName;
-        if (normalizedRole) payload.role = normalizedRole;
-        if (normalizedCpf) payload.cpf = normalizedCpf;
-        if (trimmedMatricula) payload.matricula = trimmedMatricula;
-        payload.unidade = organizationType || null;
-        if (trimmedOrgao) payload.orgao = trimmedOrgao;
+        const payload: Partial<UserPayload> & { is_active: boolean } = {
+          is_active: isActive,
+          ...baseUserPayload,
+          role: normalizedRole as UserRole,
+        };
         if (trimmedPassword) payload.password = trimmedPassword;
 
-        await fetchJson(`${USERS_URL}/${id}`, {
+        await fetchJson(`${USERS_URL}/${editingUserId}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -405,9 +499,9 @@ export function AdminUsersPanel({
         });
       }
 
-      resetForm();
-      setSuccess(creating ? "Usuário criado com sucesso." : "Usuário atualizado com sucesso.");
-      load();
+      resetUserForm();
+      setSuccess(isCreatingUser ? "Usuário criado com sucesso." : "Usuário atualizado com sucesso.");
+      loadUsers();
     } catch (e: any) {
       setErr(e?.message || "Erro ao salvar usuário");
     }
@@ -422,8 +516,8 @@ export function AdminUsersPanel({
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (id === userId) resetForm();
-      load();
+      if (editingUserId === userId) resetUserForm();
+      loadUsers();
     } catch (e: any) {
       setErr(e?.message || "Erro ao desativar usuário");
     }
@@ -438,31 +532,41 @@ export function AdminUsersPanel({
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      load();
+      loadUsers();
     } catch (e: any) {
       setErr(e?.message || "Erro ao reativar usuário");
     }
   }
 
-  const normalizedManageFilter = manageFilter.trim().toLowerCase();
-  const normalizedManageFilterCpf = normalizedManageFilter.replace(/\D/g, "");
+  const normalizedUserSearch = userSearch.trim().toLowerCase();
+  const normalizedUserSearchDigits = normalizedUserSearch.replace(/\D/g, "");
   const filteredOrganizations = useMemo(() => {
-    const q = orgSearch.trim().toLowerCase();
+    const q = organizationSearch.trim().toLowerCase();
     if (!q) return organizations;
-    return organizations.filter((org) => {
-      const name = org.name.toLowerCase();
-      const type = (org.organization_type || "").toLowerCase();
+    return organizations.filter((organization) => {
+      const name = organization.name.toLowerCase();
+      const type = (organization.organization_type || "").toLowerCase();
       return name.includes(q) || type.includes(q);
     });
-  }, [organizations, orgSearch]);
+  }, [organizations, organizationSearch]);
   const shouldShowFiveOrgRows = filteredOrganizations.length >= 5;
-  const selectedOrganization = organizations.find((org) => org.name === orgao);
-  const selectedOrganizationType = selectedOrganization?.organization_type || "";
-  const filteredItems = items.filter((u) => {
-    if (!normalizedManageFilter) return true;
-    const name = (u.full_name || "").toLowerCase();
-    const cpfDigits = (u.cpf || "").replace(/\D/g, "");
-    return name.includes(normalizedManageFilter) || (normalizedManageFilterCpf && cpfDigits.includes(normalizedManageFilterCpf));
+  const selectedOrganizationOption =
+    organizations.find((organization) => organization.id === selectedOrganizationId) ||
+    organizations.find((organization) => organization.name === organizationName);
+  const selectedOrganizationUnit = selectedOrganizationOption?.organization_type || "";
+  const cpfOrMatriculaError = err === "Informe cpf ou matrícula.";
+  const filteredUsers = users.filter((user) => {
+    if (!normalizedUserSearch) return true;
+    const name = (user.full_name || "").toLowerCase();
+    const organizationNameValue = (user.orgao || user.organization_name || "").toLowerCase();
+    const cpfDigits = (user.cpf || "").replace(/\D/g, "");
+    const matriculaText = (user.matricula || "").toLowerCase();
+    return (
+      name.includes(normalizedUserSearch) ||
+      organizationNameValue.includes(normalizedUserSearch) ||
+      matriculaText.includes(normalizedUserSearch) ||
+      (normalizedUserSearchDigits && cpfDigits.includes(normalizedUserSearchDigits))
+    );
   });
 
   return (
@@ -519,17 +623,17 @@ export function AdminUsersPanel({
         </div>
       )}
       {userTab === "create" && (
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
+        <div
+          className="adminCard"
+          style={{
+            padding: 12,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.90)",
+            border: "1px solid rgba(0,0,0,0.10)",
+          }}
+        >
         <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 10 }}>
-          {id ? "Editar usuário" : "Criar usuário"}
+          {editingUserId ? "Editar usuário" : "Criar usuário"}
         </div>
 
         <div
@@ -544,42 +648,65 @@ export function AdminUsersPanel({
             style={inputStyle()}
           />
 
-          <input
-            value={cpf}
-            onChange={(e) => setCpf(formatCpf(e.target.value))}
-            placeholder="cpf (11 dígitos)"
-            style={inputStyle()}
-          />
+          <div
+            style={{
+              gridColumn: isMobile ? "1 / span 1" : "1 / span 2",
+              display: "grid",
+              gap: 10,
+              padding: 12,
+              borderRadius: 16,
+              border: cpfOrMatriculaError ? "1px solid rgba(220,38,38,0.24)" : "1px solid rgba(15,23,42,0.08)",
+              background: cpfOrMatriculaError ? "rgba(254,242,242,0.96)" : "rgba(248,250,252,0.92)",
+            }}
+          >
+            <div
+              className="adminGrid2"
+              style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))" }}
+            >
+              <input
+                value={cpf}
+                onChange={(e) => setCpf(formatCpf(e.target.value))}
+                placeholder="CPF"
+                inputMode="numeric"
+                maxLength={14}
+                aria-invalid={cpfOrMatriculaError}
+                style={inputStyle()}
+              />
 
-          <input
-            value={matricula}
-            onChange={(e) => setMatricula(e.target.value)}
-            placeholder="matrícula"
-            style={inputStyle()}
-          />
-          <div className="customSelect" ref={orgWrapRef}>
+              <input
+                value={matricula}
+                onChange={(e) => {
+                  setMatricula(e.target.value);
+                }}
+                placeholder="Matrícula"
+                aria-invalid={cpfOrMatriculaError}
+                style={inputStyle()}
+              />
+            </div>
+          </div>
+          <div className="customSelect" ref={organizationDropdownRef}>
             <button
               type="button"
               className="customSelectBtn"
               onClick={() => {
-                if (loadingOrgs) return;
-                setOrgOpen((v) => {
-                  const next = !v;
-                  if (next) setOrgSearch("");
+                if (loadingOrganizations) return;
+                setIsOrganizationDropdownOpen((isOpen) => {
+                  const next = !isOpen;
+                  if (next) setOrganizationSearch("");
                   return next;
                 });
               }}
-              disabled={loadingOrgs}
+              disabled={loadingOrganizations}
               style={
-                loadingOrgs
+                loadingOrganizations
                   ? { cursor: "not-allowed", opacity: 0.75, fontWeight: 500 }
                   : { fontWeight: 500 }
               }
             >
-              <span>{orgao || (loadingOrgs ? "Carregando organizações..." : "órgão (nome da organização)")}</span>
+              <span>{organizationName || (loadingOrganizations ? "Carregando organizações..." : "órgão / organização")}</span>
               <span className="customSelectChevron" />
             </button>
-            {orgOpen && !loadingOrgs && (
+            {isOrganizationDropdownOpen && !loadingOrganizations && (
               <div className="customSelectMenu" style={{ gap: 6 }}>
                 <div
                   style={{
@@ -592,8 +719,8 @@ export function AdminUsersPanel({
                   }}
                 >
                   <input
-                    value={orgSearch}
-                    onChange={(e) => setOrgSearch(e.target.value)}
+                    value={organizationSearch}
+                    onChange={(e) => setOrganizationSearch(e.target.value)}
                     placeholder="Filtrar organização..."
                     style={{
                       ...inputStyle(),
@@ -616,44 +743,49 @@ export function AdminUsersPanel({
                     gap: 4,
                   }}
                 >
-                {filteredOrganizations.map((org) => (
-                  <button
-                    key={`${org.name}-${org.organization_type}`}
-                    type="button"
-                    className={`customSelectItem ${orgao === org.name ? "customSelectItemActive" : ""}`}
-                    onClick={() => {
-                      setOrgao(org.name);
-                      setUnidade(org.organization_type || "");
-                      setOrgOpen(false);
-                    }}
-                    style={{
-                      display: "grid",
-                      gap: 2,
-                      alignItems: "start",
-                      textAlign: "left",
-                      borderRadius: 12,
-                      padding: "9px 10px",
-                      fontWeight: 500,
-                    }}
-                  >
-                    <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(0,0,0,0.86)" }}>{org.name}</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(15,23,42,0.62)" }}>
-                      {org.organization_type || "Tipo não informado"}
-                    </span>
-                  </button>
-                ))}
-                {!filteredOrganizations.length && (
-                  <div
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      fontSize: 12,
-                      color: "rgba(0,0,0,0.62)",
-                    }}
-                  >
-                    Nenhuma organização encontrada para esse filtro.
-                  </div>
-                )}
+                  {filteredOrganizations.map((organization) => (
+                    <button
+                      key={organization.id}
+                      type="button"
+                      className={`customSelectItem ${
+                        selectedOrganizationId === organization.id || organizationName === organization.name
+                          ? "customSelectItemActive"
+                          : ""
+                      }`}
+                      onClick={() => {
+                        setSelectedOrganizationId(organization.id);
+                        setOrganizationName(organization.name);
+                        setOrganizationUnit(organization.organization_type || "");
+                        setIsOrganizationDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "grid",
+                        gap: 2,
+                        alignItems: "start",
+                        textAlign: "left",
+                        borderRadius: 12,
+                        padding: "9px 10px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(0,0,0,0.86)" }}>{organization.name}</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(15,23,42,0.62)" }}>
+                        {organization.organization_type || "Tipo não informado"}
+                      </span>
+                    </button>
+                  ))}
+                  {!filteredOrganizations.length && (
+                    <div
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        fontSize: 12,
+                        color: "rgba(0,0,0,0.62)",
+                      }}
+                    >
+                      Nenhuma organização encontrada para esse filtro.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -666,13 +798,13 @@ export function AdminUsersPanel({
               disabled
               style={{
                 cursor: "not-allowed",
-                opacity: orgao ? 1 : 0.75,
+                opacity: organizationName ? 1 : 0.75,
                 fontWeight: 500,
               }}
-              title={orgao ? "Tipo vinculado à organização selecionada" : "Selecione primeiro uma organização"}
+              title={organizationName ? "Unidade opcional vinculada à organização selecionada" : "Unidade opcional"}
             >
               <span>
-                {selectedOrganizationType || unidade || (loadingOrgs ? "Carregando tipos..." : "tipo da organização")}
+                {selectedOrganizationUnit || organizationUnit || (loadingOrganizations ? "Carregando unidade..." : "unidade (opcional)")}
               </span>
             </button>
           </div>
@@ -687,12 +819,13 @@ export function AdminUsersPanel({
                   setPasswordCopied(false);
                 }}
                 onClick={refreshPasswordSuggestion}
-                placeholder={id ? "nova senha (opcional)" : "senha (mín 8)"}
-                type={passwordVisible ? "text" : "password"}
-                autoComplete="new-password"
+                placeholder={editingUserId ? "nova senha (opcional)" : "senha (mín 8)"}
+                type={isPasswordVisible ? "text" : "password"}
                 style={{
                   ...inputStyle(),
                   paddingRight: 70,
+                  opacity: 1,
+                  cursor: "text",
                 }}
               />
               <div
@@ -708,7 +841,7 @@ export function AdminUsersPanel({
               >
                 <button
                   type="button"
-                  onClick={() => setPasswordVisible((v) => !v)}
+                  onClick={() => setIsPasswordVisible((isVisible) => !isVisible)}
                   style={{
                     width: 26,
                     height: 26,
@@ -722,10 +855,10 @@ export function AdminUsersPanel({
                     padding: 0,
                     cursor: "pointer",
                   }}
-                  title={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
-                  aria-label={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
+                  title={isPasswordVisible ? "Ocultar senha" : "Mostrar senha"}
+                  aria-label={isPasswordVisible ? "Ocultar senha" : "Mostrar senha"}
                 >
-                  {passwordVisible ? (
+                  {isPasswordVisible ? (
                     <EyeOff size={14} strokeWidth={2.2} aria-hidden="true" />
                   ) : (
                     <Eye size={14} strokeWidth={2.2} aria-hidden="true" />
@@ -756,12 +889,12 @@ export function AdminUsersPanel({
                 </button>
               </div>
             </div>
-            {id && (
-              <div style={{ paddingLeft: 2, fontSize: 11, fontWeight: 700, color: "rgba(15,23,42,0.58)" }}>
+            {editingUserId && (
+              <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(15,23,42,0.58)", paddingLeft: 2 }}>
                 Deixe em branco para manter a senha atual.
               </div>
             )}
-            {suggestedPassword && (
+            {!editingUserId && suggestedPassword && (
               <button
                 type="button"
                 onClick={applySuggestedPassword}
@@ -786,33 +919,26 @@ export function AdminUsersPanel({
             )}
           </div>
 
-          <div className="customSelect" ref={roleWrapRef}>
-            <button type="button" className="customSelectBtn" onClick={() => setRoleOpen((v) => !v)}>
+          <div className="customSelect" ref={roleDropdownRef}>
+            <button type="button" className="customSelectBtn" onClick={() => setIsRoleDropdownOpen((isOpen) => !isOpen)}>
               <span>{roleLabel(role)}</span>
               <span className="customSelectChevron" />
             </button>
-            {roleOpen && (
+            {isRoleDropdownOpen && (
               <div className="customSelectMenu">
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "user" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("user");
-                    setRoleOpen(false);
-                  }}
-                >
-                  Usuário sem streaming
-                </button>
-                <button
-                  type="button"
-                  className={`customSelectItem ${role === "admin" ? "customSelectItemActive" : ""}`}
-                  onClick={() => {
-                    setRole("admin");
-                    setRoleOpen(false);
-                  }}
-                >
-                  Administrador
-                </button>
+                {roleSelectOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`customSelectItem ${role === option.value ? "customSelectItemActive" : ""}`}
+                    onClick={() => {
+                      setRole(option.value);
+                      setIsRoleDropdownOpen(false);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -855,11 +981,11 @@ export function AdminUsersPanel({
               fontWeight: 900,
             }}
           >
-            {id ? "Salvar alterações" : "Criar usuário"}
+            {editingUserId ? "Salvar alterações" : "Criar usuário"}
           </button>
 
           <button
-            onClick={resetForm}
+            onClick={resetUserForm}
             style={{
               padding: "10px 12px",
               borderRadius: 14,
@@ -880,31 +1006,31 @@ export function AdminUsersPanel({
       )}
 
       {userTab === "manage" && (
-      <div
-        className="adminCard"
-        style={{
-          padding: 12,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.90)",
-          border: "1px solid rgba(0,0,0,0.10)",
-        }}
-      >
+        <div
+          className="adminCard"
+          style={{
+            padding: 12,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.90)",
+            border: "1px solid rgba(0,0,0,0.10)",
+          }}
+        >
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 13 }}>Usuários</div>
           <div style={{ fontSize: 12, opacity: 0.75 }}>
-            {loading ? "Carregando..." : `${filteredItems.length} de ${items.length} itens`}
+            {loadingUsers ? "Carregando..." : `${filteredUsers.length} de ${users.length} itens`}
           </div>
         </div>
 
         <div style={{ marginBottom: 10, display: "flex", gap: 8, alignItems: "center" }}>
           <input
-            value={manageFilter}
-            onChange={(e) => setManageFilter(e.target.value)}
-            placeholder="Filtrar por nome ou CPF"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            placeholder="Filtrar por nome, CPF, matrícula ou órgão"
             style={{ ...inputStyle(), flex: 1, minWidth: 0 }}
           />
           <button
-            onClick={load}
+            onClick={loadUsers}
             style={{
               width: 40,
               height: 40,
@@ -925,34 +1051,34 @@ export function AdminUsersPanel({
           </button>
         </div>
 
-        <div
-          className="scrollbarHidden"
-          style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
-          onScroll={(e) => {
-            if (!isMobile) return;
-            const el = e.currentTarget;
-            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-              setMobileCount((v) => v + ADMIN_PAGE_SIZE);
-            }
-          }}
-        >
+          <div
+            className="scrollbarHidden"
+            style={{ display: "grid", gap: 8, maxHeight: "50vh", overflow: "auto" }}
+            onScroll={(e) => {
+              if (!isMobile) return;
+              const el = e.currentTarget;
+              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+                setVisibleMobileUserCount((currentVisibleCount) => currentVisibleCount + ADMIN_PAGE_SIZE);
+              }
+            }}
+          >
           {(isMobile
-            ? filteredItems.slice(0, mobileCount)
-            : filteredItems.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE)
-          ).map((u) => {
-            const expBadge = getUserExpirationBadge(u.expires_at);
+            ? filteredUsers.slice(0, visibleMobileUserCount)
+            : filteredUsers.slice((currentPage - 1) * ADMIN_PAGE_SIZE, currentPage * ADMIN_PAGE_SIZE)
+          ).map((user) => {
+            const expirationBadge = getUserExpirationBadge(user.expires_at);
             const isExpired = (() => {
-              if (!u.expires_at) return false;
-              const expMs = new Date(u.expires_at).getTime();
+              if (!user.expires_at) return false;
+              const expMs = new Date(user.expires_at).getTime();
               return Number.isFinite(expMs) ? expMs <= Date.now() : false;
             })();
             const hasTermsInfo =
-              typeof u.terms_accepted_at !== "undefined" ||
-              typeof u.accepted_terms_version !== "undefined";
-            const termsAccepted = !!u.terms_accepted_at && !!u.accepted_terms_version;
+              typeof user.terms_accepted_at !== "undefined" ||
+              typeof user.accepted_terms_version !== "undefined";
+            const termsAccepted = !!user.terms_accepted_at && !!user.accepted_terms_version;
             return (
               <div
-                key={u.id}
+                key={user.id}
                 className="adminRow"
                 style={{
                   border: "1px solid rgba(0,0,0,0.10)",
@@ -976,9 +1102,9 @@ export function AdminUsersPanel({
                         wordBreak: "break-word",
                       }}
                     >
-                      {u.full_name || u.email}
+                      {user.full_name || user.email}
                     </div>
-                    <span style={{ opacity: 0.55, fontSize: 12, whiteSpace: isMobile ? "normal" : "nowrap" }}>{roleLabel(u.role)}</span>
+                    <span style={{ opacity: 0.55, fontSize: 12, whiteSpace: isMobile ? "normal" : "nowrap" }}>{roleLabel(user.role)}</span>
                   </div>
                   <div
                     style={{
@@ -991,24 +1117,32 @@ export function AdminUsersPanel({
                       wordBreak: "break-word",
                     }}
                   >
-                    {u.email}
+                    {user.email}
                   </div>
                   <div
                     style={{
                       fontSize: 12,
                       opacity: 0.72,
                       marginTop: 2,
-                      whiteSpace: isMobile ? "normal" : "nowrap",
-                      overflow: isMobile ? "visible" : "hidden",
-                      textOverflow: isMobile ? "clip" : "ellipsis",
+                      whiteSpace: "normal",
+                      overflow: "visible",
+                      textOverflow: "clip",
                       wordBreak: "break-word",
+                      overflowWrap: "anywhere",
+                      lineHeight: 1.35,
                     }}
                   >
-                    {u.is_active ? "ATIVO" : "INATIVO"}
-                    {u.cpf ? ` • CPF: ${u.cpf}` : ""}
-                    {u.matricula ? ` • Matrícula: ${u.matricula}` : ""}
-                    {u.orgao ? ` • ${u.orgao}` : ""}
-                    {u.unidade ? ` • ${u.unidade}` : ""}
+                    <div>
+                      {user.is_active ? "ATIVO" : "INATIVO"}
+                      {user.cpf ? ` • CPF: ${user.cpf}` : ""}
+                      {user.matricula ? ` • Matrícula: ${user.matricula}` : ""}
+                    </div>
+                    {(user.orgao || user.organization_name || user.unidade) && (
+                      <div>
+                        {user.orgao || user.organization_name ? `• ${user.orgao || user.organization_name}` : ""}
+                        {user.unidade ? ` • ${user.unidade}` : ""}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                     <span
@@ -1020,12 +1154,12 @@ export function AdminUsersPanel({
                         fontSize: 10,
                         fontWeight: 800,
                         letterSpacing: 0.1,
-                        border: `1px solid ${expBadge.borderColor}`,
-                        background: expBadge.background,
-                        color: expBadge.color,
+                        border: `1px solid ${expirationBadge.borderColor}`,
+                        background: expirationBadge.background,
+                        color: expirationBadge.color,
                       }}
                     >
-                      {expBadge.label}
+                      {expirationBadge.label}
                     </span>
                     {termsAccepted ? (
                       <span
@@ -1073,82 +1207,88 @@ export function AdminUsersPanel({
                   </div>
                 </div>
 
-              <button
-                onClick={() => pick(u)}
-                className="adminRowBtn"
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(10,40,75,0.82)",
-                  background: "rgba(255,255,255,0.96)",
-                  cursor: "pointer",
-                  fontWeight: 900,
-                  color: "#0a284b",
-                }}
-              >
-                Editar
-              </button>
+              {!isManagerViewer || canManagerTouchRole(user.role) ? (
+                <>
+                  <button
+                    onClick={() => editUser(user)}
+                    className="adminRowBtn"
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(10,40,75,0.82)",
+                      background: "rgba(255,255,255,0.96)",
+                      cursor: "pointer",
+                      fontWeight: 900,
+                      color: "#0a284b",
+                    }}
+                  >
+                    Editar
+                  </button>
 
-              {u.is_active && !isExpired ? (
-                <button
-                  onClick={() => deactivate(u.id)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(10,40,75,0.18)",
-                    background: "rgba(10,40,75,0.92)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                  }}
-                >
-                  Desativar
-                </button>
-              ) : (
-                <button
-                  onClick={() => reactivate(u.id)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(34,197,94,.14)",
-                    color: "#15803d",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                  }}
-                >
-                  Reativar
-                </button>
-              )}
+                  {user.is_active && !isExpired ? (
+                    <button
+                      onClick={() => deactivate(user.id)}
+                      className="adminRowBtn"
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(10,40,75,0.18)",
+                        background: "rgba(10,40,75,0.92)",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Desativar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => reactivate(user.id)}
+                      className="adminRowBtn"
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(0,0,0,0.12)",
+                        background: "rgba(34,197,94,.14)",
+                        color: "#15803d",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Reativar
+                    </button>
+                  )}
+                </>
+              ) : null}
               </div>
             );
           })}
 
-          {!filteredItems.length && !loading && (
+          {!filteredUsers.length && !loadingUsers && (
             <div style={{ fontSize: 12, opacity: 0.75 }}>Nenhum usuário encontrado para esse filtro.</div>
           )}
         </div>
 
-        {!isMobile && filteredItems.length > ADMIN_PAGE_SIZE && (
+        {!isMobile && filteredUsers.length > ADMIN_PAGE_SIZE && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
             <button
               className="btnGhost"
-              onClick={() => setPage((v) => Math.max(1, v - 1))}
-              disabled={page <= 1}
-              style={{ opacity: page <= 1 ? 0.5 : 1 }}
+              onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
+              disabled={currentPage <= 1}
+              style={{ opacity: currentPage <= 1 ? 0.5 : 1 }}
             >
               Anterior
             </button>
             <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Página {page} de {Math.max(1, Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE))}
+              Página {currentPage} de {Math.max(1, Math.ceil(filteredUsers.length / ADMIN_PAGE_SIZE))}
             </div>
             <button
               className="btnGhost"
-              onClick={() => setPage((v) => Math.min(Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE), v + 1))}
-              disabled={page >= Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE)}
-              style={{ opacity: page >= Math.ceil(filteredItems.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
+              onClick={() =>
+                setCurrentPage((current) => Math.min(Math.ceil(filteredUsers.length / ADMIN_PAGE_SIZE), current + 1))
+              }
+              disabled={currentPage >= Math.ceil(filteredUsers.length / ADMIN_PAGE_SIZE)}
+              style={{ opacity: currentPage >= Math.ceil(filteredUsers.length / ADMIN_PAGE_SIZE) ? 0.5 : 1 }}
             >
               Próxima
             </button>

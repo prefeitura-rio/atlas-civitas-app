@@ -11,8 +11,6 @@ export type Camera = {
   address: string;
   city: string;
   uf: string;
-  streaming_url?: string | null;
-  stream_url?: string | null;
   is_active: boolean;
 };
 
@@ -24,7 +22,7 @@ export type CameraIntel = {
   lng: number;
   responsavel?: string | null;
   direction?: string | null;
-  streaming_url?: string | null;
+  external_camera_id?: string | null;
   is_active?: boolean;
   source_file?: string | null;
   last_seen_at?: string | null;
@@ -34,13 +32,21 @@ export type CameraIntel = {
 
 export type CameraLpr = {
   id?: string;
+  id_ponto_coleta?: string | number | null;
+  origem_equipamento?: string | null;
+  local?: string | null;
   code: string;
   name: string;
   lat: number;
   lng: number;
+  latitude?: number | null;
+  longitude?: number | null;
   neighborhood?: string | null;
+  bairro?: string | null;
   direction?: string | null;
+  sentido?: string | null;
   is_active?: boolean;
+  status_ativo?: boolean | number | string | null;
   source_file?: string | null;
   last_seen_at?: string | null;
   created_at?: string | null;
@@ -49,21 +55,22 @@ export type CameraLpr = {
 
 export type Radar = {
   id?: string;
+  id_ponto_coleta?: string | number | null;
+  origem_equipamento?: string | null;
+  local?: string | null;
   codcet: string;
 
   lat?: number | null;
   lng?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 
-  empresa?: string | null;
   bairro?: string | null;
   logradouro?: string | null;
   localidade?: string | null;
   sentido?: string | null;
-
-  velofisc?: number | null;
-  numero_equipamento?: string | null;
-
   status?: string | null;
+  status_ativo?: boolean | number | string | null;
   is_active?: boolean;
 
   updated_at?: string | null;
@@ -76,6 +83,7 @@ export type Me = {
   full_name: string;
   role: UserRole;
   roles?: string[] | null;
+  matricula?: string | null;
   is_active: boolean;
   organization_id?: string | null;
   organization_name?: string | null;
@@ -92,6 +100,8 @@ export type AdminUser = {
   cpf?: string | null;
   matricula?: string | null;
   unidade?: string | null;
+  organization_id?: string | null;
+  organization_name?: string | null;
   orgao?: string | null;
   is_active: boolean;
   created_at?: string;
@@ -119,6 +129,13 @@ export type FeatureCatalogItem = {
   description?: string | null;
 };
 
+export type SmartCameraSessionResponse = {
+  session_url?: string | null;
+  external_camera_id?: string | null;
+  camera_id?: string | null;
+  result?: string | null;
+};
+
 export type AdminLog = {
   id: string;
   created_at: string;
@@ -140,5 +157,10 @@ export type AdminLog = {
     name?: string;
     code?: string;
     codcet?: string;
+    id_ponto_coleta?: string;
+    local?: string;
+    bairro?: string;
+    sentido?: string;
+    origem_equipamento?: string;
   } | null;
 };
