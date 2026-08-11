@@ -92,7 +92,7 @@ const FALLBACK_ORGANIZATION_TYPES = [
   "Secretaria",
 ];
 
-const FALLBACK_JURISDICTION_LEVELS = ["Federal", "Estadual", "Municipal", "Privada"];
+const FALLBACK_JURISDICTION_LEVELS = ["Federal", "Estadual", "Distrital", "Municipal", "Privada"];
 const BAIROS_FEATURE_FAMILY = "bairros";
 const RISP_FEATURE_FAMILY = "risp";
 const AISP_FEATURE_FAMILY = "aisp";
