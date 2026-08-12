@@ -54,6 +54,7 @@ import civitasLogo from "@/assets/civitas_icon.png";
 import civitasWhatsappIcon from "@/assets/icons/civitas/whatsapp.svg";
 import civitasDownloadIcon from "@/assets/icons/civitas/Icon-1.svg";
 import civitasInfoIcon from "@/assets/icons/civitas/Icon.svg";
+import civitasEmergencyIcon from "@/assets/icons/civitas/e911_emergency.svg";
 import civitasDetectionIcon from "@/assets/icons/civitas/motion_sensor_active.svg";
 import civitasRadarIcon from "@/assets/icons/civitas/radar.svg";
 import civitasJointPlatesIcon from "@/assets/icons/civitas/traffic_jam.svg";
@@ -1767,6 +1768,12 @@ export default function MapPage() {
   }, []);
 
   const civitasToolsSummary = [
+    {
+      tool: "Cerco Eletrônico",
+      what: "Monitoramento em tempo real de veículos suspeitos, com geração automática de alertas",
+      when: "Em situações de busca ativa, quando a placa do veículo já é conhecida",
+      result: "Alertas em tempo real a cada nova detecção da placa monitorada nos equipamentos tecnológicos da Prefeitura",
+    },
     {
       tool: "Pontos de Detecção",
       what: "Consultar todas as passagens de uma placa e reconstruir deslocamentos e rotas",
@@ -6671,6 +6678,7 @@ export default function MapPage() {
 
   const renderCivitasPanel = () => {
     const civitasToolIcons = [
+      civitasEmergencyIcon,
       civitasDetectionIcon,
       civitasRadarIcon,
       civitasJointPlatesIcon,
