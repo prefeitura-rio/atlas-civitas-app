@@ -19,15 +19,20 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  LayoutDashboard,
   MapPinned,
   LogOut,
   Menu,
+  MessageCircle,
   PenTool,
+  RadioTower,
   Search,
   Satellite,
   Shield,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
+  UserRound,
   X,
 } from "lucide-react";
 import { useAuth } from "../app/auth";
@@ -51,6 +56,7 @@ import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 import cameraLprIconSatellite from "@/assets/camera-lpr-icon-satellite.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
 import civitasLogo from "@/assets/civitas_icon.png";
+import civitasSidebarSymbol from "@/assets/civitas-sidebar-symbol.png";
 import civitasWhatsappIcon from "@/assets/icons/civitas/whatsapp.svg";
 import civitasDownloadIcon from "@/assets/icons/civitas/Icon-1.svg";
 import civitasInfoIcon from "@/assets/icons/civitas/Icon.svg";
@@ -6476,8 +6482,8 @@ export default function MapPage() {
       : panel === "civitas"
         ? 1120
         : 560;
-  const panelSideInset = 16;
-  const panelShiftRight = panel === "civitas" ? 190 : 0;
+  const panelSideInset = 82;
+  const panelShiftRight = 0;
   const panelMaxHeight =
     panel === "admin"
       ? activeAdminTab === "usage"
@@ -6935,7 +6941,8 @@ export default function MapPage() {
               bumpDockAutoHide();
             }}
           >
-            CAMADAS
+            <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden="true" />
+            <span>Camadas</span>
           </div>
         )}
 
@@ -7477,120 +7484,66 @@ export default function MapPage() {
         )}
       </div>
 
-      {/* Header (desktop) */}
-      <div
-        className="desktopPanels"
-        style={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          right: 16,
-          zIndex: 20,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          color: "#0b0b0f",
-        }}
-      >
-        <div
-          className="glass"
-          style={{
-            padding: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 12,
-            width: 160,
-            height: 50,
-          }}
-        >
-          <img src={civitasLogo} alt="Civitas" style={{ height: 34, width: 145 }} />
+      {/* Desktop navigation: compact by default, expanded on hover. */}
+      <aside className="appSidebar desktopPanels" aria-label="Navegação principal">
+        <div className="appSidebarBrand">
+          <span className="appSidebarLogoMark" aria-hidden="true">
+            <img src={civitasSidebarSymbol} alt="" />
+          </span>
+          <img className="appSidebarLogoFull" src={civitasLogo} alt="Civitas Rio" />
         </div>
 
-        <div
-          className="glass"
-          style={{
-            flex: 1,
-            padding: "0 10px",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
-            height: 53,
-          }}
-        >
+        <p className="appSidebarSectionLabel">Navegação</p>
+        <nav className="appSidebarNav" aria-label="Áreas do sistema">
           <button
-            className={`tabBtn ${panel === "map" ? "tabBtnActive" : ""}`}
+            className={`appSidebarItem ${panel === "map" ? "appSidebarItemActive" : ""}`}
             onClick={() => togglePanel("map")}
-            title="Clique de novo pra fechar"
+            title="Equipamentos"
           >
-            CENTRAL
+            <LayoutDashboard aria-hidden="true" />
+            <span>Equipamentos</span>
           </button>
-
           <button
-            className={`tabBtn ${panel === "profile" ? "tabBtnActive" : ""}`}
+            className={`appSidebarItem ${panel === "profile" ? "appSidebarItemActive" : ""}`}
             onClick={() => togglePanel("profile")}
-            title="Clique de novo pra fechar"
+            title="Meu perfil"
           >
-            PERFIL
+            <UserRound aria-hidden="true" />
+            <span>Meu perfil</span>
           </button>
-
+          <button
+            className={`appSidebarItem ${panel === "civitas" ? "appSidebarItemActive" : ""}`}
+            onClick={() => togglePanel("civitas")}
+            title={civitasTabLabel}
+          >
+            <RadioTower aria-hidden="true" />
+            <span>{civitasTabLabel}</span>
+          </button>
           {canAccessAdmin && (
             <button
-              className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
+              className={`appSidebarItem ${panel === "admin" ? "appSidebarItemActive" : ""}`}
               onClick={() => togglePanel("admin")}
-              title="Clique de novo pra fechar"
+              title={developmentTabLabel}
             >
-              {developmentTabLabel}
+              <SlidersHorizontal aria-hidden="true" />
+              <span>{developmentTabLabel}</span>
             </button>
           )}
+        </nav>
 
-          <div style={{ flex: 1 }} />
-
-          <button
-            type="button"
-            className="civitasSearchBtn"
-            onClick={() => togglePanel("civitas")}
-            title={panel === "civitas" ? "Fechar CIVITAS" : "Abrir CIVITAS"}
+        <div className="appSidebarFooter">
+          <a
+            className="appSidebarItem"
+            href={civitasContactWhatsappHref}
+            target="_blank"
+            rel="noreferrer"
+            title="Abrir suporte no WhatsApp"
           >
-            {civitasTabLabel}
-          </button>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
-            <input
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchErr(null);
-                setSearchQuery(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleSearch();
-              }}
-              placeholder="Buscar rua ou coordenadas no RJ"
-              style={{ ...inputStyle(), flex: "1 1 240px", minWidth: 240, maxWidth: 320, padding: "8px 10px" }}
-            />
-            <button className="btnGhost" onClick={() => void handleSearch()} title="Buscar">
-              BUSCAR
-            </button>
-          </div>
-          {searchErr && <div style={{ fontSize: 11, color: "#991b1b" }}>{searchErr}</div>}
-        </div>
-
-        <div
-          className="glass"
-          style={{
-            padding: "0 8px",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            height: 50
-          }}
-        >
-          <div style={{ width: 72, height: 48, display: "grid", placeItems: "center" }}>
-            <img src={prefeituraLogo} alt="Prefeitura" style={{ height: 28, width: "auto" }} />
-          </div>
+            <MessageCircle aria-hidden="true" />
+            <span>Ajuda</span>
+          </a>
           <button
-            className="btnGhost"
+            className="appSidebarItem appSidebarLogout"
             onClick={() => {
               auth?.logout?.();
               try {
@@ -7599,19 +7552,45 @@ export default function MapPage() {
                 window.location.href = "/login";
               }
             }}
+            title="Encerrar sessão"
           >
-            SAIR
+            <LogOut aria-hidden="true" />
+            <span>Encerrar sessão</span>
           </button>
         </div>
+      </aside>
+
+      <div className="mapCommandBar desktopPanels">
+        <Search size={17} strokeWidth={2.2} aria-hidden="true" />
+        <input
+          value={searchQuery}
+          onChange={(e) => {
+            setSearchErr(null);
+            setSearchQuery(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void handleSearch();
+          }}
+          placeholder="Buscar endereço ou coordenadas no Rio de Janeiro"
+          aria-label="Buscar endereço ou coordenadas"
+        />
+        <button onClick={() => void handleSearch()} title="Buscar local">Buscar</button>
+        {searchErr && <div className="mapCommandBarError">{searchErr}</div>}
+      </div>
+
+      <div className="mapUtilityBar desktopPanels">
+        <img src={prefeituraLogo} alt="Prefeitura do Rio" />
+        <div className="mapUtilityBarDivider" />
+        <span className="mapUtilityBarIdentity">{me?.full_name || "Sessão segura"}</span>
       </div>
 
       {/* LEFT PANEL (desktop) */}
       {panel !== null && (
         <div
-          className={`desktopPanels ${panel === "civitas" ? "" : "panelCard"}`.trim()}
+          className={`desktopPanels mapWorkspacePanel ${panel === "civitas" ? "" : "panelCard"} ${panel === "profile" ? "profilePanel" : ""}`.trim()}
           style={{
             position: "absolute",
-            top: 90,
+            top: 76,
             left: panelSideInset + panelShiftRight,
             width: panelWidth,
             maxWidth: `calc(100vw - ${panelSideInset * 2}px)`,
@@ -7623,7 +7602,7 @@ export default function MapPage() {
         >
           {panel === "map" && (
             <>
-              <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
+              <div className="equipmentPanelHeader" style={{ marginBottom: 12, display: "grid", gap: 12 }}>
                 <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
                   {availableListModes.map((option) => (
                     <button
@@ -7673,7 +7652,7 @@ export default function MapPage() {
               <div
                 key={listMode}
                 ref={listScrollRef}
-                className="scrollbarHidden"
+                className="scrollbarHidden equipmentList"
                 style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
                 onScroll={(e) => {
                   if (isMobile) return;
@@ -7972,6 +7951,7 @@ export default function MapPage() {
           {panel === "profile" && (
             <>
               <div
+                className="profileSummaryCard"
                 style={{
                   padding: 12,
                   borderRadius: 16,
@@ -7980,30 +7960,21 @@ export default function MapPage() {
                   marginBottom: 12,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 900,
-                    letterSpacing: "0.08em",
-                    color: "rgba(10,40,75,0.58)",
-                    marginBottom: 6,
-                  }}
-                >
-                  PERFIL
-                </div>
-                <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8, color: "#0f172a" }}>Dados do usuário</div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 900, color: "rgba(10,40,75,0.58)" }}>Nome</div>
-                  <div style={{ fontSize: 13, color: "#0f172a" }}>{me?.full_name || "-"}</div>
-                  <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Email</div>
-                  <div style={{ fontSize: 13, color: "rgba(15,23,42,0.72)" }}>{me?.email || "-"}</div>
-                  <div style={{ fontSize: 11, fontWeight: 900, marginTop: 6, color: "rgba(10,40,75,0.58)" }}>Organização</div>
-                  <div style={{ fontSize: 13, color: "rgba(15,23,42,0.85)" }}>{auth.organizationName || "-"}</div>
+                <div className="profileIdentityHeader">
+                  <span className="profileAvatar" aria-hidden="true"><UserRound size={21} strokeWidth={2} /></span>
+                  <div>
+                    <div className="profileEyebrow">Dados da conta</div>
+                    <div className="profileTitle">{me?.full_name || "Usuário"}</div>
+                  </div>
+                  <span className="profileOrganizationBadge">{auth.organizationName || "Sem organização"}</span>
                 </div>
               </div>
 
-                <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
-                <div style={{ fontSize: 13, fontWeight: 900 }}>Trocar senha</div>
+                <div className="profilePasswordCard" style={{ display: "grid", gap: 10, maxWidth: 520 }}>
+                <div>
+                  <div className="profilePasswordTitle">Trocar senha</div>
+                  <div className="profilePasswordHint">Escolha uma senha forte para manter sua conta protegida.</div>
+                </div>
                 <div style={{ position: "relative" }}>
                   <input
                     value={pwOld}
@@ -8105,6 +8076,7 @@ export default function MapPage() {
                 </div>
 
                 <button
+                  className="profilePasswordSubmit"
                   onClick={changePassword}
                   disabled={pwLoading}
                   style={{
@@ -8142,7 +8114,7 @@ export default function MapPage() {
 
           {panel === "admin" && canAccessAdmin && (
             <>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div className="adminPanelHeader" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                 <div style={{ fontWeight: 900, fontSize: 14 }}>Administrador</div>
                 <div className="muted" style={{ fontSize: 12 }}>
                   Gerenciamento completo
@@ -8164,7 +8136,7 @@ export default function MapPage() {
               </div>
 
               <div
-                className="scrollbarHidden"
+                className="scrollbarHidden adminPanelContent"
                 style={{
                   maxHeight: panelMaxHeight,
                   overflow: activeAdminTab === "users" && adminUsersOrgOpen ? "visible" : "auto",

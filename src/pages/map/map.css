@@ -330,10 +330,10 @@
 }
 
 .panelCard {
-  background: #f0f0f0;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
-  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid #dce5ed;
+  box-shadow: 0 18px 46px rgba(15, 35, 56, 0.16);
+  border-radius: 16px;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
 }
@@ -761,6 +761,421 @@
 .mobileBar {
   display: none;
 }
+
+/* Desktop shell: a clean control surface that reveals the product context on intent. */
+.appSidebar {
+  --sidebar-collapsed-width: 66px;
+  --sidebar-expanded-width: 272px;
+  position: absolute;
+  z-index: 60;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--sidebar-collapsed-width);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #0b1929;
+  background: #fff;
+  border-right: 1px solid #e2e8f0;
+  box-shadow: 10px 0 28px rgba(15, 35, 56, 0.05);
+  transition: width 230ms cubic-bezier(0.2, 0.82, 0.25, 1), box-shadow 230ms ease;
+}
+.appSidebar:hover, .appSidebar:focus-within { width: var(--sidebar-expanded-width); box-shadow: 16px 0 36px rgba(15, 35, 56, 0.12); }
+.appSidebarBrand { height: 76px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 0; padding: 0 12px; border-bottom: 1px solid #e8edf3; }
+.appSidebarLogoMark { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 44px; overflow: hidden; border-radius: 12px; background: #123865; box-shadow: 0 6px 14px rgba(18, 56, 101, .16); transition: width 180ms ease, flex-basis 180ms ease, opacity 150ms ease, transform 180ms ease; }
+.appSidebarLogoMark img { width: 30px; height: 30px; object-fit: contain; display: block; }
+.appSidebarLogoFull { width: 0; height: 36px; display: block; opacity: 0; object-fit: contain; object-position: left center; transform: translateX(-8px); transition: width 220ms cubic-bezier(.2, .82, .25, 1), opacity 150ms ease, transform 180ms ease; }
+.appSidebar:hover .appSidebarBrand, .appSidebar:focus-within .appSidebarBrand { justify-content: center; padding: 0 18px; }
+.appSidebar:hover .appSidebarLogoMark, .appSidebar:focus-within .appSidebarLogoMark { width: 0; flex-basis: 0; opacity: 0; transform: scale(.8); }
+.appSidebar:hover .appSidebarLogoFull, .appSidebar:focus-within .appSidebarLogoFull { width: 220px; height: 42px; opacity: 1; transform: translateX(2px); transition-delay: 65ms; }
+.appSidebarSectionLabel { height: 16px; margin: 18px 18px 0; overflow: hidden; color: #94a3b8; opacity: 0; transform: translateX(-6px); font-size: 10px; font-weight: 750; letter-spacing: .09em; line-height: 16px; text-transform: uppercase; white-space: nowrap; transition: opacity 130ms ease, transform 170ms ease; }
+.appSidebar:hover .appSidebarSectionLabel, .appSidebar:focus-within .appSidebarSectionLabel { opacity: 1; transform: translateX(0); transition-delay: 80ms; }
+.appSidebarNav, .appSidebarFooter { display: grid; gap: 6px; padding: 12px 10px 18px; }
+.appSidebarFooter { margin-top: auto; padding-top: 14px; border-top: 1px solid #e8edf3; }
+.appSidebarItem { appearance: none; width: 100%; min-height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 11px; overflow: hidden; color: #5e6e82; border: 1px solid transparent; border-radius: 10px; background: transparent; box-shadow: none; font-family: inherit; text-align: left; white-space: nowrap; cursor: pointer; transition: color 160ms ease, background 160ms ease, border-color 160ms ease; }
+.appSidebarItem svg { width: 20px; height: 20px; flex: 0 0 20px; color: #0a284b; stroke: currentColor; stroke-width: 1.9; }
+.appSidebarItem span { overflow: hidden; color: inherit; opacity: 0; transform: translateX(-6px); font-size: 13px; font-weight: 680; transition: opacity 110ms ease, transform 170ms ease; }
+.appSidebar:hover .appSidebarItem span, .appSidebar:focus-within .appSidebarItem span { opacity: 1; transform: translateX(0); transition-delay: 70ms; }
+.appSidebarItem:hover { color: #163d5f; background: #f4f6f8; }
+.appSidebarItem:focus-visible { outline: 2px solid #00a9de; outline-offset: 2px; }
+.appSidebarItemActive { color: #0a284b; border-color: transparent; background: #f4f6f8; box-shadow: none; }
+.appSidebarItemActive svg { color: #0a284b; }
+.appSidebarLogout:hover { color: #b42318; background: #fff2f0; }
+.mapCommandBar, .mapUtilityBar { position: absolute; top: 16px; z-index: 30; height: 50px; display: flex; align-items: center; color: #62758a; border: 1px solid #dce5ed; border-radius: 12px; background: rgba(255, 255, 255, .97); box-shadow: 0 10px 28px rgba(15, 35, 56, .1); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); }
+.mapCommandBar { left: 82px; width: min(460px, calc(100vw - 310px)); gap: 9px; padding: 0 5px 0 13px; }
+.mapCommandBar input { min-width: 0; flex: 1; padding: 0; color: #172534; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; font-size: 13px; font-weight: 550; }
+.mapCommandBar input:focus { border: 0; box-shadow: none; }
+.mapCommandBar input::placeholder { color: #8391a0; }
+.mapCommandBar button { height: 38px; padding: 0 14px; color: #fff; border: 0; border-radius: 9px; background: #0a284b; box-shadow: none; font-size: 12px; font-weight: 700; }
+.mapCommandBar button:hover { border: 0; background: #123b69; }
+.mapCommandBarError { position: absolute; top: calc(100% + 8px); left: 0; max-width: 100%; padding: 6px 9px; color: #991b1b; border: 1px solid rgba(185, 28, 28, .16); border-radius: 8px; background: rgba(255, 244, 244, .96); font-size: 11px; font-weight: 650; }
+.mapUtilityBar { right: 16px; gap: 12px; padding: 0 15px; border-radius: 12px; }
+.mapUtilityBar img { width: auto; height: 30px; object-fit: contain; }
+.mapUtilityBarDivider { width: 1px; height: 26px; background: #d6e1e9; }
+.mapUtilityBarIdentity { max-width: 210px; overflow: hidden; color: #193852; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Keep the workspace clear while the navigation rail is expanded. */
+.mapCommandBar,
+.mapWorkspacePanel {
+  transition: transform 230ms cubic-bezier(0.2, 0.82, 0.25, 1);
+}
+
+.appSidebar:hover ~ .mapCommandBar,
+.appSidebar:focus-within ~ .mapCommandBar,
+.appSidebar:hover ~ .mapWorkspacePanel,
+.appSidebar:focus-within ~ .mapWorkspacePanel {
+  transform: translateX(206px);
+}
+
+.appSidebar:hover ~ .mapWorkspacePanel,
+.appSidebar:focus-within ~ .mapWorkspacePanel {
+  max-width: calc(100vw - 288px) !important;
+}
+
+.profilePanel.panelCard {
+  padding: 18px !important;
+  background: rgba(255, 255, 255, 0.98);
+  border-color: #dce5ed;
+  border-radius: 16px;
+  box-shadow: 0 18px 42px rgba(15, 35, 56, 0.14);
+}
+
+.profileSummaryCard {
+  position: relative;
+  padding: 15px 16px !important;
+  border-color: #e0e8ee !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+}
+
+.profileEyebrow {
+  color: #668296 !important;
+  font-size: 10px !important;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.profileTitle,
+.profilePasswordTitle {
+  color: #122d46;
+  letter-spacing: -0.01em;
+}
+
+.profileIdentityHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.profileAvatar {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #0a284b;
+  border: 1px solid #d7e4eb;
+  border-radius: 10px;
+  background: #f5fafc;
+}
+
+.profileIdentityHeader .profileTitle {
+  margin-top: 1px;
+  color: #0a284b !important;
+  font-size: 15px !important;
+  font-weight: 720 !important;
+  line-height: 1.25;
+}
+
+.profileOrganizationBadge {
+  max-width: 160px;
+  margin-left: auto;
+  padding: 6px 9px;
+  overflow: hidden;
+  color: #35516b;
+  border: 1px solid #dce8ef;
+  border-radius: 999px;
+  background: #f7fafc;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profileDetails {
+  grid-template-columns: 108px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 9px !important;
+}
+
+.profileDetails > div:nth-child(odd) {
+  margin-top: 0 !important;
+  color: #6a7c8f !important;
+  font-size: 10px !important;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.profileDetails > div:nth-child(even) {
+  overflow: hidden;
+  color: #17324d !important;
+  font-size: 13px !important;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profilePasswordCard {
+  padding: 16px;
+  border: 1px solid #e3eaf0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 5px 14px rgba(15, 35, 56, 0.045);
+}
+
+.profilePasswordTitle {
+  color: #0a284b;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.profilePasswordHint {
+  margin-top: 3px;
+  color: #6a7c8f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.profilePasswordCard input {
+  min-height: 42px;
+  border-color: #d9e3eb !important;
+  border-radius: 9px !important;
+  background: #fbfdff !important;
+}
+
+.profilePasswordCard .profilePasswordSubmit {
+  min-height: 42px;
+  border-radius: 9px !important;
+  color: #fff !important;
+  border-color: #0a284b !important;
+  background: #0a284b !important;
+  box-shadow: 0 7px 14px rgba(10, 40, 75, 0.2);
+}
+
+.profilePasswordCard .profilePasswordSubmit:hover:not(:disabled) {
+  border-color: #123b69 !important;
+  background: #123b69 !important;
+}
+
+/* Equipment and administration panels share the same deliberate, institutional surface. */
+.desktopPanels.panelCard:not(.profilePanel) {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.desktopPanels.panelCard .panelTitle {
+  color: #0a284b;
+  font-size: 15px;
+  letter-spacing: -0.015em;
+}
+
+.desktopPanels.panelCard .tabBtnActive {
+  color: #0a284b;
+  border-color: #b9d9e8;
+  background: #edf7fb;
+}
+
+.desktopPanels.panelCard .tabsRail .subTabActive {
+  color: #0a284b;
+}
+
+.desktopPanels.panelCard .tabsRail {
+  --tabs-btn-text: #64748b;
+  --tabs-accent-start: #00a9de;
+  --tabs-accent-end: #0a284b;
+}
+
+.desktopPanels.panelCard .adminCard {
+  border-color: #dce5ed !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: 0 5px 16px rgba(15, 35, 56, 0.05);
+}
+
+.desktopPanels.panelCard .adminCard input {
+  border-color: #d9e3eb !important;
+  border-radius: 9px !important;
+  background: #fbfdff !important;
+}
+
+.desktopPanels.panelCard .adminCard .btnGhost {
+  border-color: #cbdbe5;
+  background: #fff;
+  color: #20415e;
+}
+
+.desktopPanels.panelCard .adminCard .btnGhost:hover {
+  border-color: #9fc6d8;
+  background: #f2f9fc;
+}
+
+.equipmentPanelHeader {
+  padding: 2px 2px 14px;
+  border-bottom: 1px solid #e4edf3;
+}
+
+.equipmentPanelHeader .tabsRail {
+  gap: 24px;
+}
+
+.equipmentPanelHeader .panelTitle {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+
+.desktopPanels.panelCard .panelSearch {
+  gap: 8px;
+  margin: 14px 0;
+  padding: 5px;
+  border: 1px solid #dce5ed;
+  border-radius: 12px;
+  background: #f8fbfd;
+}
+
+.desktopPanels.panelCard .panelSearch > input {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0 !important;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.desktopPanels.panelCard .panelSearch > button {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 !important;
+  color: #5f7184 !important;
+  border: 1px solid #dbe5ec !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  line-height: 1;
+}
+
+.desktopPanels.panelCard .panelSearch > button:hover {
+  color: #0a284b !important;
+  border-color: #a8cddd !important;
+  background: #eef8fc !important;
+}
+
+.equipmentList {
+  padding: 1px 2px 2px;
+}
+
+.equipmentList .listItem {
+  position: relative;
+  padding: 13px 14px;
+  border-color: #e0e8ee;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(15, 35, 56, 0.035);
+}
+
+.equipmentList .listItem::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+  transition: background 160ms ease;
+}
+
+.equipmentList .listItem:hover {
+  border-color: #b9d9e8;
+  background: #fbfeff;
+  box-shadow: 0 8px 18px rgba(15, 35, 56, 0.08);
+}
+
+.equipmentList .listItem:hover::after {
+  background: #00a9de;
+}
+
+.equipmentList .listStreamPill--camera,
+.equipmentList .listStreamPill--smart {
+  min-height: 26px;
+  padding: 4px 11px;
+  color: #0a284b;
+  border-color: #b9d7e6;
+  background: #eef8fc;
+  box-shadow: none;
+}
+
+.equipmentList .listStreamPill--camera:hover,
+.equipmentList .listStreamPill--smart:hover {
+  color: #062440;
+  border-color: #77bad5;
+  background: #dff3fb;
+  box-shadow: 0 3px 8px rgba(10, 40, 75, 0.08);
+}
+
+.pageControls {
+  padding: 9px;
+  border: 1px solid #e1e9ef;
+  border-radius: 12px;
+  background: #fbfdfe;
+}
+
+.pageControls .btnGhost {
+  min-height: 34px;
+  border-radius: 8px;
+  color: #0a284b;
+  border-color: #cbdce6;
+  background: #fff;
+}
+
+.adminPanelHeader {
+  min-height: 42px;
+  padding: 2px 2px 14px;
+  border-bottom: 1px solid #e1eaf0;
+}
+
+.adminPanelHeader > div:first-child {
+  color: #0a284b;
+  font-size: 16px !important;
+  letter-spacing: -0.02em;
+}
+
+.adminPanelContent {
+  padding-top: 14px;
+}
+
+.adminPanelContent .adminCard {
+  padding: 16px !important;
+}
+
+.adminPanelContent .adminCard input,
+.adminPanelContent .adminCard .customSelectBtn {
+  min-height: 42px;
+  border-color: #d7e2ea !important;
+  border-radius: 9px !important;
+  background: #fbfdff !important;
+  box-shadow: none !important;
+}
+
+.adminPanelContent .adminCard input:focus,
+.adminPanelContent .adminCard .customSelectBtn:focus {
+  border-color: #74bdd8 !important;
+  box-shadow: 0 0 0 3px rgba(0, 169, 222, 0.11) !important;
+}
+
 
 .mapRoot {
   position: fixed;
@@ -1569,6 +1984,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .appSidebar,
+  .appSidebarBrandCopy,
+  .appSidebarItem,
+  .appSidebarItem span {
+    transition: none;
+  }
   .mobileMenuBackdrop,
   .mobileMenuSheet {
     animation: none;
@@ -2221,30 +2642,40 @@
   pointer-events: auto;
 }
 .dockHandle {
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  height: 42px;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d5e0e7;
+  box-shadow: 0 9px 20px rgba(15, 35, 56, 0.14);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   user-select: none;
-  font-weight: 900;
-  font-size: 11px;
-  color: rgba(0, 0, 0, 0.78);
+  font-weight: 700;
+  font-size: 12px;
+  color: #0a284b;
+  letter-spacing: 0.01em;
   pointer-events: auto;
+  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.dockHandle:hover {
+  background: #f5fafc;
+  border-color: #b8d6e4;
+  box-shadow: 0 12px 24px rgba(15, 35, 56, 0.18);
+  transform: translateY(-1px);
+}
+.dockHandle:active {
+  transform: translateY(0);
 }
 .dock {
-  padding: 10px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid #dce5ed;
+  box-shadow: 0 18px 42px rgba(15, 35, 56, 0.18);
   backdrop-filter: blur(16px) saturate(200%);
   -webkit-backdrop-filter: blur(16px) saturate(200%);
   display: flex;
@@ -2264,18 +2695,18 @@
   height: 0;
 }
 .dockTitle {
-  font-size: 11px;
-  font-weight: 900;
-  color: rgba(0, 0, 0, 0.72);
-  letter-spacing: 0.02em;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0a284b;
+  letter-spacing: 0;
   text-transform: uppercase;
   margin-bottom: 4px;
 }
 .dockSectionLabel {
   font-size: 10px;
-  font-weight: 900;
-  color: rgba(0, 0, 0, 0.56);
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: #708398;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 .dockBase {
@@ -2365,22 +2796,24 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.04);
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid #e0e8ee;
+  background: #fff;
   cursor: pointer;
-  font-weight: 900;
-  color: rgba(0, 0, 0, 0.82);
+  font-weight: 650;
+  color: #24425d;
   transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
 .dockChip:hover {
   transform: translateY(-1px);
-  background: rgba(0, 0, 0, 0.06);
+  border-color: #b8d7e5;
+  background: #f7fbfd;
 }
 .dockChipOn {
-  background: rgba(0, 0, 0, 0.1);
-  border-color: rgba(0, 0, 0, 0.14);
+  border-color: #b4d8e8;
+  background: #edf8fc;
+  color: #0a284b;
 }
 .dockChipDisabled {
   opacity: 0.55;
@@ -2447,8 +2880,8 @@
 }
 .dockDivider {
   height: 1px;
-  background: rgba(0, 0, 0, 0.08);
-  margin: 4px 0;
+  background: #e4ecf1;
+  margin: 6px 0;
 }
 .dockFab {
   width: 40px;
@@ -2553,24 +2986,97 @@
 }
 
 /* SweetAlert2 - clean white style with app typography */
+.swal2-container.swal2-backdrop-show {
+  background: rgba(15, 35, 56, 0.38) !important;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.swal2-popup {
+  width: min(31rem, calc(100vw - 32px)) !important;
+  padding: 28px !important;
+  border: 1px solid #dce5ed !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  box-shadow: 0 24px 64px rgba(15, 35, 56, 0.2) !important;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+
+.swal2-title {
+  padding: 0 !important;
+  color: #122d46 !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
+}
+
+.swal2-html-container {
+  margin: 10px 0 0 !important;
+  color: #5e6e82 !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
+.swal2-actions {
+  width: 100%;
+  margin: 22px 0 0 !important;
+  gap: 8px !important;
+}
+
+.swal2-styled.swal2-confirm,
+.swal2-actions .atlasSwalBtnPrimary {
+  min-width: 112px !important;
+  min-height: 40px !important;
+  margin: 0 !important;
+  border: 1px solid #007fae !important;
+  border-radius: 9px !important;
+  background: #007fae !important;
+  box-shadow: 0 6px 14px rgba(0, 127, 174, 0.18) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.swal2-styled.swal2-confirm:hover,
+.swal2-actions .atlasSwalBtnPrimary:hover {
+  background: #006e99 !important;
+}
+
+.swal2-styled.swal2-cancel,
+.swal2-actions .atlasSwalBtnGhost {
+  min-width: 112px !important;
+  min-height: 40px !important;
+  margin: 0 !important;
+  border: 1px solid #d6e1e9 !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: #40566c !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.swal2-close {
+  color: #7b8b9a !important;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.swal2-close:hover {
+  color: #17324d !important;
+  background: #f1f6f9 !important;
+}
+
 .swal2-popup.atlasSwalPopup {
-  font-family: "Rajdhani", "Sora", "Manrope", "Segoe UI", sans-serif !important;
-  border-radius: 18px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  background: #ffffff;
-  color: #0f172a;
-  box-shadow: 0 22px 56px rgba(15, 23, 42, 0.2);
+  color: #122d46;
 }
 
 .swal2-title.atlasSwalTitle {
-  color: #0f172a;
-  font-weight: 900;
+  color: #122d46;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
 
 .swal2-html-container.atlasSwalHtml {
-  color: rgba(15, 23, 42, 0.78);
-  font-size: 15px;
+  color: #5e6e82;
+  font-size: 14px;
 }
 
 .swal2-footer.atlasSwalFooter {
@@ -2579,7 +3085,7 @@
 }
 
 .swal2-actions .atlasSwalBtn {
-  font-family: "Rajdhani", "Sora", "Manrope", "Segoe UI", sans-serif !important;
+  font-family: var(--font-family-primary) !important;
   border-radius: 12px;
   min-width: 132px;
   height: 40px;
@@ -2612,24 +3118,21 @@
 }
 
 .swal2-actions .atlasSwalBtnPrimary {
-  color: #f8fafc;
-  border-color: rgba(15, 23, 42, 0.2);
-  background: #0f172a;
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.24);
+  color: #fff;
 }
 
 .swal2-actions .atlasSwalBtnPrimary:hover {
-  background: #1e293b;
+  background: #006e99;
 }
 
 .swal2-actions .atlasSwalBtnGhost {
-  color: #334155;
-  border-color: rgba(15, 23, 42, 0.18);
-  background: rgba(248, 250, 252, 1);
+  color: #40566c;
+  border-color: #d6e1e9;
+  background: #fff;
 }
 
 .swal2-actions .atlasSwalBtnGhost:hover {
-  background: rgba(241, 245, 249, 1);
+  background: #f3f8fb;
 }
 
 .swal2-popup.atlasSwalPopup .swal2-icon.swal2-warning {
