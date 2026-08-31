@@ -28,6 +28,7 @@ import {
   PenTool,
   RadioTower,
   Search,
+  ScanLine,
   Satellite,
   Shield,
   ShieldAlert,
@@ -48,9 +49,9 @@ import {
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
-import radarIcon from "@/assets/radar-icon.png";
+import radarIconSatellite from "@/assets/radar-icon-satellite.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
-import cameraLprIcon from "@/assets/camera-lpr-icon.png";
+import cameraLprIconSatellite from "@/assets/camera-lpr-icon-satellite.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
 import civitasLogo from "@/assets/civitas_icon.png";
 import civitasSidebarSymbol from "@/assets/civitas-sidebar-symbol.png";
@@ -224,12 +225,12 @@ function getCameraMarkerImageSource(style: MapBaseStyle, kind: CameraMarkerKind)
 
 const POI_MARKER_IMAGE_SOURCES: Record<MapBaseStyle, { radar: string; camera_lpr: string }> = {
   streets: {
-    radar: radarIcon,
-    camera_lpr: cameraLprIcon,
+    radar: radarIconSatellite,
+    camera_lpr: cameraLprIconSatellite,
   },
   satellite: {
-    radar: radarIcon,
-    camera_lpr: cameraLprIcon,
+    radar: radarIconSatellite,
+    camera_lpr: cameraLprIconSatellite,
   },
 } as const;
 
@@ -2160,14 +2161,6 @@ export default function MapPage() {
       setSearchEquipmentTitle("");
     }
     setPanel((cur) => (cur === next ? null : next));
-  }
-
-  function toggleMobilePanel(next: TabKey) {
-    setPanel((cur) => {
-      const target = cur === next ? null : next;
-      if (target === null) setPanelOpen(false);
-      return target;
-    });
   }
 
   useEffect(() => {
@@ -6307,7 +6300,10 @@ export default function MapPage() {
     mobileSearchSubmittingRef.current = true;
     try {
       const ok = await handleSearch(queryOverride);
-      if (ok) setMobileSearchOpen(false);
+      if (ok) {
+        setMobileSearchOpen(false);
+        setPanelOpen(true);
+      }
     } finally {
       mobileSearchSubmittingRef.current = false;
     }
@@ -7136,7 +7132,7 @@ export default function MapPage() {
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
-                    <img src={cameraLprIcon} alt="" />
+                    <img src={cameraLprIconSatellite} alt="" />
                   </span>
                   <span className="chipText">
                     <span>LPR</span>
@@ -7159,7 +7155,7 @@ export default function MapPage() {
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
-                    <img src={radarIcon} alt="" />
+                    <img src={radarIconSatellite} alt="" />
                   </span>
                   <span className="chipText">
                     <span>Radares</span>
@@ -7651,7 +7647,7 @@ export default function MapPage() {
             <MapPinned size={16} aria-hidden="true" />
           </button>
           <button type="button" className={searchMode === "equipment" ? "mapSearchModeActive" : ""} onClick={() => setSearchMode("equipment")} title="Buscar equipamento" aria-label="Buscar equipamento">
-            <RadioTower size={16} aria-hidden="true" />
+            <ScanLine size={16} aria-hidden="true" />
           </button>
         </div>
         <Search size={17} strokeWidth={2.2} aria-hidden="true" />
@@ -7739,7 +7735,7 @@ export default function MapPage() {
                       >
                         <div className="searchEquipmentResultIcon">
                           <img
-                            src={kind === "Câmera" ? cameraIcon : kind === "Super Câmera" ? cameraIntelIcon : kind === "LPR" ? cameraLprIcon : radarIcon}
+                            src={kind === "Câmera" ? cameraIcon : kind === "Super Câmera" ? cameraIntelIcon : kind === "LPR" ? cameraLprIconSatellite : radarIconSatellite}
                             alt=""
                           />
                         </div>
@@ -8404,73 +8400,28 @@ export default function MapPage() {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className="civitasSearchBtn mobileMenuPrimaryDesktop"
-                    onClick={() => {
-                      setMobileSearchOpen(false);
-                      setMobileMenuOpen(false);
-                      setPanel("civitas");
-                      setPanelOpen(true);
-                    }}
-                    title={panel === "civitas" ? "Fechar CIVITAS" : "Abrir CIVITAS"}
-                  >
-                    {civitasTabLabel}
-                  </button>
-
                   <div className="mobileMenuActions">
-                    <button
-                      type="button"
-                      className="mobileMenuAction"
-                      onClick={() => {
-                        setMobileSearchOpen(false);
-                        setMobileMenuOpen(false);
-                        setPanelOpen((v) => !v);
-                      }}
-                    >
-                      <span className="mobileMenuActionIcon">
-                        <MapPinned size={16} strokeWidth={2.4} />
-                      </span>
-                      <span className="mobileMenuActionText">
-                        <span className="mobileMenuActionLabel">{panelOpen ? "Fechar menu" : "Menu"}</span>
-                        <span className="mobileMenuActionSub">Equipamentos e central de controle</span>
-                      </span>
-                      <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
-                    </button>
-
-                    <button
-                      type="button"
-                      className="mobileMenuAction"
-                      onClick={() => {
-                        setSearchErr(null);
-                        setMobileSearchOpen(true);
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      <span className="mobileMenuActionIcon">
-                        <Search size={16} strokeWidth={2.4} />
-                      </span>
-                      <span className="mobileMenuActionText">
-                        <span className="mobileMenuActionLabel">Buscar local</span>
-                        <span className="mobileMenuActionSub">Rua, bairro ou coordenada no mapa</span>
-                      </span>
-                      <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
-                    </button>
-
-                    <button
-                      type="button"
-                      className="mobileMenuCivitasPill"
-                      onClick={() => {
-                        setMobileSearchOpen(false);
-                        setMobileMenuOpen(false);
-                        setPanel("civitas");
-                        setPanelOpen(true);
-                      }}
-                      aria-label="Acionar CIVITAS"
-                    >
-                      <img src={civitasLogo} alt="CIVITAS" />
-                      <ChevronRight size={16} strokeWidth={2.4} aria-hidden="true" />
-                    </button>
+                    {canAccessAdmin && (
+                      <button
+                        type="button"
+                        className="mobileMenuAction"
+                        onClick={() => {
+                          setMobileSearchOpen(false);
+                          setMobileMenuOpen(false);
+                          setPanel("admin");
+                          setPanelOpen(true);
+                        }}
+                      >
+                        <span className="mobileMenuActionIcon">
+                          <SlidersHorizontal size={16} strokeWidth={2.4} />
+                        </span>
+                        <span className="mobileMenuActionText">
+                          <span className="mobileMenuActionLabel">{developmentTabLabel}</span>
+                          <span className="mobileMenuActionSub">Gestão de usuários e equipamentos</span>
+                        </span>
+                        <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -8526,79 +8477,41 @@ export default function MapPage() {
               }
             }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 8,
-                marginBottom: 12,
-              }}
-            >
-              <button
-                className={`tabBtn ${panel === "map" ? "tabBtnActive" : ""}`}
-                style={{
-                  minHeight: 42,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  whiteSpace: "normal",
-                  lineHeight: 1.15,
-                }}
-                onClick={() => toggleMobilePanel("map")}
-              >
-                CENTRAL
-              </button>
-
-              <button
-                className={`tabBtn ${panel === "profile" ? "tabBtnActive" : ""}`}
-                style={{
-                  minHeight: 42,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  whiteSpace: "normal",
-                  lineHeight: 1.15,
-                }}
-                onClick={() => toggleMobilePanel("profile")}
-              >
-                PERFIL
-              </button>
-
-              {canAccessAdmin && (
-                <button
-                  className={`tabBtn ${panel === "admin" ? "tabBtnActive" : ""}`}
-                  style={{
-                    minHeight: 42,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    whiteSpace: "normal",
-                    lineHeight: 1.15,
-                  }}
-                  onClick={() => toggleMobilePanel("admin")}
-                >
-                  {developmentTabLabel}
-                </button>
-              )}
-
-              <button
-                type="button"
-                className="civitasSearchBtn"
-                style={{
-                  minHeight: 42,
-                  width: "100%",
-                  fontSize: 12,
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                }}
-                onClick={() => toggleMobilePanel("civitas")}
-                title={panel === "civitas" ? "Fechar CIVITAS" : "Abrir CIVITAS"}
-              >
-                {civitasTabLabel}
-              </button>
-            </div>
-
             {panel === "map" && (
+              (searchEquipmentPoint || searchedEquipment.length > 0) ? (
+                <div
+                  className="searchEquipmentResults searchEquipmentResultsScrollable"
+                  onScroll={(event) => {
+                    const target = event.currentTarget;
+                    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 24) {
+                      setNearbyVisibleCount((count) => Math.min(count + 7, displayedSearchEquipment.length));
+                    }
+                  }}
+                >
+                  <div className="searchEquipmentResultsTitle">{searchEquipmentTitle || "Equipamentos próximos da busca"}</div>
+                  {displayedSearchEquipment.length ? displayedSearchEquipment.slice(0, nearbyVisibleCount).map(({ item, kind, meters }, index) => (
+                    <button
+                      type="button"
+                      className="searchEquipmentResultCard"
+                      key={`mobile-${kind}-${getPointCollectionCode(item)}-${index}`}
+                      onClick={() => {
+                        const lng = getLng(item);
+                        const lat = getLat(item);
+                        if (lng != null && lat != null) {
+                          flyToPoint(lng, lat, 18);
+                          setPanelOpen(false);
+                        }
+                      }}
+                    >
+                      <div className="searchEquipmentResultIcon"><img src={kind === "Câmera" ? cameraIcon : kind === "Super Câmera" ? cameraIntelIcon : kind === "LPR" ? cameraLprIconSatellite : radarIconSatellite} alt="" /></div>
+                      <div className="searchEquipmentResultBody">
+                        <strong>{item.name || item.nome || `${kind} ${getPointCollectionCode(item) || ""}`}</strong>
+                        <span>{kind} · {getPointCollectionCode(item) || "Sem código"}{typeof meters === "number" ? ` · ${Math.round(meters)} m` : ""}</span>
+                      </div>
+                    </button>
+                  )) : <div className="searchEquipmentEmpty">Nenhum equipamento encontrado.</div>}
+                </div>
+              ) : (
               <>
                 <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
                   {!isMobile ? (
@@ -8983,6 +8896,7 @@ export default function MapPage() {
                   </div>
                 )}
               </>
+              )
             )}
 
             {panel === "profile" && (
@@ -9296,6 +9210,9 @@ export default function MapPage() {
           onClick={() => {
             setMobileMenuOpen(false);
             setMobileSearchOpen(false);
+            setSearchEquipmentPoint(null);
+            setSearchedEquipment([]);
+            setSearchEquipmentTitle("");
             setPanel("map");
             setPanelOpen(true);
           }}
@@ -9349,12 +9266,23 @@ export default function MapPage() {
           type="button"
           className={mobileMenuOpen ? "mobileBottomNavActive" : ""}
           onClick={() => {
+            if (!canAccessAdmin) {
+              auth?.logout?.();
+              try {
+                nav("/login", { replace: true });
+              } catch {
+                window.location.href = "/login";
+              }
+              return;
+            }
             setMobileSearchOpen(false);
             setPanelOpen(false);
             setMobileMenuOpen((open) => !open);
           }}
+          aria-label={canAccessAdmin ? "Mais opções" : "Sair"}
+          title={canAccessAdmin ? "Mais opções" : "Sair"}
         >
-          <Menu size={20} aria-hidden="true" />
+          {canAccessAdmin ? <Menu size={20} aria-hidden="true" /> : <LogOut size={20} aria-hidden="true" />}
           <span>Mais</span>
         </button>
       </nav>
@@ -9394,7 +9322,16 @@ export default function MapPage() {
             </div>
 
             <div className="mobileSearchCopy">
-              Digite rua, bairro, ponto de referência ou coordenada no mapa.
+              {searchMode === "address" ? "Digite rua, bairro, ponto de referência ou coordenada no mapa." : "Digite o código numérico do equipamento."}
+            </div>
+
+            <div className="mobileSearchMode" role="group" aria-label="Tipo de busca">
+              <button type="button" className={searchMode === "address" ? "mobileSearchModeActive" : ""} onClick={() => setSearchMode("address")} title="Buscar local" aria-label="Buscar local">
+                <MapPinned size={17} aria-hidden="true" />
+              </button>
+              <button type="button" className={searchMode === "equipment" ? "mobileSearchModeActive" : ""} onClick={() => setSearchMode("equipment")} title="Buscar equipamento" aria-label="Buscar equipamento">
+                <ScanLine size={17} aria-hidden="true" />
+              </button>
             </div>
 
             <div className="mobileSearchFieldShell">
@@ -9418,7 +9355,7 @@ export default function MapPage() {
                     setMobileSearchOpen(false);
                   }
                 }}
-                placeholder="Buscar rua ou coordenadas no RJ"
+                placeholder="Busca"
                 className="mobileSearchInput"
               />
               {searchQuery.trim() && (
@@ -9437,7 +9374,7 @@ export default function MapPage() {
               )}
             </div>
 
-            <div className="mobileSearchSectionLabel">Sugestões rápidas</div>
+            {searchMode === "address" && <><div className="mobileSearchSectionLabel">Sugestões rápidas</div>
             <div className="mobileSearchChips">
               {[
                 { label: "Copacabana", value: "Copacabana" },
@@ -9458,6 +9395,7 @@ export default function MapPage() {
                 </button>
               ))}
             </div>
+            </>}
 
             {searchErr && <div className="mobileSearchError">{searchErr}</div>}
 
