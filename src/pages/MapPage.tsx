@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
   LayoutDashboard,
+  Layers,
   MapPinned,
   LogOut,
   Menu,
@@ -47,16 +48,13 @@ import {
 import "./map/map.css";
 import prefeituraLogo from "@/assets/prefeitura_icon2.png";
 import cameraIcon from "@/assets/camera-icon.png";
-import cameraIconSatellite from "@/assets/camera-icon-satellite.png";
 import radarIcon from "@/assets/radar-icon.png";
-import radarIconSatellite from "@/assets/radar-icon-satellite.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
-import cameraIntelIconSatellite from "@/assets/cameras-inteligentes-icon-satellite.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
-import cameraLprIconSatellite from "@/assets/camera-lpr-icon-satellite.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
 import civitasLogo from "@/assets/civitas_icon.png";
 import civitasSidebarSymbol from "@/assets/civitas-sidebar-symbol.png";
+import civitasActionSymbol from "@/assets/civitas-action-symbol.png";
 import civitasWhatsappIcon from "@/assets/icons/civitas/whatsapp.svg";
 import civitasDownloadIcon from "@/assets/icons/civitas/Icon-1.svg";
 import civitasInfoIcon from "@/assets/icons/civitas/Icon.svg";
@@ -226,12 +224,12 @@ function getCameraMarkerImageSource(style: MapBaseStyle, kind: CameraMarkerKind)
 
 const POI_MARKER_IMAGE_SOURCES: Record<MapBaseStyle, { radar: string; camera_lpr: string }> = {
   streets: {
-    radar: radarIconSatellite,
-    camera_lpr: cameraLprIconSatellite,
+    radar: radarIcon,
+    camera_lpr: cameraLprIcon,
   },
   satellite: {
-    radar: radarIconSatellite,
-    camera_lpr: cameraLprIconSatellite,
+    radar: radarIcon,
+    camera_lpr: cameraLprIcon,
   },
 } as const;
 
@@ -1858,8 +1856,13 @@ export default function MapPage() {
   const dockTimerRef = useRef<number | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<"address" | "equipment">("address");
   const [searchErr, setSearchErr] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<{ lng: number; lat: number } | null>(null);
+  const [searchEquipmentPoint, setSearchEquipmentPoint] = useState<{ lng: number; lat: number } | null>(null);
+  const [searchedEquipment, setSearchedEquipment] = useState<Array<{ item: any; kind: string; meters?: number }>>([]);
+  const [searchEquipmentTitle, setSearchEquipmentTitle] = useState("");
+  const [nearbyVisibleCount, setNearbyVisibleCount] = useState(7);
   const searchTimerRef = useRef<number | null>(null);
   const panelRef = useRef<PanelKey>(null);
   const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
@@ -2151,6 +2154,11 @@ export default function MapPage() {
   }, [canUseAreaDraw]);
 
   function togglePanel(next: TabKey) {
+    if (next === "map") {
+      setSearchEquipmentPoint(null);
+      setSearchedEquipment([]);
+      setSearchEquipmentTitle("");
+    }
     setPanel((cur) => (cur === next ? null : next));
   }
 
@@ -6123,6 +6131,36 @@ export default function MapPage() {
     setSearchErr(null);
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
 
+    if (searchMode === "equipment") {
+      if (!/^\d+$/.test(q)) {
+        setSearchErr("Informe somente o número do equipamento.");
+        return false;
+      }
+      const requestedCode = q.replace(/^0+(?=\d)/, "");
+      const hasRequestedCode = (item: any) =>
+        getPointCollectionIdentifiers(item).some((identifier) => {
+          const numericIdentifier = String(identifier).replace(/\D/g, "");
+          return numericIdentifier.replace(/^0+(?=\d)/, "") === requestedCode;
+        });
+      const entries = [
+        ...cameras.map((item: any) => ({ item, kind: "Câmera" })),
+        ...camerasIntel.map((item: any) => ({ item, kind: "Super Câmera" })),
+        ...camerasLpr.map((item: any) => ({ item, kind: "LPR" })),
+        ...radares.map((item: any) => ({ item, kind: "Radar" })),
+      ].filter(({ item }) => hasRequestedCode(item));
+
+      if (!entries.length) {
+        setSearchedEquipment([]);
+        setSearchErr("Nenhum equipamento encontrado.");
+        return false;
+      }
+      setSearchEquipmentPoint(null);
+      setSearchedEquipment(entries);
+      setSearchEquipmentTitle("Equipamentos encontrados");
+      setPanel("map");
+      return true;
+    }
+
     const rioPolygon: Array<[number, number]> = [
       [-43.96293645275085, -22.666692475162534],
       [-43.884929495808876, -22.718091155985434],
@@ -6171,6 +6209,10 @@ export default function MapPage() {
           return false;
         }
         setSearchPin({ lng, lat });
+        setSearchEquipmentPoint({ lng, lat });
+        setSearchedEquipment([]);
+        setSearchEquipmentTitle("Equipamentos próximos da busca");
+        setPanel("map");
         flyToPoint(lng, lat, 16);
         searchTimerRef.current = window.setTimeout(() => setSearchPin(null), 4000);
         return true;
@@ -6245,6 +6287,10 @@ export default function MapPage() {
         return false;
       }
       setSearchPin({ lng, lat });
+      setSearchEquipmentPoint({ lng, lat });
+      setSearchedEquipment([]);
+      setSearchEquipmentTitle("Equipamentos próximos da busca");
+      setPanel("map");
       const isAddress =
         Array.isArray(f.place_type) && (f.place_type.includes("address") || f.place_type.includes("poi"));
       flyToPoint(lng, lat, isAddress ? 17.5 : 16);
@@ -6370,6 +6416,36 @@ export default function MapPage() {
       : mobileCountRadares;
 
   const listItems = isMobile ? filtered.slice(0, mobileCount) : pagedItems;
+
+  const nearbySearchEquipment = useMemo(() => {
+    if (!searchEquipmentPoint) return [];
+    const { lng, lat } = searchEquipmentPoint;
+    const distance = (item: any) => {
+      const itemLat = getLat(item);
+      const itemLng = getLng(item);
+      if (itemLat == null || itemLng == null) return Infinity;
+      const dLat = (itemLat - lat) * 111_000;
+      const dLng = (itemLng - lng) * 111_000 * Math.cos((lat * Math.PI) / 180);
+      return Math.sqrt(dLat * dLat + dLng * dLng);
+    };
+    const groups = [
+      ...cameras.map((item: any) => ({ item, kind: "Câmera" })),
+      ...camerasIntel.map((item: any) => ({ item, kind: "Super Câmera" })),
+      ...camerasLpr.map((item: any) => ({ item, kind: "LPR" })),
+      ...radares.map((item: any) => ({ item, kind: "Radar" })),
+    ];
+    return groups
+      .map((entry) => ({ ...entry, meters: distance(entry.item) }))
+      .filter((entry) => entry.meters <= 100)
+      .sort((a, b) => a.meters - b.meters)
+      .slice(0, 30);
+  }, [searchEquipmentPoint, cameras, camerasIntel, camerasLpr, radares]);
+
+  const displayedSearchEquipment = searchEquipmentPoint ? nearbySearchEquipment : searchedEquipment;
+
+  useEffect(() => {
+    setNearbyVisibleCount(7);
+  }, [searchEquipmentPoint, searchedEquipment]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1210px), (max-height: 500px) and (pointer: coarse)");
@@ -6848,6 +6924,10 @@ export default function MapPage() {
         style={{ position: "absolute", inset: 0, background: "#0b0b0f" }}
       />
 
+      <div className="mobileMapBrandPill" aria-label="CIVITAS">
+        <img src={civitasLogo} alt="CIVITAS" />
+      </div>
+
       {!MAPBOX_TOKEN && (
         <div
           className="glassStrong"
@@ -6934,21 +7014,34 @@ export default function MapPage() {
 
         {!dockOpen && (
           <div
-            className="dockHandle"
+            className={`dockHandle ${isMobile ? "dockHandleMobile" : ""}`}
             title="Abrir camadas"
             onClick={() => {
               setDockOpen(true);
               bumpDockAutoHide();
             }}
           >
-            <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden="true" />
-            <span>Camadas</span>
+            {isMobile ? <Layers size={20} strokeWidth={2.1} aria-hidden="true" /> : <><SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden="true" /><span>Camadas</span></>}
           </div>
         )}
 
         {dockOpen && (
           <>
             <div className="dock">
+              {isMobile && (
+                <div className="dockMobileTitle">Camadas</div>
+              )}
+              {isMobile && (
+                <button
+                  type="button"
+                  className="dockMobileClose"
+                  onClick={() => setDockOpen(false)}
+                  aria-label="Recolher camadas"
+                  title="Recolher camadas"
+                >
+                  <X size={18} strokeWidth={2.4} />
+                </button>
+              )}
               <div className="dockSectionLabel">Base do mapa</div>
               <div className="dockBase">
                 <div className="dockBaseToggle">
@@ -6997,7 +7090,7 @@ export default function MapPage() {
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
-                    <img src={cameraIconSatellite} alt="" />
+                    <img src={cameraIcon} alt="" />
                   </span>
                   <span className="chipText">
                     <span>Câmeras</span>
@@ -7020,7 +7113,7 @@ export default function MapPage() {
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
-                    <img src={cameraIntelIconSatellite} alt="" />
+                    <img src={cameraIntelIcon} alt="" />
                   </span>
                   <span className="chipText">
                     <span>Super Câmeras Inteligentes</span>
@@ -7501,18 +7594,10 @@ export default function MapPage() {
             title="Equipamentos"
           >
             <LayoutDashboard aria-hidden="true" />
-            <span>Equipamentos</span>
+            <span>EQUIPAMENTOS</span>
           </button>
           <button
-            className={`appSidebarItem ${panel === "profile" ? "appSidebarItemActive" : ""}`}
-            onClick={() => togglePanel("profile")}
-            title="Meu perfil"
-          >
-            <UserRound aria-hidden="true" />
-            <span>Meu perfil</span>
-          </button>
-          <button
-            className={`appSidebarItem ${panel === "civitas" ? "appSidebarItemActive" : ""}`}
+            className={`appSidebarItem appSidebarCivitas ${panel === "civitas" ? "appSidebarItemActive" : ""}`}
             onClick={() => togglePanel("civitas")}
             title={civitasTabLabel}
           >
@@ -7561,6 +7646,14 @@ export default function MapPage() {
       </aside>
 
       <div className="mapCommandBar desktopPanels">
+        <div className="mapSearchMode" role="group" aria-label="Tipo de busca">
+          <button type="button" className={searchMode === "address" ? "mapSearchModeActive" : ""} onClick={() => setSearchMode("address")} title="Buscar endereço" aria-label="Buscar endereço">
+            <MapPinned size={16} aria-hidden="true" />
+          </button>
+          <button type="button" className={searchMode === "equipment" ? "mapSearchModeActive" : ""} onClick={() => setSearchMode("equipment")} title="Buscar equipamento" aria-label="Buscar equipamento">
+            <RadioTower size={16} aria-hidden="true" />
+          </button>
+        </div>
         <Search size={17} strokeWidth={2.2} aria-hidden="true" />
         <input
           value={searchQuery}
@@ -7571,23 +7664,44 @@ export default function MapPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleSearch();
           }}
-          placeholder="Buscar endereço ou coordenadas no Rio de Janeiro"
-          aria-label="Buscar endereço ou coordenadas"
+          placeholder="Buscar"
+          aria-label={searchMode === "address" ? "Buscar endereço ou coordenadas" : "Buscar equipamento"}
         />
-        <button onClick={() => void handleSearch()} title="Buscar local">Buscar</button>
+        <button onClick={() => void handleSearch()} title="Buscar">Buscar</button>
         {searchErr && <div className="mapCommandBarError">{searchErr}</div>}
       </div>
 
-      <div className="mapUtilityBar desktopPanels">
-        <img src={prefeituraLogo} alt="Prefeitura do Rio" />
-        <div className="mapUtilityBarDivider" />
-        <span className="mapUtilityBarIdentity">{me?.full_name || "Sessão segura"}</span>
+      <div className="mapTopActions desktopPanels">
+        <button
+          type="button"
+          className={`mapCivitasAction ${panel === "civitas" ? "mapCivitasActionActive" : ""}`}
+          onClick={() => togglePanel("civitas")}
+          title={panel === "civitas" ? "Fechar CIVITAS" : "Acionar CIVITAS"}
+        >
+          <span className="mapCivitasActionLogo" aria-hidden="true">
+            <img src={civitasActionSymbol} alt="" />
+          </span>
+          <span>ACIONAR CIVITAS</span>
+        </button>
+        <div className="mapUtilityBar">
+          <img src={prefeituraLogo} alt="Prefeitura do Rio" />
+          <div className="mapUtilityBarDivider" />
+          <button
+            type="button"
+            className={`mapUtilityBarIdentity mapUtilityProfile ${panel === "profile" ? "mapUtilityProfileActive" : ""}`}
+            onClick={() => togglePanel("profile")}
+            title={me?.full_name ? `Abrir perfil de ${me.full_name}` : "Abrir meu perfil"}
+            aria-label="Abrir meu perfil"
+          >
+            <UserRound size={18} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* LEFT PANEL (desktop) */}
       {panel !== null && (
         <div
-          className={`desktopPanels mapWorkspacePanel ${panel === "civitas" ? "" : "panelCard"} ${panel === "profile" ? "profilePanel" : ""}`.trim()}
+          className={`desktopPanels mapWorkspacePanel ${panel === "civitas" ? "" : "panelCard"} ${panel === "profile" ? "profilePanel" : ""} ${panel === "map" && (searchEquipmentPoint || searchedEquipment.length) ? "searchEquipmentOnly" : ""}`.trim()}
           style={{
             position: "absolute",
             top: 76,
@@ -7602,6 +7716,42 @@ export default function MapPage() {
         >
           {panel === "map" && (
             <>
+              {(searchEquipmentPoint || searchedEquipment.length > 0) && (
+                <div className={`searchEquipmentResults ${displayedSearchEquipment.length > 5 ? "searchEquipmentResultsScrollable" : ""}`} onScroll={(event) => {
+                  const target = event.currentTarget;
+                  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 24) {
+                    setNearbyVisibleCount((count) => Math.min(count + 7, displayedSearchEquipment.length));
+                  }
+                }}>
+                  <div className="searchEquipmentResultsTitle">{searchEquipmentTitle || "Equipamentos próximos da busca"}</div>
+                  {displayedSearchEquipment.length ? (
+                    displayedSearchEquipment.slice(0, nearbyVisibleCount).map(({ item, kind, meters }, index) => (
+                      <button
+                        type="button"
+                        className="searchEquipmentResultCard"
+                        key={`${kind}-${getPointCollectionCode(item)}-${index}`}
+                        onClick={() => {
+                          const lng = getLng(item);
+                          const lat = getLat(item);
+                          if (lng != null && lat != null) flyToPoint(lng, lat, 18);
+                        }}
+                        title="Centralizar equipamento no mapa"
+                      >
+                        <div className="searchEquipmentResultIcon">
+                          <img
+                            src={kind === "Câmera" ? cameraIcon : kind === "Super Câmera" ? cameraIntelIcon : kind === "LPR" ? cameraLprIcon : radarIcon}
+                            alt=""
+                          />
+                        </div>
+                        <div className="searchEquipmentResultBody">
+                          <strong>{item.name || item.nome || `${kind} ${getPointCollectionCode(item) || ""}`}</strong>
+                          <span>{kind} · {getPointCollectionCode(item) || "Sem código"}{typeof meters === "number" ? ` · ${Math.round(meters)} m` : ""}</span>
+                        </div>
+                      </button>
+                    ))
+                  ) : <div className="searchEquipmentEmpty">Nenhum equipamento encontrado próximo deste endereço.</div>}
+                </div>
+              )}
               <div className="equipmentPanelHeader" style={{ marginBottom: 12, display: "grid", gap: 12 }}>
                 <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
                   {availableListModes.map((option) => (
@@ -8215,10 +8365,6 @@ export default function MapPage() {
             paddingRight: 10,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={civitasLogo} alt="Civitas" style={{ height: 32, width: "auto", maxWidth: 150 }} />
-          </div>
-
           <div style={{ position: "relative" }}>
             <button
               className={`btnGhost mobileMenuTrigger ${mobileMenuOpen ? "mobileMenuTrigger--open" : ""}`}
@@ -8309,6 +8455,21 @@ export default function MapPage() {
                         <span className="mobileMenuActionSub">Rua, bairro ou coordenada no mapa</span>
                       </span>
                       <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="mobileMenuCivitasPill"
+                      onClick={() => {
+                        setMobileSearchOpen(false);
+                        setMobileMenuOpen(false);
+                        setPanel("civitas");
+                        setPanelOpen(true);
+                      }}
+                      aria-label="Acionar CIVITAS"
+                    >
+                      <img src={civitasLogo} alt="CIVITAS" />
+                      <ChevronRight size={16} strokeWidth={2.4} aria-hidden="true" />
                     </button>
 
                     <button
@@ -9127,6 +9288,76 @@ export default function MapPage() {
           </div>
         )}
       </div>
+
+      <nav className="mobileBottomNav" aria-label="Navegação principal">
+        <button
+          type="button"
+          className={panelOpen && panel === "map" ? "mobileBottomNavActive" : ""}
+          onClick={() => {
+            setMobileMenuOpen(false);
+            setMobileSearchOpen(false);
+            setPanel("map");
+            setPanelOpen(true);
+          }}
+        >
+          <LayoutDashboard size={19} aria-hidden="true" />
+          <span>Equipamentos</span>
+        </button>
+        <button
+          type="button"
+          className={mobileSearchOpen ? "mobileBottomNavActive" : ""}
+          onClick={() => {
+            setSearchErr(null);
+            setPanelOpen(false);
+            setMobileMenuOpen(false);
+            setMobileSearchOpen(true);
+          }}
+        >
+          <Search size={19} aria-hidden="true" />
+          <span>Buscar</span>
+        </button>
+        <button
+          type="button"
+          className={`mobileBottomNavCivitas ${panelOpen && panel === "civitas" ? "mobileBottomNavActive" : ""}`}
+          onClick={() => {
+            setMobileSearchOpen(false);
+            setMobileMenuOpen(false);
+            setPanel("civitas");
+            setPanelOpen(true);
+          }}
+          aria-label="Acionar CIVITAS"
+        >
+          <span className="mobileBottomNavCivitasLogo"><img src={civitasActionSymbol} alt="" /></span>
+          <span>Acionar</span>
+        </button>
+        <button
+          type="button"
+          className={panelOpen && panel === "profile" ? "mobileBottomNavActive" : ""}
+          onClick={() => {
+            setMobileSearchOpen(false);
+            setMobileMenuOpen(false);
+            setPanel("profile");
+            setPanelOpen(true);
+          }}
+          aria-label="Meu perfil"
+          title="Meu perfil"
+        >
+          <UserRound size={20} aria-hidden="true" />
+          <span>Perfil</span>
+        </button>
+        <button
+          type="button"
+          className={mobileMenuOpen ? "mobileBottomNavActive" : ""}
+          onClick={() => {
+            setMobileSearchOpen(false);
+            setPanelOpen(false);
+            setMobileMenuOpen((open) => !open);
+          }}
+        >
+          <Menu size={20} aria-hidden="true" />
+          <span>Mais</span>
+        </button>
+      </nav>
 
       {mobileSearchOpen && (
         <div

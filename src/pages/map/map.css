@@ -783,7 +783,7 @@
 }
 .appSidebar:hover, .appSidebar:focus-within { width: var(--sidebar-expanded-width); box-shadow: 16px 0 36px rgba(15, 35, 56, 0.12); }
 .appSidebarBrand { height: 76px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 0; padding: 0 12px; border-bottom: 1px solid #e8edf3; }
-.appSidebarLogoMark { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 44px; overflow: hidden; border-radius: 12px; background: #123865; box-shadow: 0 6px 14px rgba(18, 56, 101, .16); transition: width 180ms ease, flex-basis 180ms ease, opacity 150ms ease, transform 180ms ease; }
+.appSidebarLogoMark { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 44px; overflow: hidden; border-radius: 12px; background: transparent; box-shadow: none; transition: width 180ms ease, flex-basis 180ms ease, opacity 150ms ease, transform 180ms ease; }
 .appSidebarLogoMark img { width: 30px; height: 30px; object-fit: contain; display: block; }
 .appSidebarLogoFull { width: 0; height: 36px; display: block; opacity: 0; object-fit: contain; object-position: left center; transform: translateX(-8px); transition: width 220ms cubic-bezier(.2, .82, .25, 1), opacity 150ms ease, transform 180ms ease; }
 .appSidebar:hover .appSidebarBrand, .appSidebar:focus-within .appSidebarBrand { justify-content: center; padding: 0 18px; }
@@ -794,13 +794,15 @@
 .appSidebarNav, .appSidebarFooter { display: grid; gap: 6px; padding: 12px 10px 18px; }
 .appSidebarFooter { margin-top: auto; padding-top: 14px; border-top: 1px solid #e8edf3; }
 .appSidebarItem { appearance: none; width: 100%; min-height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 11px; overflow: hidden; color: #5e6e82; border: 1px solid transparent; border-radius: 10px; background: transparent; box-shadow: none; font-family: inherit; text-align: left; white-space: nowrap; cursor: pointer; transition: color 160ms ease, background 160ms ease, border-color 160ms ease; }
-.appSidebarItem svg { width: 20px; height: 20px; flex: 0 0 20px; color: #0a284b; stroke: currentColor; stroke-width: 1.9; }
+.appSidebarItem svg { width: 22px; height: 22px; flex: 0 0 22px; color: #0a284b; stroke: currentColor; stroke-width: 1.9; }
 .appSidebarItem span { overflow: hidden; color: inherit; opacity: 0; transform: translateX(-6px); font-size: 13px; font-weight: 680; transition: opacity 110ms ease, transform 170ms ease; }
 .appSidebar:hover .appSidebarItem span, .appSidebar:focus-within .appSidebarItem span { opacity: 1; transform: translateX(0); transition-delay: 70ms; }
 .appSidebarItem:hover { color: #163d5f; background: #f4f6f8; }
 .appSidebarItem:focus-visible { outline: 2px solid #00a9de; outline-offset: 2px; }
 .appSidebarItemActive { color: #0a284b; border-color: transparent; background: #f4f6f8; box-shadow: none; }
 .appSidebarItemActive svg { color: #0a284b; }
+.appSidebarCivitas.appSidebarItemActive { color: #007fae; border-color: #bfe8f7; background: #eaf8fd; }
+.appSidebarCivitas.appSidebarItemActive svg { color: #00a9de; }
 .appSidebarLogout:hover { color: #b42318; background: #fff2f0; }
 .mapCommandBar, .mapUtilityBar { position: absolute; top: 16px; z-index: 30; height: 50px; display: flex; align-items: center; color: #62758a; border: 1px solid #dce5ed; border-radius: 12px; background: rgba(255, 255, 255, .97); box-shadow: 0 10px 28px rgba(15, 35, 56, .1); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); }
 .mapCommandBar { left: 82px; width: min(460px, calc(100vw - 310px)); gap: 9px; padding: 0 5px 0 13px; }
@@ -810,10 +812,78 @@
 .mapCommandBar button { height: 38px; padding: 0 14px; color: #fff; border: 0; border-radius: 9px; background: #0a284b; box-shadow: none; font-size: 12px; font-weight: 700; }
 .mapCommandBar button:hover { border: 0; background: #123b69; }
 .mapCommandBarError { position: absolute; top: calc(100% + 8px); left: 0; max-width: 100%; padding: 6px 9px; color: #991b1b; border: 1px solid rgba(185, 28, 28, .16); border-radius: 8px; background: rgba(255, 244, 244, .96); font-size: 11px; font-weight: 650; }
-.mapUtilityBar { right: 16px; gap: 12px; padding: 0 15px; border-radius: 12px; }
-.mapUtilityBar img { width: auto; height: 30px; object-fit: contain; }
-.mapUtilityBarDivider { width: 1px; height: 26px; background: #d6e1e9; }
-.mapUtilityBarIdentity { max-width: 210px; overflow: hidden; color: #193852; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
+.mapSearchMode { display: inline-flex; align-self: stretch; align-items: center; gap: 2px; padding: 4px; border-right: 1px solid #e0e8ef; background: #f3f6f9; flex: 0 0 auto; }
+.mapSearchMode button, .mapCommandBar .mapSearchMode button { display: inline-flex; width: 32px; align-items: center; justify-content: center; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 7px; color: #6a7d90; background: transparent; box-shadow: none; line-height: 1; cursor: pointer; }
+.mapSearchMode button:hover, .mapCommandBar .mapSearchMode button:hover { color: #163d63; background: #e7eef4; }
+.mapSearchMode button.mapSearchModeActive, .mapCommandBar .mapSearchMode button.mapSearchModeActive { color: #0a284b; background: #fff; box-shadow: 0 1px 4px rgba(23, 52, 78, .14); }
+.mapSearchMode button.mapSearchModeActive svg { color: #00a9de; }
+.mapUtilityBar { right: 16px; justify-content: flex-start; gap: 12px; padding: 0 15px; border-radius: 12px; }
+.mapUtilityBar img { width: auto; height: 34px; flex: 0 0 auto; order: 3; object-fit: contain; }
+.mapUtilityBarDivider { width: 1px; height: 26px; order: 2; background: #d6e1e9; }
+.mapUtilityBarIdentity { max-width: 210px; margin-left: 0; overflow: hidden; color: #193852; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; order: 1; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.mapUtilityProfile { appearance: none; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 34px; padding: 0; border: 0; border-radius: 8px; color: #6f8498; background: transparent; cursor: pointer; transition: color 140ms ease, background 140ms ease; }
+.mapUtilityProfile:hover, .mapUtilityProfileActive { color: #0a284b; background: #f2f7fa; }
+
+.mapTopActions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mapTopActions .mapUtilityBar {
+  position: relative;
+  top: auto;
+  right: auto;
+}
+
+.mapCivitasAction {
+  height: 50px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: #007fae;
+  border: 1px solid #bfe8f7;
+  border-radius: 12px;
+  background: #eaf8fd;
+  box-shadow: 0 8px 20px rgba(15, 35, 56, .09);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.mapCivitasAction:hover,
+.mapCivitasActionActive {
+  border-color: #8bcfe7;
+  background: #dff3fb;
+  transform: translateY(-1px);
+}
+
+.mapCivitasAction svg {
+  color: #00a9de;
+}
+
+.mapCivitasActionLogo {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  background: #123865;
+}
+
+.mapCivitasActionLogo img {
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
+}
 
 /* Keep the workspace clear while the navigation rail is expanded. */
 .mapCommandBar,
@@ -1187,6 +1257,9 @@
   background: #0b0b0f;
 }
 
+.mobileBottomNav { display: none; }
+.mobileMapBrandPill { display: none; }
+
 @media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
   .mapRoot {
     top: calc(env(safe-area-inset-top) * -1);
@@ -1207,7 +1280,7 @@
     position: fixed;
     left: 12px;
     right: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: calc(82px + env(safe-area-inset-bottom));
     max-height: 72vh;
     overflow: auto;
     transform: translateY(0);
@@ -1232,6 +1305,63 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+  .mobileBar > .glass { display: contents !important; }
+  .mobileBar .mobileMenuTrigger { display: none; }
+  .mobileBottomNav {
+    position: fixed;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    left: 12px;
+    z-index: 35;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
+    min-height: 62px;
+    padding: 5px;
+    border: 1px solid rgba(214, 225, 233, .92);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 14px 34px rgba(10, 40, 75, .18);
+  }
+  .mobileMapBrandPill {
+    position: fixed;
+    top: calc(11px + env(safe-area-inset-top));
+    left: 50%;
+    z-index: 24;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 142px;
+    height: 38px;
+    padding: 0 15px;
+    border: 1px solid rgba(214, 225, 233, .95);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .97);
+    box-shadow: 0 8px 22px rgba(10, 40, 75, .16);
+    transform: translateX(-50%);
+  }
+  .mobileMapBrandPill img { width: auto; height: 26px; max-width: 136px; object-fit: contain; }
+  .mobileBottomNav button {
+    display: grid;
+    place-items: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 5px 2px;
+    border: 0;
+    border-radius: 13px;
+    color: #718398;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+  }
+  .mobileBottomNav button > span:not(.mobileBottomNavCivitasLogo) { display: none; }
+  .mobileBottomNav button.mobileBottomNavActive { color: #0a284b; background: #edf4f8; }
+  .mobileBottomNav .mobileBottomNavCivitas { position: relative; z-index: 1; width: 58px; height: 58px; justify-self: center; align-self: center; margin-top: -28px; border: 3px solid #fff; border-radius: 50%; color: #fff; background: #0a284b; box-shadow: 0 10px 22px rgba(10, 40, 75, .32); }
+  .mobileBottomNav .mobileBottomNavCivitas.mobileBottomNavActive { color: #fff; background: #0a284b; }
+  .mobileBottomNavCivitasLogo { width: 30px; height: 30px; display: grid; place-items: center; }
+  .mobileBottomNavCivitasLogo img { width: 30px; height: 30px; object-fit: contain; }
+  .mapboxgl-ctrl-top-right .mapboxgl-ctrl-group,
+  .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group { display: none !important; }
   .mobileMenuTrigger {
     width: 44px;
     height: 40px;
@@ -1420,6 +1550,21 @@
   .mobileMenuActionDanger .mobileMenuActionChevron {
     color: rgba(185, 28, 28, 0.5);
   }
+  .mobileMenuCivitasPill {
+    width: 100%;
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 13px;
+    border: 1px solid #c9eaf6;
+    border-radius: 999px;
+    color: #0a284b;
+    background: #eefaff;
+    cursor: pointer;
+  }
+  .mobileMenuCivitasPill img { width: auto; height: 23px; max-width: 154px; object-fit: contain; }
+  .mobileMenuCivitasPill:hover { background: #e1f6ff; border-color: #98d8ee; }
   .mobileSearchLayer {
     position: fixed;
     top: var(--vv-offset-top, 0px);
@@ -1873,13 +2018,20 @@
   }
   .dockWrap {
     position: fixed;
-    right: 12px;
-    top: calc(76px + env(safe-area-inset-top));
+    right: 14px;
+    top: calc(14px + env(safe-area-inset-top));
     bottom: auto;
     max-height: calc(var(--vvh, 100dvh) - 96px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     overflow: auto;
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
     overscroll-behavior: contain;
+  }
+  .dockWrap:has(.dock) {
+    top: auto;
+    right: 12px;
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    left: 12px;
+    max-height: min(62vh, calc(var(--vvh, 100dvh) - 150px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
   }
   .dockHandle {
     height: 32px;
@@ -1887,7 +2039,21 @@
     font-size: 11px;
     border-radius: 999px;
   }
+  .dockHandleMobile {
+    width: 44px;
+    height: 44px;
+    margin-right: 0;
+    padding: 0;
+    transform: none;
+    border: 1px solid #d7e2ea;
+    border-radius: 14px;
+    color: #0a284b;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 8px 20px rgba(10, 40, 75, .18);
+  }
+  .dockHandleMobile:hover { transform: translateY(-1px); background: #fff; }
   .dock {
+    position: relative;
     padding: 10px;
     gap: 6px;
     min-width: 150px;
@@ -1896,6 +2062,23 @@
     max-height: calc(var(--vvh, 100dvh) - 140px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     border-radius: 16px;
   }
+  .dockWrap:has(.dock) .dock { width: 100%; max-width: 100%; max-height: inherit; padding: 16px 12px 12px; border-radius: 20px; }
+  .dockMobileTitle { margin: 0 40px 14px 2px; color: #0a284b; font-size: 15px; font-weight: 800; }
+  .dockMobileClose {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 0;
+    color: #0a284b;
+    background: transparent;
+    cursor: pointer;
+  }
+  .dock .dockSectionLabel:first-of-type { padding-right: 36px; }
   .dockSectionLabel {
     font-size: 9px;
   }
@@ -3178,5 +3361,34 @@
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+.searchEquipmentResults { display: grid; gap: 8px; margin: 0 0 14px; padding: 10px; border: 1px solid #d8e3ec; border-radius: 12px; background: #f7fafc; }
+.searchEquipmentResultsScrollable { height: min(360px, calc(100vh - 190px)); max-height: min(360px, calc(100vh - 190px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; -ms-overflow-style: none; }
+.searchEquipmentResultsScrollable::-webkit-scrollbar { display: none; }
+.searchEquipmentResultsTitle { color: #0a284b; font-size: 13px; font-weight: 800; }
+.searchEquipmentResultCard { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; padding: 10px; border: 1px solid #dbe5ed; border-radius: 10px; text-align: left; background: #fff; cursor: pointer; }
+.searchEquipmentResultCard:hover { border-color: #a9c6da; background: #f8fcff; }
+.searchEquipmentResultIcon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: #0a284b; background: #e5f1f8; flex: 0 0 28px; }
+.searchEquipmentResultIcon img { width: 20px; height: 20px; object-fit: contain; }
+.searchEquipmentResultBody { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.searchEquipmentResultBody strong { overflow: hidden; color: #12263d; font-size: 12px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.searchEquipmentResultBody span, .searchEquipmentEmpty { color: #64788c; font-size: 11px; }
+.searchEquipmentOnly > :not(.searchEquipmentResults) { display: none !important; }
+
+@media (max-width: 520px) {
+  .searchEquipmentResults { height: min(56vh, 420px); padding: 8px; }
+  .searchEquipmentResultCard { align-items: flex-start; gap: 8px; padding: 9px; }
+  .searchEquipmentResultIcon { width: 26px; height: 26px; flex-basis: 26px; }
+  .searchEquipmentResultIcon img { width: 18px; height: 18px; }
+  .searchEquipmentResultBody strong { white-space: normal; }
+  .searchEquipmentResultBody span { line-height: 1.35; }
+}
+
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
+  .mapRoot .dockWrap:not(:has(.dock)) {
+    top: calc(11px + env(safe-area-inset-top));
+    right: 14px;
   }
 }
