@@ -5234,8 +5234,14 @@ export default function MapPage() {
 
   function toggleAreaDrawing() {
     if (!canUseAreaDraw) return;
+    if (areaDrawMode) {
+      clearAreaDrawing();
+      setAreaDrawMode(false);
+      setAreaToolsOpen(false);
+      return;
+    }
     setAreaToolsOpen(true);
-    setAreaDrawMode((prev) => !prev);
+    setAreaDrawMode(true);
     setAreaReportMsg(null);
   }
 
@@ -6907,6 +6913,8 @@ export default function MapPage() {
     );
   };
 
+  const mobileLayersVisible = dockOpen && !panelOpen && !mobileMenuOpen && !mobileSearchOpen;
+
   return (
     <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""}`}>
       <div
@@ -6920,9 +6928,26 @@ export default function MapPage() {
         style={{ position: "absolute", inset: 0, background: "#0b0b0f" }}
       />
 
-      <div className="mobileMapBrandPill" aria-label="CIVITAS">
+      <div className="mobileMapBrandPill">
         <img src={civitasLogo} alt="CIVITAS" />
       </div>
+      <button
+        type="button"
+        className={mobileLayersVisible ? "mobileLayersToggle mobileLayersToggleActive" : "mobileLayersToggle"}
+        onClick={() => {
+          setPanelOpen(false);
+          setMobileMenuOpen(false);
+          setMobileSearchOpen(false);
+          setDockOpen((open) => panelOpen || mobileMenuOpen ? true : !open);
+        }}
+        aria-label={mobileLayersVisible ? "Fechar camadas" : "Abrir camadas"}
+        aria-expanded={mobileLayersVisible}
+        aria-controls="mapLayersPanel"
+        title={mobileLayersVisible ? "Fechar camadas" : "Abrir camadas"}
+      >
+        <Layers size={18} strokeWidth={2.1} aria-hidden="true" />
+        <span>Camadas</span>
+      </button>
 
       {!MAPBOX_TOKEN && (
         <div
@@ -7008,7 +7033,7 @@ export default function MapPage() {
                 : "Carregando resumo...",
           })}
 
-        {!dockOpen && (
+        {!dockOpen && !isMobile && (
           <div
             className={`dockHandle ${isMobile ? "dockHandleMobile" : ""}`}
             title="Abrir camadas"
@@ -7017,13 +7042,13 @@ export default function MapPage() {
               bumpDockAutoHide();
             }}
           >
-            {isMobile ? <Layers size={20} strokeWidth={2.1} aria-hidden="true" /> : <><SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden="true" /><span>Camadas</span></>}
+            {isMobile ? <Layers size={20} strokeWidth={2.1} aria-hidden="true" /> : <><Layers size={14} strokeWidth={2.2} aria-hidden="true" /><span>Camadas</span></>}
           </div>
         )}
 
         {dockOpen && (
           <>
-            <div className="dock">
+            <div className="dock" id="mapLayersPanel">
               {isMobile && (
                 <div className="dockMobileTitle">Camadas</div>
               )}
@@ -7278,12 +7303,9 @@ export default function MapPage() {
                 className="dockChip"
                 onClick={() => {
                   if (areaDrawMode) {
+                    clearAreaDrawing();
                     setAreaDrawMode(false);
-                    areaDrawPolygonsRef.current = [];
-                    setAreaDrawPoints([]);
-                    setAreaDrawPolygons([]);
                     setAreaToolsOpen(false);
-                    setAreaReportMsg(null);
                     return;
                   }
                   setAreaToolsOpen(true);
