@@ -17,6 +17,7 @@ import cameraLprIcon from "@/assets/camera-lpr-icon.png";
 
 const ADMIN_PAGE_SIZE = 50;
 type StatusFilter = "all" | "active" | "inactive";
+type CameraScope = "cameras" | "inteligentes" | "lpr";
 
 function coerceCoord(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -39,11 +40,13 @@ function getLng(value: any) {
 export function AdminCamerasPanel({
   apiBase,
   token,
+  scope,
   onStatusChanged,
   isMobile,
 }: {
   apiBase: string;
   token: string;
+  scope: CameraScope;
   onStatusChanged?: () => void;
   isMobile: boolean;
 }) {
@@ -59,8 +62,6 @@ export function AdminCamerasPanel({
   const [lprLoading, setLprLoading] = useState(false);
   const [lprItems, setLprItems] = useState<CameraLpr[]>([]);
 
-  const [camTab, setCamTab] = useState<"cameras" | "civitas">("cameras");
-  const [civitasTab, setCivitasTab] = useState<"inteligentes" | "lpr">("inteligentes");
   const [pageCams, setPageCams] = useState(1);
   const [pageIntel, setPageIntel] = useState(1);
   const [pageLpr, setPageLpr] = useState(1);
@@ -136,8 +137,6 @@ export function AdminCamerasPanel({
     buttonsStyling: false,
     backdrop: "rgba(2, 6, 23, 0.74)",
   } as const;
-
-  type CameraScope = "cameras" | "inteligentes" | "lpr";
 
   function applyStatusFilter<T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(
     list: T[],
@@ -455,16 +454,12 @@ export function AdminCamerasPanel({
   }
 
   useEffect(() => {
-    load();
+    setErr(null);
+    if (scope === "cameras") load();
+    if (scope === "inteligentes") loadIntel();
+    if (scope === "lpr") loadLpr();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (camTab !== "civitas") return;
-    if (civitasTab === "inteligentes") loadIntel();
-    if (civitasTab === "lpr") loadLpr();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camTab, civitasTab]);
+  }, [scope]);
 
   useEffect(() => {
     setPageCams(1);
@@ -474,8 +469,7 @@ export function AdminCamerasPanel({
     setMobileCountIntel(ADMIN_PAGE_SIZE);
     setMobileCountLpr(ADMIN_PAGE_SIZE);
   }, [
-    camTab,
-    civitasTab,
+    scope,
     items.length,
     intelItems.length,
     lprItems.length,
@@ -489,122 +483,13 @@ export function AdminCamerasPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      {!isMobile ? (
-        <div className="tabsRail tabsRailSection">
-          <button className={`subTab ${camTab === "cameras" ? "subTabActive" : ""}`} onClick={() => setCamTab("cameras")}>
-            Câmeras
-          </button>
-          <button className={`subTab ${camTab === "civitas" ? "subTabActive" : ""}`} onClick={() => setCamTab("civitas")}>
-            Câmeras Civitas
-          </button>
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gap: 6,
-            padding: "10px 12px",
-            borderRadius: 16,
-            border: "1px solid rgba(10,40,75,0.08)",
-            background: "rgba(255,255,255,0.88)",
-          }}
-        >
-          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>ORIGEM</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {[
-              { key: "cameras" as const, label: "Câmeras" },
-              { key: "civitas" as const, label: "Câmeras Civitas" },
-            ].map((option) => {
-              const active = camTab === option.key;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => setCamTab(option.key)}
-                  style={{
-                    padding: "7px 12px",
-                    borderRadius: 999,
-                    border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
-                    background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
-                    color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    whiteSpace: "nowrap",
-                    cursor: "pointer",
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {camTab === "civitas" && (
-        !isMobile ? (
-          <div className="tabsRail tabsRailSection tabsRailCompact">
-            <button
-              className={`subTab ${civitasTab === "inteligentes" ? "subTabActive" : ""}`}
-              onClick={() => setCivitasTab("inteligentes")}
-            >
-              Inteligentes
-            </button>
-            <button className={`subTab ${civitasTab === "lpr" ? "subTabActive" : ""}`} onClick={() => setCivitasTab("lpr")}>
-              LPR
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gap: 6,
-              padding: "10px 12px",
-              borderRadius: 16,
-              border: "1px solid rgba(10,40,75,0.08)",
-              background: "rgba(255,255,255,0.88)",
-            }}
-          >
-            <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>TIPO</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {[
-                { key: "inteligentes" as const, label: "Inteligentes" },
-                { key: "lpr" as const, label: "LPR" },
-              ].map((option) => {
-                const active = civitasTab === option.key;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => setCivitasTab(option.key)}
-                    style={{
-                      padding: "7px 12px",
-                      borderRadius: 999,
-                      border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
-                      background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
-                      color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      whiteSpace: "nowrap",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )
-      )}
-
       {err && (
         <div style={{ fontSize: 12, opacity: 0.9, color: "#991b1b" }}>
           {err}
         </div>
       )}
 
-      {camTab === "cameras" && (
+      {scope === "cameras" && (
         <>
           <div
             className="adminCard"
@@ -760,7 +645,7 @@ export function AdminCamerasPanel({
         </>
       )}
 
-      {camTab === "civitas" && civitasTab === "inteligentes" && (
+      {scope === "inteligentes" && (
         <div
           className="adminCard"
           style={{
@@ -913,7 +798,7 @@ export function AdminCamerasPanel({
         </div>
       )}
 
-      {camTab === "civitas" && civitasTab === "lpr" && (
+      {scope === "lpr" && (
         <div
           className="adminCard"
           style={{

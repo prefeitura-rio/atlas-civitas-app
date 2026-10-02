@@ -16,6 +16,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import Swal from "sweetalert2";
 import {
   Building2,
+  ChartNoAxesCombined,
   ChevronRight,
   Eye,
   EyeOff,
@@ -47,14 +48,12 @@ import {
   normalizeRole,
 } from "./map/roles";
 import "./map/map.css";
-import prefeituraLogo from "@/assets/prefeitura_icon2.png";
+import atlasBrand from "@/assets/atlas-brand.png";
 import cameraIcon from "@/assets/camera-icon.png";
 import radarIconSatellite from "@/assets/radar-icon-satellite.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIconSatellite from "@/assets/camera-lpr-icon-satellite.png";
 import mapPinRed from "@/assets/map-pin-red.svg";
-import civitasLogo from "@/assets/civitas_icon.png";
-import civitasSidebarSymbol from "@/assets/civitas-sidebar-symbol.png";
 import civitasActionSymbol from "@/assets/civitas-action-symbol.png";
 import civitasWhatsappIcon from "@/assets/icons/civitas/whatsapp.svg";
 import civitasDownloadIcon from "@/assets/icons/civitas/Icon-1.svg";
@@ -84,7 +83,7 @@ import {
 type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
-type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "radares";
+type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "smart_cameras" | "lpr" | "radares";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
 type AreaDrawPolygonPoints = Array<[number, number]>;
@@ -93,10 +92,14 @@ const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
   { key: "users", label: "Usuários" },
   { key: "organizations", label: "Organizações" },
   { key: "cameras", label: "Câmeras" },
+  { key: "smart_cameras", label: "Super Câmeras Inteligentes" },
+  { key: "lpr", label: "LPR" },
   { key: "radares", label: "Radares" },
   { key: "usage", label: "Métricas" },
   { key: "logs", label: "Logs" },
 ];
+
+const EQUIPMENT_ADMIN_TABS: AdminTab[] = ["cameras", "smart_cameras", "lpr", "radares"];
 
 const REPORT_LAYER_RULES = [
   { feature: "cameras", layer: "cameras" },
@@ -1550,7 +1553,6 @@ export default function MapPage() {
   const unavailableSmartCameraIdsRef = useRef<Record<string, true>>({});
   const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const mobileSearchSubmittingRef = useRef(false);
-  const mobileSearchTouchSubmitAtRef = useRef(0);
 
   const handlersBoundRef = useRef(false);
   const selectionRingTimerRef = useRef<number | null>(null);
@@ -1738,6 +1740,8 @@ export default function MapPage() {
   const [pwMsg, setPwMsg] = useState<string | null>(null);
 
   const [adminTab, setAdminTab] = useState<AdminTab>("users");
+  const [adminMenuExpanded, setAdminMenuExpanded] = useState(true);
+  const [equipmentMenuExpanded, setEquipmentMenuExpanded] = useState(true);
   const [adminUsersOrgOpen, setAdminUsersOrgOpen] = useState(false);
 
   const [gpsErr, setGpsErr] = useState<string | null>(null);
@@ -1865,8 +1869,11 @@ export default function MapPage() {
   const [searchEquipmentTitle, setSearchEquipmentTitle] = useState("");
   const [nearbyVisibleCount, setNearbyVisibleCount] = useState(7);
   const searchTimerRef = useRef<number | null>(null);
+  const automaticSearchTimerRef = useRef<number | null>(null);
+  const searchGenerationRef = useRef(0);
   const panelRef = useRef<PanelKey>(null);
   const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
+  const adminWorkspaceMainRef = useRef<HTMLElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const mapResizeFrameRef = useRef<number | null>(null);
   const civitasScrollRef = useRef<HTMLDivElement | null>(null);
@@ -2045,6 +2052,16 @@ export default function MapPage() {
   const activeAdminTab = adminTabOptions.some((option) => option.key === adminTab)
     ? adminTab
     : adminTabOptions[0]?.key ?? "users";
+  const activeAdminLabel = adminTabOptions.find((option) => option.key === activeAdminTab)?.label ?? "Usuários";
+  const activeAdminIsEquipment = EQUIPMENT_ADMIN_TABS.includes(activeAdminTab);
+  function adminTabIcon(key: AdminTab) {
+    if (key === "users") return <UserRound aria-hidden="true" />;
+    if (key === "organizations") return <Building2 aria-hidden="true" />;
+    if (key === "cameras" || key === "smart_cameras" || key === "lpr") return <Eye aria-hidden="true" />;
+    if (key === "radares") return <RadioTower aria-hidden="true" />;
+    if (key === "usage") return <ChartNoAxesCombined aria-hidden="true" />;
+    return <ShieldCheck aria-hidden="true" />;
+  }
   const availableListModes = useMemo(
     () => LIST_MODE_OPTIONS.filter(({ feature }) => hasFeature(feature)),
     [hasFeature]
@@ -2160,6 +2177,10 @@ export default function MapPage() {
       setSearchedEquipment([]);
       setSearchEquipmentTitle("");
     }
+    if (next === "civitas") {
+      setPanelOpen(false);
+      setMobileSearchOpen(false);
+    }
     setPanel((cur) => (cur === next ? null : next));
   }
 
@@ -2172,6 +2193,10 @@ export default function MapPage() {
     if (adminTab === activeAdminTab) return;
     setAdminTab(activeAdminTab);
   }, [panel, adminTab, activeAdminTab]);
+
+  useEffect(() => {
+    adminWorkspaceMainRef.current?.scrollTo(0, 0);
+  }, [activeAdminTab]);
 
   function flyToPoint(lng: number, lat: number, zoom?: number) {
     const map = mapRef.current;
@@ -4652,6 +4677,8 @@ export default function MapPage() {
       searchMarkerRef.current?.remove();
       searchMarkerRef.current = null;
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
+      if (automaticSearchTimerRef.current) window.clearTimeout(automaticSearchTimerRef.current);
+      searchGenerationRef.current += 1;
       if (suppressMapClickTimerRef.current) {
         window.clearTimeout(suppressMapClickTimerRef.current);
         suppressMapClickTimerRef.current = null;
@@ -6124,13 +6151,16 @@ export default function MapPage() {
     }
   }
 
-  async function handleSearch(queryOverride?: string): Promise<boolean> {
+  async function handleSearch(queryOverride?: string, modeOverride?: "address" | "equipment", generation?: number): Promise<boolean> {
     const q = (queryOverride ?? searchQuery).trim();
     if (!q) return false;
+    const currentGeneration = generation ?? ++searchGenerationRef.current;
+    const isCurrentSearch = () => currentGeneration === searchGenerationRef.current;
+    if (!isCurrentSearch()) return false;
     setSearchErr(null);
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
 
-    if (searchMode === "equipment") {
+    if ((modeOverride ?? searchMode) === "equipment") {
       if (!/^\d+$/.test(q)) {
         setSearchErr("Informe somente o número do equipamento.");
         return false;
@@ -6259,11 +6289,14 @@ export default function MapPage() {
       let features: any[] = [];
       if (looksLikeAddressWithNumber) {
         features = await fetchFeatures({ types: "address", autocomplete: false, limit: 5 });
+        if (!isCurrentSearch()) return false;
         if (!features.length) features = await fetchFeatures({ types: "address", autocomplete: true, limit: 5 });
+        if (!isCurrentSearch()) return false;
         if (!features.length) features = await fetchFeatures({ limit: 5 });
       } else {
         features = await fetchFeatures({ limit: 3 });
       }
+      if (!isCurrentSearch()) return false;
 
       const f = pickFeature(features);
       const center = Array.isArray(f?.center)
@@ -6296,9 +6329,25 @@ export default function MapPage() {
       searchTimerRef.current = window.setTimeout(() => setSearchPin(null), 4000);
       return true;
     } catch (e: any) {
-      setSearchErr(e?.message || "Falha ao buscar endereço.");
+      if (isCurrentSearch()) setSearchErr(e?.message || "Falha ao buscar endereço.");
       return false;
     }
+  }
+
+  function scheduleAutomaticSearch(nextQuery: string, nextMode: "address" | "equipment") {
+    const generation = ++searchGenerationRef.current;
+    if (automaticSearchTimerRef.current) window.clearTimeout(automaticSearchTimerRef.current);
+    setSearchErr(null);
+    setSearchPin(null);
+    setSearchEquipmentPoint(null);
+    setSearchedEquipment([]);
+    const trimmedQuery = nextQuery.trim();
+    if (!trimmedQuery) return;
+    if (nextMode === "address" && trimmedQuery.length < 3) return;
+    automaticSearchTimerRef.current = window.setTimeout(() => {
+      void handleSearch(trimmedQuery, nextMode, generation);
+      automaticSearchTimerRef.current = null;
+    }, 700);
   }
 
   async function submitMobileSearch(queryOverride?: string) {
@@ -6313,19 +6362,6 @@ export default function MapPage() {
     } finally {
       mobileSearchSubmittingRef.current = false;
     }
-  }
-
-  function submitMobileSearchFromTouch(event: React.PointerEvent<HTMLButtonElement>) {
-    if (event.pointerType !== "touch") return;
-    event.preventDefault();
-    event.stopPropagation();
-    mobileSearchTouchSubmitAtRef.current = Date.now();
-    void submitMobileSearch();
-  }
-
-  function submitMobileSearchFromClick() {
-    if (Date.now() - mobileSearchTouchSubmitAtRef.current < 700) return;
-    void submitMobileSearch();
   }
 
   const filtered = useMemo(() => {
@@ -6552,26 +6588,10 @@ export default function MapPage() {
     }
   }, [panel, activeAdminTab]);
 
-  const panelWidth =
-    panel === "admin"
-      ? activeAdminTab === "usage"
-        ? 1240
-        : 860
-      : panel === "civitas"
-        ? 1120
-        : 560;
+  const panelWidth = 560;
   const panelSideInset = 82;
   const panelShiftRight = 0;
-  const panelMaxHeight =
-    panel === "admin"
-      ? activeAdminTab === "usage"
-        ? "82vh"
-        : activeAdminTab === "organizations"
-          ? "84vh"
-          : activeAdminTab === "users" && adminUsersOrgOpen
-            ? "84vh"
-            : "74vh"
-      : "56vh";
+  const panelMaxHeight = "56vh";
   const currentListOption =
     availableListModes.find(({ mode }) => mode === listMode) ||
     LIST_MODE_OPTIONS.find(({ mode }) => mode === listMode) ||
@@ -6919,17 +6939,17 @@ export default function MapPage() {
     <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""}`}>
       <div
         ref={mapContainerRef}
+        className="mapCanvas"
         onClick={() => {
           if (panel !== null) setPanel(null);
           if (panelOpen) setPanelOpen(false);
           if (mobileMenuOpen) setMobileMenuOpen(false);
           if (mobileSearchOpen) setMobileSearchOpen(false);
         }}
-        style={{ position: "absolute", inset: 0, background: "#0b0b0f" }}
       />
 
       <div className="mobileMapBrandPill">
-        <img src={civitasLogo} alt="CIVITAS" />
+        <img src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" />
       </div>
       <button
         type="button"
@@ -7595,15 +7615,8 @@ export default function MapPage() {
         )}
       </div>
 
-      {/* Desktop navigation: compact by default, expanded on hover. */}
-      <aside className="appSidebar desktopPanels" aria-label="Navegação principal">
-        <div className="appSidebarBrand">
-          <span className="appSidebarLogoMark" aria-hidden="true">
-            <img src={civitasSidebarSymbol} alt="" />
-          </span>
-          <img className="appSidebarLogoFull" src={civitasLogo} alt="Civitas Rio" />
-        </div>
-
+      {/* Desktop navigation */}
+      <aside className={`appSidebar desktopPanels ${panel === "admin" || panel === "civitas" ? "appSidebarExpanded" : ""}`} aria-label="Navegação principal">
         <p className="appSidebarSectionLabel">Navegação</p>
         <nav className="appSidebarNav" aria-label="Áreas do sistema">
           <button
@@ -7623,14 +7636,78 @@ export default function MapPage() {
             <span>{civitasTabLabel}</span>
           </button>
           {canAccessAdmin && (
-            <button
-              className={`appSidebarItem ${panel === "admin" ? "appSidebarItemActive" : ""}`}
-              onClick={() => togglePanel("admin")}
-              title={developmentTabLabel}
-            >
-              <SlidersHorizontal aria-hidden="true" />
-              <span>{developmentTabLabel}</span>
-            </button>
+            <>
+              <button
+                className={`appSidebarItem ${panel === "admin" ? "appSidebarItemActive" : ""}`}
+                onClick={() => {
+                  if (panel === "admin") setAdminMenuExpanded((expanded) => !expanded);
+                  else {
+                    setAdminMenuExpanded(true);
+                    setEquipmentMenuExpanded(true);
+                    setPanel("admin");
+                  }
+                }}
+                title={developmentTabLabel}
+                aria-expanded={panel === "admin" && adminMenuExpanded}
+                aria-controls={panel === "admin" && adminMenuExpanded ? "admin-sidebar-sections" : undefined}
+              >
+                <SlidersHorizontal aria-hidden="true" />
+                <span>{developmentTabLabel}</span>
+                <ChevronRight className={`appSidebarGroupChevron ${adminMenuExpanded ? "appSidebarGroupChevronOpen" : ""}`} aria-hidden="true" />
+              </button>
+              {panel === "admin" && adminMenuExpanded && (
+                <div className="appSidebarSubnav" id="admin-sidebar-sections">
+                  {adminTabOptions.map((option) => {
+                    if (option.key === "cameras") {
+                      return (
+                        <div className="appSidebarEquipmentGroup" key="equipment-group">
+                          <button
+                            type="button"
+                            className={`appSidebarSubitem appSidebarEquipmentTrigger ${activeAdminIsEquipment ? "appSidebarSubitemActive" : ""}`}
+                            onClick={() => setEquipmentMenuExpanded((expanded) => !expanded)}
+                            aria-expanded={equipmentMenuExpanded}
+                            aria-controls={equipmentMenuExpanded ? "admin-equipment-sections" : undefined}
+                          >
+                            <LayoutDashboard aria-hidden="true" />
+                            <span>Equipamentos</span>
+                            <ChevronRight className={`appSidebarEquipmentChevron ${equipmentMenuExpanded ? "appSidebarEquipmentChevronOpen" : ""}`} aria-hidden="true" />
+                          </button>
+                          {equipmentMenuExpanded && (
+                            <div className="appSidebarEquipmentChildren" id="admin-equipment-sections">
+                              {adminTabOptions.filter((item) => EQUIPMENT_ADMIN_TABS.includes(item.key)).map((item) => (
+                                <button
+                                  key={item.key}
+                                  type="button"
+                                  className={`appSidebarSubitem appSidebarEquipmentItem ${activeAdminTab === item.key ? "appSidebarSubitemActive" : ""}`}
+                                  onClick={() => setAdminTab(item.key)}
+                                  aria-current={activeAdminTab === item.key ? "page" : undefined}
+                                >
+                                  {adminTabIcon(item.key)}
+                                  <span>{item.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    if (EQUIPMENT_ADMIN_TABS.includes(option.key)) return null;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        className={`appSidebarSubitem ${activeAdminTab === option.key ? "appSidebarSubitemActive" : ""}`}
+                        onClick={() => setAdminTab(option.key)}
+                        aria-current={activeAdminTab === option.key ? "page" : undefined}
+                      >
+                        {adminTabIcon(option.key)}
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </nav>
 
@@ -7663,63 +7740,70 @@ export default function MapPage() {
         </div>
       </aside>
 
-      <div className="mapCommandBar desktopPanels">
-        <div className="mapSearchMode" role="group" aria-label="Tipo de busca">
-          <button type="button" className={searchMode === "address" ? "mapSearchModeActive" : ""} onClick={() => setSearchMode("address")} title="Buscar endereço" aria-label="Buscar endereço">
-            <MapPinned size={16} aria-hidden="true" />
-          </button>
-          <button type="button" className={searchMode === "equipment" ? "mapSearchModeActive" : ""} onClick={() => setSearchMode("equipment")} title="Buscar equipamento" aria-label="Buscar equipamento">
-            <ScanLine size={16} aria-hidden="true" />
-          </button>
+      <header className="appTopbar desktopPanels">
+        <img className="appTopbarBrand" src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" />
+        <div className="mapCommandBar">
+          <div className="mapSearchMode" role="group" aria-label="Tipo de busca">
+            <button type="button" className={searchMode === "address" ? "mapSearchModeActive" : ""} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} title="Buscar endereço" aria-label="Buscar endereço">
+              <MapPinned size={16} aria-hidden="true" />
+            </button>
+            <button type="button" className={searchMode === "equipment" ? "mapSearchModeActive" : ""} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} title="Buscar equipamento" aria-label="Buscar equipamento">
+              <ScanLine size={16} aria-hidden="true" />
+            </button>
+          </div>
+          <Search size={17} strokeWidth={2.2} aria-hidden="true" />
+          <input
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchErr(null);
+              setSearchQuery(e.target.value);
+              scheduleAutomaticSearch(e.target.value, searchMode);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleSearch();
+            }}
+            placeholder="Buscar"
+            aria-label={searchMode === "address" ? "Buscar endereço ou coordenadas" : "Buscar equipamento"}
+          />
+          {searchErr && <div className="mapCommandBarError">{searchErr}</div>}
         </div>
-        <Search size={17} strokeWidth={2.2} aria-hidden="true" />
-        <input
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchErr(null);
-            setSearchQuery(e.target.value);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void handleSearch();
-          }}
-          placeholder="Buscar"
-          aria-label={searchMode === "address" ? "Buscar endereço ou coordenadas" : "Buscar equipamento"}
-        />
-        <button onClick={() => void handleSearch()} title="Buscar">Buscar</button>
-        {searchErr && <div className="mapCommandBarError">{searchErr}</div>}
-      </div>
 
-      <div className="mapTopActions desktopPanels">
-        <button
-          type="button"
-          className={`mapCivitasAction ${panel === "civitas" ? "mapCivitasActionActive" : ""}`}
-          onClick={() => togglePanel("civitas")}
-          title={panel === "civitas" ? "Fechar CIVITAS" : "Acionar CIVITAS"}
-        >
-          <span className="mapCivitasActionLogo" aria-hidden="true">
-            <img src={civitasActionSymbol} alt="" />
-          </span>
-          <span>ACIONAR CIVITAS</span>
-        </button>
-        <div className="mapUtilityBar">
-          <img src={prefeituraLogo} alt="Prefeitura do Rio" />
-          <div className="mapUtilityBarDivider" />
+        <div className="mapTopActions">
           <button
             type="button"
-            className={`mapUtilityBarIdentity mapUtilityProfile ${panel === "profile" ? "mapUtilityProfileActive" : ""}`}
-            onClick={() => togglePanel("profile")}
-            title={me?.full_name ? `Abrir perfil de ${me.full_name}` : "Abrir meu perfil"}
-            aria-label="Abrir meu perfil"
+            className={`mapCivitasAction ${panel === "civitas" ? "mapCivitasActionActive" : ""}`}
+            onClick={() => togglePanel("civitas")}
+            title={panel === "civitas" ? "Fechar CIVITAS" : "Acionar CIVITAS"}
           >
-            <UserRound size={18} strokeWidth={2} aria-hidden="true" />
+            <span className="mapCivitasActionLogo" aria-hidden="true">
+              <img src={civitasActionSymbol} alt="" />
+            </span>
+            <span>ACIONAR CIVITAS</span>
           </button>
+          <div className="mapUtilityBar">
+            <button
+              type="button"
+              className={`mapUtilityBarIdentity mapUtilityProfile ${panel === "profile" ? "mapUtilityProfileActive" : ""}`}
+              onClick={() => togglePanel("profile")}
+              title={me?.full_name ? `Abrir perfil de ${me.full_name}` : "Abrir meu perfil"}
+              aria-label="Abrir meu perfil"
+            >
+              <span className="mapUtilityProfileAvatar" aria-hidden="true">
+                {(me?.full_name || "Usuário").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}
+              </span>
+              <span className="mapUtilityProfileCopy">
+                <strong>{me?.full_name || "Usuário"}</strong>
+                <small title={auth.organizationName || "Sem organização"}>{auth.organizationName || "Sem organização"}</small>
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
       {/* LEFT PANEL (desktop) */}
-      {panel !== null && (
+      {panel !== null && panel !== "admin" && panel !== "civitas" && (
         <div
-          className={`desktopPanels mapWorkspacePanel ${panel === "civitas" ? "" : "panelCard"} ${panel === "profile" ? "profilePanel" : ""} ${panel === "map" && (searchEquipmentPoint || searchedEquipment.length) ? "searchEquipmentOnly" : ""}`.trim()}
+          className={`desktopPanels mapWorkspacePanel panelCard ${panel === "profile" ? "profilePanel" : ""} ${panel === "map" && (searchEquipmentPoint || searchedEquipment.length) ? "searchEquipmentOnly" : ""}`.trim()}
           style={{
             position: "absolute",
             top: 76,
@@ -7727,7 +7811,7 @@ export default function MapPage() {
             width: panelWidth,
             maxWidth: `calc(100vw - ${panelSideInset * 2}px)`,
             zIndex: 20,
-            padding: panel === "civitas" ? 0 : 14,
+            padding: 14,
             color: "#0b0b0f",
             marginLeft: 0,
           }}
@@ -8278,80 +8362,110 @@ export default function MapPage() {
             </>
           )}
 
-          {panel === "civitas" && renderCivitasPanel()}
-
-          {panel === "admin" && canAccessAdmin && (
-            <>
-              <div className="adminPanelHeader" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <div style={{ fontWeight: 900, fontSize: 14 }}>Administrador</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  Gerenciamento completo
-                </div>
-
-                <div style={{ flex: 1 }} />
-
-                <div className="tabsRail tabsRailAdmin">
-                  {adminTabOptions.map((option) => (
-                    <button
-                      key={option.key}
-                      className={`subTab ${activeAdminTab === option.key ? "subTabActive" : ""}`}
-                      onClick={() => setAdminTab(option.key)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div
-                className="scrollbarHidden adminPanelContent"
-                style={{
-                  maxHeight: panelMaxHeight,
-                  overflow: activeAdminTab === "users" && adminUsersOrgOpen ? "visible" : "auto",
-                }}
-              >
-                {activeAdminTab === "users" && (
-                  <AdminUsersPanel
-                    apiBase={API_BASE}
-                    token={accessToken}
-                    viewerRole={role}
-                    isMobile={isMobile}
-                    onOrgDropdownOpenChange={setAdminUsersOrgOpen}
-                  />
-                )}
-                {activeAdminTab === "usage" && (
-                  <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
-                )}
-                {activeAdminTab === "organizations" && (
-                  <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
-                )}
-                {activeAdminTab === "cameras" && (
-                  <AdminCamerasPanel
-                    apiBase={API_BASE}
-                    token={accessToken}
-                    onStatusChanged={() => {
-                      loadCameras();
-                      loadCamerasIntel();
-                      loadCamerasLpr();
-                    }}
-                    isMobile={isMobile}
-                  />
-                )}
-                {activeAdminTab === "radares" && (
-                  <AdminRadaresPanel
-                    apiBase={API_BASE}
-                    token={accessToken}
-                    onStatusChanged={() => {
-                      loadRadares();
-                    }}
-                    isMobile={isMobile}
-                  />
-                )}
-                {activeAdminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
-              </div>
-            </>
-          )}
         </div>
+      )}
+
+      {panel === "civitas" && (
+        <section className="civitasWorkspace" aria-label="Acionar CIVITAS">
+          <div className="civitasWorkspaceTopline">
+            <nav className="civitasWorkspaceBreadcrumb" aria-label="Caminho de navegação">
+              <button type="button" onClick={() => { setPanel(null); setPanelOpen(false); }}>Mapa</button>
+              <ChevronRight size={14} aria-hidden="true" />
+              <span aria-current="page">Acionar CIVITAS</span>
+            </nav>
+            <button type="button" className="adminWorkspaceClose civitasWorkspaceClose" aria-label="Voltar ao mapa" onClick={() => { setPanel(null); setPanelOpen(false); }}>
+              <X size={16} aria-hidden="true" />
+              <span>Voltar ao mapa</span>
+            </button>
+          </div>
+          {renderCivitasPanel()}
+        </section>
+      )}
+
+      {panel === "admin" && canAccessAdmin && (
+        <section className="adminWorkspace" aria-label="Administração">
+          <main className="adminWorkspaceMain" ref={adminWorkspaceMainRef}>
+            <nav className="adminWorkspaceMobileNav" aria-label="Seções da administração">
+              {adminTabOptions.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={activeAdminTab === option.key ? "adminWorkspaceMobileNavActive" : ""}
+                  onClick={() => setAdminTab(option.key)}
+                  aria-current={activeAdminTab === option.key ? "page" : undefined}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </nav>
+            <nav className="adminBreadcrumb" aria-label="Caminho de navegação">
+              <button type="button" onClick={() => { setPanel(null); setPanelOpen(false); }}>Mapa</button>
+              <ChevronRight size={14} aria-hidden="true" />
+              <span>Administração</span>
+              {activeAdminIsEquipment && (
+                <>
+                  <ChevronRight size={14} aria-hidden="true" />
+                  <span>Equipamentos</span>
+                </>
+              )}
+              <ChevronRight size={14} aria-hidden="true" />
+              <span aria-current="page">{activeAdminLabel}</span>
+            </nav>
+
+            <div className="adminWorkspaceHeader">
+              <div>
+                <h1>{activeAdminIsEquipment ? "Equipamentos" : activeAdminLabel}</h1>
+                <p>{activeAdminIsEquipment ? activeAdminLabel : "Gerenciamento completo"}</p>
+              </div>
+              <button type="button" className="adminWorkspaceClose" aria-label="Voltar ao mapa" onClick={() => { setPanel(null); setPanelOpen(false); }}>
+                <X size={16} aria-hidden="true" />
+                <span>Voltar ao mapa</span>
+              </button>
+            </div>
+
+            <div className={`adminWorkspaceContent ${adminUsersOrgOpen ? "adminWorkspaceContentDropdownOpen" : ""}`}>
+              {activeAdminTab === "users" && (
+                <AdminUsersPanel
+                  apiBase={API_BASE}
+                  token={accessToken}
+                  viewerRole={role}
+                  isMobile={isMobile}
+                  onOrgDropdownOpenChange={setAdminUsersOrgOpen}
+                />
+              )}
+              {activeAdminTab === "usage" && (
+                <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+              )}
+              {activeAdminTab === "organizations" && (
+                <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+              )}
+              {(activeAdminTab === "cameras" || activeAdminTab === "smart_cameras" || activeAdminTab === "lpr") && (
+                <AdminCamerasPanel
+                  apiBase={API_BASE}
+                  token={accessToken}
+                  scope={activeAdminTab === "smart_cameras" ? "inteligentes" : activeAdminTab}
+                  onStatusChanged={() => {
+                    loadCameras();
+                    loadCamerasIntel();
+                    loadCamerasLpr();
+                  }}
+                  isMobile={isMobile}
+                />
+              )}
+              {activeAdminTab === "radares" && (
+                <AdminRadaresPanel
+                  apiBase={API_BASE}
+                  token={accessToken}
+                  onStatusChanged={() => loadRadares()}
+                  isMobile={isMobile}
+                />
+              )}
+              {activeAdminTab === "logs" && (
+                <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+              )}
+            </div>
+          </main>
+        </section>
       )}
 
       {/* Mobile bar (mantive o seu layout, sem inventar) */}
@@ -8431,7 +8545,7 @@ export default function MapPage() {
                           setMobileSearchOpen(false);
                           setMobileMenuOpen(false);
                           setPanel("admin");
-                          setPanelOpen(true);
+                          setPanelOpen(false);
                         }}
                       >
                         <span className="mobileMenuActionIcon">
@@ -8476,7 +8590,7 @@ export default function MapPage() {
           </div>
         </div>
 
-        {panelOpen && (
+        {panelOpen && panel !== "admin" && panel !== "civitas" && (
           <div
             ref={mobileDrawerRef}
             className="mobileDrawer glassStrong scrollbarHidden"
@@ -9122,105 +9236,6 @@ export default function MapPage() {
               </>
             )}
 
-            {panel === "civitas" && renderCivitasPanel()}
-
-            {panel === "admin" && canAccessAdmin && (
-              <>
-                {!isMobile ? (
-                  <div className="tabsRail tabsRailAdmin tabsRailAdminMobile">
-                    {adminTabOptions.map((option) => (
-                      <button
-                        key={option.key}
-                        className={`subTab ${activeAdminTab === option.key ? "subTabActive" : ""}`}
-                        onClick={() => setAdminTab(option.key)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 6,
-                      marginBottom: 12,
-                      padding: "10px 12px",
-                      borderRadius: 16,
-                      border: "1px solid rgba(10,40,75,0.08)",
-                      background: "rgba(255,255,255,0.88)",
-                    }}
-                  >
-                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>
-                      SEÇÃO
-                    </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {adminTabOptions.map((option) => {
-                        const active = activeAdminTab === option.key;
-                        return (
-                          <button
-                            key={option.key}
-                            type="button"
-                            onClick={() => setAdminTab(option.key)}
-                            style={{
-                              padding: "7px 12px",
-                              borderRadius: 999,
-                              border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
-                              background: active ? "rgba(10,40,75,0.92)" : "rgba(255,255,255,0.96)",
-                              color: active ? "#fff" : "rgba(10,40,75,0.76)",
-                              fontSize: 11,
-                              fontWeight: 800,
-                              whiteSpace: "nowrap",
-                              cursor: "pointer",
-                            }}
-                          >
-                            {option.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {activeAdminTab === "users" && (
-                  <AdminUsersPanel
-                    apiBase={API_BASE}
-                    token={accessToken}
-                    viewerRole={role}
-                    isMobile={isMobile}
-                    onOrgDropdownOpenChange={setAdminUsersOrgOpen}
-                  />
-                )}
-                {activeAdminTab === "usage" && (
-                  <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
-                )}
-                {activeAdminTab === "organizations" && (
-                  <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
-                )}
-                {activeAdminTab === "cameras" && (
-                  <AdminCamerasPanel
-                    apiBase={API_BASE}
-                    token={accessToken}
-                    onStatusChanged={() => {
-                      loadCameras();
-                      loadCamerasIntel();
-                      loadCamerasLpr();
-                    }}
-                    isMobile={isMobile}
-                  />
-                )}
-                {activeAdminTab === "radares" && (
-                  <AdminRadaresPanel
-                    apiBase={API_BASE}
-                    token={accessToken}
-                    onStatusChanged={() => {
-                      loadRadares();
-                    }}
-                    isMobile={isMobile}
-                  />
-                )}
-                {activeAdminTab === "logs" && <AdminLogsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />}
-              </>
-            )}
           </div>
         )}
       </div>
@@ -9257,12 +9272,12 @@ export default function MapPage() {
         </button>
         <button
           type="button"
-          className={`mobileBottomNavCivitas ${panelOpen && panel === "civitas" ? "mobileBottomNavActive" : ""}`}
+          className={`mobileBottomNavCivitas ${panel === "civitas" ? "mobileBottomNavActive" : ""}`}
           onClick={() => {
             setMobileSearchOpen(false);
             setMobileMenuOpen(false);
             setPanel("civitas");
-            setPanelOpen(true);
+            setPanelOpen(false);
           }}
           aria-label="Acionar CIVITAS"
         >
@@ -9348,10 +9363,10 @@ export default function MapPage() {
             </div>
 
             <div className="mobileSearchMode" role="group" aria-label="Tipo de busca">
-              <button type="button" className={searchMode === "address" ? "mobileSearchModeActive" : ""} onClick={() => setSearchMode("address")} title="Buscar local" aria-label="Buscar local">
+              <button type="button" className={searchMode === "address" ? "mobileSearchModeActive" : ""} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} title="Buscar local" aria-label="Buscar local">
                 <MapPinned size={17} aria-hidden="true" />
               </button>
-              <button type="button" className={searchMode === "equipment" ? "mobileSearchModeActive" : ""} onClick={() => setSearchMode("equipment")} title="Buscar equipamento" aria-label="Buscar equipamento">
+              <button type="button" className={searchMode === "equipment" ? "mobileSearchModeActive" : ""} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} title="Buscar equipamento" aria-label="Buscar equipamento">
                 <ScanLine size={17} aria-hidden="true" />
               </button>
             </div>
@@ -9368,6 +9383,7 @@ export default function MapPage() {
                 onChange={(e) => {
                   setSearchErr(null);
                   setSearchQuery(e.target.value);
+                  scheduleAutomaticSearch(e.target.value, searchMode);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -9387,6 +9403,7 @@ export default function MapPage() {
                   onClick={() => {
                     setSearchErr(null);
                     setSearchQuery("");
+                    scheduleAutomaticSearch("", searchMode);
                   }}
                   aria-label="Limpar busca"
                   title="Limpar"
@@ -9396,41 +9413,9 @@ export default function MapPage() {
               )}
             </div>
 
-            {searchMode === "address" && <><div className="mobileSearchSectionLabel">Sugestões rápidas</div>
-            <div className="mobileSearchChips">
-              {[
-                { label: "Copacabana", value: "Copacabana" },
-                { label: "Centro", value: "Centro" },
-                { label: "Barra da Tijuca", value: "Barra da Tijuca" },
-                { label: "-22.91, -43.18", value: "-22.91, -43.18" },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  className="mobileSearchChip"
-                  onClick={() => {
-                    setSearchQuery(item.value);
-                    void submitMobileSearch(item.value);
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            </>}
-
             {searchErr && <div className="mobileSearchError">{searchErr}</div>}
 
-            <button
-              type="button"
-              className="mobileSearchSubmitBtn"
-              onPointerDown={submitMobileSearchFromTouch}
-              onClick={submitMobileSearchFromClick}
-            >
-              Buscar no mapa
-            </button>
-
-            <div className="mobileSearchHint">Toque fora para fechar. A busca fica limitada ao município do Rio.</div>
+            <div className="mobileSearchHint">A busca começa automaticamente. Toque fora para ver o mapa.</div>
           </div>
         </div>
       )}
