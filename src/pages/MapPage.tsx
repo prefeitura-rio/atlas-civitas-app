@@ -18,10 +18,12 @@ import {
   Building2,
   ChartNoAxesCombined,
   ChevronRight,
+  Clapperboard,
   Eye,
   EyeOff,
   LayoutDashboard,
   Layers,
+  LocateFixed,
   MapPinned,
   LogOut,
   Menu,
@@ -83,7 +85,7 @@ import {
 type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
-type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "smart_cameras" | "lpr" | "radares";
+type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "smart_cameras" | "lpr" | "radares" | "cinematic";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
 type AreaDrawPolygonPoints = Array<[number, number]>;
@@ -95,6 +97,7 @@ const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
   { key: "smart_cameras", label: "Super Câmeras Inteligentes" },
   { key: "lpr", label: "LPR" },
   { key: "radares", label: "Radares" },
+  { key: "cinematic", label: "Modo cinematográfico" },
   { key: "usage", label: "Métricas" },
   { key: "logs", label: "Logs" },
 ];
@@ -189,6 +192,15 @@ const LAYERS = {
   aisp_label: "lyr-aisp-label",
   cisp_label: "lyr-cisp-label",
 } as const;
+
+const POI_LAYER_IDS = [
+  LAYERS.clusters,
+  LAYERS.cluster_count,
+  LAYERS.cameras_points,
+  LAYERS.cameras_intel_points,
+  LAYERS.cameras_lpr_points,
+  LAYERS.radares_points,
+] as const;
 
 const IMAGES = {
   radar: "radar_icon",
@@ -1477,6 +1489,14 @@ function makeAreaDrawGeoJSON(
   return { type: "FeatureCollection", features } as FeatureCollection<any, any>;
 }
 
+function LayerToggle({ checked }: { checked: boolean }) {
+  return (
+    <span className={`chipToggle ${checked ? "chipToggleOn" : ""}`} aria-hidden="true">
+      <span className="chipToggleThumb" />
+    </span>
+  );
+}
+
 export default function MapPage() {
   const auth = useAuth();
   const nav = useNavigate();
@@ -1521,6 +1541,7 @@ export default function MapPage() {
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const cinematicModeRef = useRef(false);
   const areaDrawModeRef = useRef(false);
   const areaDrawPointsRef = useRef<Array<[number, number]>>([]);
   const areaDrawPolygonsRef = useRef<AreaDrawPolygonPoints[]>([]);
@@ -1603,6 +1624,8 @@ export default function MapPage() {
   const [showCamerasLpr, setShowCamerasLpr] = useState(true);
   const [showRadares, setShowRadares] = useState(true);
   const [showBairros, setShowBairros] = useState(false);
+  const [bairroIntroOpen, setBairroIntroOpen] = useState(false);
+  const [bairroSearchMinimized, setBairroSearchMinimized] = useState(false);
   const [showRisp, setShowRisp] = useState(false);
   const [showAisp, setShowAisp] = useState(false);
   const [showCisp, setShowCisp] = useState(false);
@@ -1647,6 +1670,8 @@ export default function MapPage() {
   const [securityAreaReportLoading, setSecurityAreaReportLoading] = useState(false);
   const [securityAreaReportMsg, setSecurityAreaReportMsg] = useState<string | null>(null);
   const [areaDrawMode, setAreaDrawMode] = useState(false);
+  const [areaDrawAwaitingStart, setAreaDrawAwaitingStart] = useState(false);
+  const [areaDrawMinimized, setAreaDrawMinimized] = useState(false);
   const [areaToolsOpen, setAreaToolsOpen] = useState(false);
   const [areaDrawPoints, setAreaDrawPoints] = useState<Array<[number, number]>>([]);
   const [areaDrawPolygons, setAreaDrawPolygons] = useState<AreaDrawPolygonPoints[]>([]);
@@ -1671,8 +1696,8 @@ export default function MapPage() {
   }
 
   useEffect(() => {
-    areaDrawModeRef.current = areaDrawMode;
-  }, [areaDrawMode]);
+    areaDrawModeRef.current = areaDrawMode && !areaDrawAwaitingStart && !areaDrawMinimized;
+  }, [areaDrawMode, areaDrawAwaitingStart, areaDrawMinimized]);
 
   useEffect(() => {
     areaDrawPointsRef.current = areaDrawPoints;
@@ -1740,6 +1765,7 @@ export default function MapPage() {
   const [pwMsg, setPwMsg] = useState<string | null>(null);
 
   const [adminTab, setAdminTab] = useState<AdminTab>("users");
+  const [cinematicMode, setCinematicMode] = useState(false);
   const [adminMenuExpanded, setAdminMenuExpanded] = useState(true);
   const [equipmentMenuExpanded, setEquipmentMenuExpanded] = useState(true);
   const [adminUsersOrgOpen, setAdminUsersOrgOpen] = useState(false);
@@ -1856,7 +1882,11 @@ export default function MapPage() {
     };
   }, [gpsOn, gps]);
 
-  const [dockOpen, setDockOpen] = useState(true);
+  const [dockOpen, setDockOpen] = useState(false);
+  const dockHandleRef = useRef<HTMLButtonElement | null>(null);
+  const dockCloseRef = useRef<HTMLButtonElement | null>(null);
+  const dockPanelRef = useRef<HTMLDivElement | null>(null);
+  const wasDesktopDockOpenRef = useRef(false);
   const DOCK_AUTOHIDE_MS = 0;
   const dockTimerRef = useRef<number | null>(null);
 
@@ -2039,13 +2069,54 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dockOpen]);
 
+  useEffect(() => {
+    const desktopOpen = dockOpen && !isMobile;
+    const wasOpen = wasDesktopDockOpenRef.current;
+    wasDesktopDockOpenRef.current = desktopOpen;
+
+    if (!desktopOpen) {
+      if (wasOpen) dockHandleRef.current?.focus();
+      return;
+    }
+
+    dockCloseRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDockOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(
+        dockPanelRef.current?.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+        ) ?? []
+      ).filter((element) => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && (document.activeElement === first || !dockPanelRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dockPanelRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [dockOpen, isMobile]);
+
   const role = normalizeRole(me?.role ?? me?.roles?.[0]);
   const canAccessAdmin = canAccessAdminBackoffice(role);
+  useEffect(() => {
+    if (!canAccessAdmin) setCinematicMode(false);
+  }, [canAccessAdmin]);
   const hasStreamingAccess = canAccessStreaming(role);
   const hasSmartCameraStreamingAccess = canAccessSmartCameraStreaming(role);
   const adminTabOptions = useMemo(() => {
     if (role === "manager") {
-      return ADMIN_TAB_OPTIONS.filter((option) => option.key === "users" || option.key === "organizations");
+      return ADMIN_TAB_OPTIONS.filter((option) => option.key === "users" || option.key === "organizations" || option.key === "cinematic");
     }
     return ADMIN_TAB_OPTIONS;
   }, [role]);
@@ -2055,6 +2126,7 @@ export default function MapPage() {
   const activeAdminLabel = adminTabOptions.find((option) => option.key === activeAdminTab)?.label ?? "Usuários";
   const activeAdminIsEquipment = EQUIPMENT_ADMIN_TABS.includes(activeAdminTab);
   function adminTabIcon(key: AdminTab) {
+    if (key === "cinematic") return <Clapperboard aria-hidden="true" />;
     if (key === "users") return <UserRound aria-hidden="true" />;
     if (key === "organizations") return <Building2 aria-hidden="true" />;
     if (key === "cameras" || key === "smart_cameras" || key === "lpr") return <Eye aria-hidden="true" />;
@@ -2117,6 +2189,8 @@ export default function MapPage() {
   useEffect(() => {
     if (!canViewBairros) {
       setShowBairros(false);
+      setBairroIntroOpen(false);
+      setBairroSearchMinimized(false);
       setSelectedBairro("");
       setBairroQuery("");
       setBairroReportMsg(null);
@@ -2165,6 +2239,8 @@ export default function MapPage() {
   useEffect(() => {
     if (!canUseAreaDraw) {
       setAreaDrawMode(false);
+      setAreaDrawAwaitingStart(false);
+      setAreaDrawMinimized(false);
       setAreaToolsOpen(false);
       setAreaDrawPoints([]);
       setAreaReportMsg(null);
@@ -2252,9 +2328,10 @@ export default function MapPage() {
       map.addSource(SOURCES.pois, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
-        cluster: true,
+        cluster: !cinematicModeRef.current,
         clusterRadius: 60,
         clusterMaxZoom: 14,
+        ...(cinematicModeRef.current ? { maxzoom: 14 } : {}),
       });
     }
 
@@ -3348,9 +3425,7 @@ export default function MapPage() {
           title: (p.name || "Câmera sem nome").toString(),
           meta: `Zona: ${(p.zona_camera || "-").toString()}`,
         };
-      }
-      if (kind === "camera_intel") {
-        return {
+       return {
           kind,
           title: (p.name || "Super Câmera Inteligente").toString(),
           meta: `Responsável: ${(p.responsavel || "-").toString()}`,
@@ -5264,11 +5339,15 @@ export default function MapPage() {
     if (areaDrawMode) {
       clearAreaDrawing();
       setAreaDrawMode(false);
+      setAreaDrawAwaitingStart(false);
+      setAreaDrawMinimized(false);
       setAreaToolsOpen(false);
       return;
     }
     setAreaToolsOpen(true);
     setAreaDrawMode(true);
+    setAreaDrawAwaitingStart(true);
+    setAreaDrawMinimized(false);
     setAreaReportMsg(null);
   }
 
@@ -5847,6 +5926,21 @@ export default function MapPage() {
   }, [poisGeo]);
 
   useEffect(() => {
+    if (cinematicModeRef.current === cinematicMode) return;
+    cinematicModeRef.current = cinematicMode;
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    for (const layerId of POI_LAYER_IDS) {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+    }
+    if (map.getSource(SOURCES.pois)) map.removeSource(SOURCES.pois);
+    ensureSourcesAndLayers(map);
+    updatePoisData(map, poisGeo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cinematicMode]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     if (!bairrosGeo || !bairrosLinesGeo) return;
@@ -6115,11 +6209,11 @@ export default function MapPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.getCanvas().style.cursor = areaDrawMode ? "crosshair" : "";
+    map.getCanvas().style.cursor = areaDrawMode && !areaDrawAwaitingStart && !areaDrawMinimized ? "crosshair" : "";
     return () => {
       if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
     };
-  }, [areaDrawMode]);
+  }, [areaDrawMode, areaDrawAwaitingStart, areaDrawMinimized]);
 
   async function changePassword() {
     setPwMsg(null);
@@ -6648,7 +6742,7 @@ export default function MapPage() {
     loadingText?: string;
   }) => (
     <div
-      className="dock"
+      className="dock geometrySummaryCard"
       style={
         isMobile
           ? { width: "100%", maxWidth: 360, padding: 8, gap: 4 }
@@ -6660,18 +6754,20 @@ export default function MapPage() {
           Resumo
         </div>
         <button
+          type="button"
           className="btnGhost"
           onClick={onClose}
           style={{
-            width: isMobile ? 24 : 28,
-            height: isMobile ? 24 : 28,
-            padding: 0,
-            borderRadius: 999,
-            lineHeight: 1,
+            minWidth: isMobile ? 64 : 28,
+            minHeight: isMobile ? 32 : 28,
+            padding: isMobile ? "5px 10px" : 0,
+            borderRadius: isMobile ? 8 : 999,
+            lineHeight: 1.2,
           }}
-          title="Fechar resumo"
+          aria-label={isMobile ? "Voltar ao mapa" : "Fechar resumo"}
+          title={isMobile ? "Voltar ao mapa" : "Fechar resumo"}
         >
-          ✕
+          {isMobile ? "Voltar" : "✕"}
         </button>
       </div>
       <div
@@ -6934,6 +7030,8 @@ export default function MapPage() {
   };
 
   const mobileLayersVisible = dockOpen && !panelOpen && !mobileMenuOpen && !mobileSearchOpen;
+  const gpsCenterVisible = canUseGps && gpsOn && !dockOpen && !panelOpen && !mobileMenuOpen && !mobileSearchOpen;
+  const activeLayerPanelOpen = !isMobile && (panel === "map" || panel === "profile");
 
   return (
     <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""}`}>
@@ -6948,12 +7046,173 @@ export default function MapPage() {
         }}
       />
 
+      {canViewBairros && showBairros && bairroIntroOpen && (
+        <div className="areaDrawIntroBackdrop">
+          <div className="areaDrawIntro" role="dialog" aria-modal="true" aria-labelledby="bairroIntroTitle">
+            <div className="areaDrawIntroArt bairroIntroArt" aria-hidden="true">
+              <Building2 size={86} strokeWidth={1.2} />
+            </div>
+            <h2 id="bairroIntroTitle">Explore os bairros no mapa</h2>
+            <p>Busque um bairro pelo nome ou selecione sua área no mapa. O contorno será destacado.</p>
+            <button type="button" className="areaDrawIntroStart" onClick={() => { setBairroIntroOpen(false); if (areaDrawMode) setAreaDrawMinimized(true); }}>
+              Buscar bairro
+            </button>
+            <button type="button" className="areaDrawIntroCancel" onClick={() => { setShowBairros(false); setBairroIntroOpen(false); }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {canUseAreaDraw && areaDrawMode && areaDrawAwaitingStart && (
+        <div className="areaDrawIntroBackdrop">
+          <div className="areaDrawIntro" role="dialog" aria-modal="true" aria-labelledby="areaDrawIntroTitle">
+            <div className="areaDrawIntroArt" aria-hidden="true">
+              <svg viewBox="0 0 280 160">
+                <path className="areaDrawIntroShape" d="M38 54 181 26 245 102 109 136Z" />
+                <path className="areaDrawIntroPending" d="M109 136 38 54" />
+                <circle cx="38" cy="54" r="6" /><circle cx="181" cy="26" r="6" />
+                <circle cx="245" cy="102" r="6" /><circle cx="109" cy="136" r="6" />
+              </svg>
+            </div>
+            <h2 id="areaDrawIntroTitle">Desenhe uma ou mais áreas no mapa</h2>
+            <p>Clique em 3 ou mais pontos para formar uma área. Use “Novo polígono” para desenhar outra, “Desfazer ponto” para corrigir e “Baixar PDF” para gerar o relatório.</p>
+            <button type="button" className="areaDrawIntroStart" onClick={() => { setAreaDrawAwaitingStart(false); if (showBairros) setBairroSearchMinimized(true); }}>
+              Começar desenho
+            </button>
+            <button type="button" className="areaDrawIntroCancel" onClick={toggleAreaDrawing}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="mapTaskPanels">
+      {canUseAreaDraw && areaDrawMode && !areaDrawAwaitingStart && areaDrawMinimized && (
+        <button type="button" className="areaDrawRestore" onClick={() => { setAreaDrawMinimized(false); if (showBairros) setBairroSearchMinimized(true); }}>
+          <PenTool size={16} aria-hidden="true" />
+          Desenhar área
+        </button>
+      )}
+
+      {canUseAreaDraw && areaDrawMode && !areaDrawAwaitingStart && !areaDrawMinimized && (
+        <div className="areaDrawToolbar" aria-label="Ferramentas de desenho">
+          <div className="areaDrawToolbarHeader">
+            <div>
+              <strong>Desenhar área</strong>
+              <span>{areaDrawPoints.length} ponto(s) em edição · {areaDrawPolygons.length} polígono(s)</span>
+            </div>
+            <div className="mapTaskPanelHeaderActions">
+              <button type="button" onClick={() => setAreaDrawMinimized(true)} title="Minimizar desenho">Minimizar</button>
+              <button type="button" onClick={toggleAreaDrawing} title="Parar desenho">Parar</button>
+            </div>
+          </div>
+          <div className="areaDrawToolbarActions">
+            <button type="button" onClick={removeLastAreaPoint} disabled={areaDrawPoints.length === 0 || areaReportLoading}>Desfazer ponto</button>
+            <button type="button" onClick={finalizeCurrentAreaPolygon} disabled={areaDrawPoints.length < 3 || areaReportLoading}>Novo polígono</button>
+            <button type="button" onClick={clearAreaDrawing} disabled={(areaDrawPoints.length === 0 && areaDrawPolygons.length === 0) || areaReportLoading}>Limpar tudo</button>
+            <button type="button" className="areaDrawToolbarDownload" onClick={downloadAreaReport} disabled={!canRequestAreaReport || totalAreaPolygonCount === 0 || areaReportLoading}>
+              {areaReportLoading ? "Gerando..." : "Baixar PDF"}
+            </button>
+          </div>
+          {areaReportMsg && <p className="areaDrawToolbarMessage" role="status">{areaReportMsg}</p>}
+          {!canRequestAreaReport && <p className="areaDrawToolbarMessage">Ative uma camada autorizada para gerar o PDF.</p>}
+        </div>
+      )}
+
+      {canViewBairros && showBairros && !bairroIntroOpen && bairroSearchMinimized && (
+        <button
+          type="button"
+          className="bairroSearchRestore"
+          onClick={() => { setBairroSearchMinimized(false); if (areaDrawMode) setAreaDrawMinimized(true); }}
+        >
+          <Building2 size={16} aria-hidden="true" />
+          Buscar bairro
+        </button>
+      )}
+
+      {canViewBairros && showBairros && !bairroIntroOpen && !bairroSearchMinimized && (
+        <div className="bairroSearchToolbar" aria-label="Buscar bairro no mapa">
+          <div className="areaDrawToolbarHeader">
+            <div>
+              <strong>Buscar bairro</strong>
+              <span>{selectedBairro || "Selecione um bairro no mapa ou na lista"}</span>
+            </div>
+            <button type="button" onClick={() => setBairroSearchMinimized(true)} title="Minimizar busca de bairros">Minimizar</button>
+          </div>
+          <input
+            className="bairroSearchInput"
+            type="search"
+            value={bairroQuery}
+            onChange={(e) => setBairroQuery(e.target.value)}
+            placeholder="Digite o nome do bairro"
+            aria-label="Nome do bairro"
+          />
+          <div className="bairroSearchResults">
+            <button type="button" className={!selectedBairro ? "bairroSearchResultSelected" : ""} onClick={() => { setSelectedBairro(""); setBairroQuery(""); }}>Todos os bairros</button>
+            {bairrosFiltered.length === 0 && <p>Nenhum bairro encontrado.</p>}
+            {bairrosFiltered.map((nome) => (
+              <button type="button" key={nome} className={selectedBairro === nome ? "bairroSearchResultSelected" : ""} onClick={() => { setSelectedBairro(nome); setBairroQuery(""); }}>
+                {nome}
+              </button>
+            ))}
+          </div>
+          {loadingBairros && <p className="areaDrawToolbarMessage">Carregando bairros...</p>}
+          {bairrosErr && <p className="areaDrawToolbarMessage" role="alert">{bairrosErr}</p>}
+          {!canExtractBairroData && selectedBairro && <p className="areaDrawToolbarMessage">Esta camada exibe somente o contorno do bairro.</p>}
+        </div>
+      )}
+
+      </div>
+
+      {(canViewCameras && showCameras || canViewCamerasIntel && showCamerasIntel || canViewCamerasLpr && showCamerasLpr || canViewRadares && showRadares || canViewCisp && showCisp || canViewRisp && showRisp || canViewAisp && showAisp) && (
+        <div
+          className={`mapActiveLayers ${activeLayerPanelOpen ? "mapActiveLayersWithPanel" : ""}`}
+          style={activeLayerPanelOpen ? {
+            "--map-active-panel-right": `calc(${panelSideInset}px + min(${panelWidth}px, calc(100vw - ${panelSideInset * 2}px)) + 16px)`,
+          } as CSSProperties : undefined}
+          aria-label="Camadas ativas"
+        >
+          {canViewCameras && showCameras && (
+            <button type="button" className="mapActiveLayer mapActiveLayerEquipment" onClick={() => setShowCameras(false)} aria-label="Desativar câmeras">
+              Câmeras <X size={16} aria-hidden="true" />
+            </button>
+          )}
+          {canViewCamerasIntel && showCamerasIntel && (
+            <button type="button" className="mapActiveLayer mapActiveLayerEquipment" onClick={() => setShowCamerasIntel(false)} aria-label="Desativar super câmeras inteligentes">
+              Super Câmeras Inteligentes <X size={16} aria-hidden="true" />
+            </button>
+          )}
+          {canViewCamerasLpr && showCamerasLpr && (
+            <button type="button" className="mapActiveLayer mapActiveLayerEquipment" onClick={() => setShowCamerasLpr(false)} aria-label="Desativar LPR">
+              LPR <X size={16} aria-hidden="true" />
+            </button>
+          )}
+          {canViewRadares && showRadares && (
+            <button type="button" className="mapActiveLayer mapActiveLayerEquipment" onClick={() => setShowRadares(false)} aria-label="Desativar radares">
+              Radares <X size={16} aria-hidden="true" />
+            </button>
+          )}
+          {canViewCisp && showCisp && (
+            <button type="button" className="mapActiveLayer" onClick={() => setShowCisp(false)} aria-label="Desativar CISP">
+              CISP <X size={16} aria-hidden="true" />
+            </button>
+          )}
+          {canViewRisp && showRisp && (
+            <button type="button" className="mapActiveLayer" onClick={() => setShowRisp(false)} aria-label="Desativar RISP">
+              RISP <X size={16} aria-hidden="true" />
+            </button>
+          )}
+          {canViewAisp && showAisp && (
+            <button type="button" className="mapActiveLayer" onClick={() => setShowAisp(false)} aria-label="Desativar AISP">
+              AISP <X size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mobileMapBrandPill">
         <img src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" />
       </div>
       <button
         type="button"
-        className={mobileLayersVisible ? "mobileLayersToggle mobileLayersToggleActive" : "mobileLayersToggle"}
+        className={`mobileLayersToggle ${mobileLayersVisible ? "mobileLayersToggleActive" : ""} ${gpsCenterVisible ? "mobileLayersToggleWithGps" : ""}`}
         onClick={() => {
           setPanelOpen(false);
           setMobileMenuOpen(false);
@@ -6966,8 +7225,23 @@ export default function MapPage() {
         title={mobileLayersVisible ? "Fechar camadas" : "Abrir camadas"}
       >
         <Layers size={18} strokeWidth={2.1} aria-hidden="true" />
-        <span>Camadas</span>
       </button>
+
+      {gpsCenterVisible && (
+        <button
+          type="button"
+          className="gpsMapCenter"
+          disabled={!gps || !!gpsErr}
+          onClick={() => {
+            if (!gps) return;
+            flyToPoint(gps.lng, gps.lat, 16);
+          }}
+          aria-label={gps && !gpsErr ? "Centralizar no GPS" : "Centralizar no GPS (aguardando localização)"}
+          title={gps && !gpsErr ? "Centralizar no GPS" : "Aguardando localização do GPS"}
+        >
+          <LocateFixed size={20} strokeWidth={2.1} aria-hidden="true" />
+        </button>
+      )}
 
       {!MAPBOX_TOKEN && (
         <div
@@ -6995,28 +7269,7 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* DOCK */}
-      <div
-        className="dockWrap"
-        style={
-          isMobile
-            ? {
-                display: mobileMenuOpen ? "none" : undefined,
-                flexDirection: "column",
-                alignItems: "stretch",
-              }
-            : undefined
-        }
-        onMouseEnter={() => {
-          if (isMobile) return;
-          setDockOpen(true);
-          bumpDockAutoHide();
-        }}
-        onMouseMove={() => {
-          if (isMobile) return;
-          bumpDockAutoHide();
-        }}
-      >
+      <div className="geometrySummaryWrap">
         {showBairros &&
           canExtractBairroData &&
           selectedBairro &&
@@ -7053,22 +7306,72 @@ export default function MapPage() {
                 : "Carregando resumo...",
           })}
 
+      </div>
+
+      {/* DOCK */}
+      <div
+        className={`dockWrap ${isMobile ? "dockWrapMobile" : "dockWrapDesktop"}`}
+        style={
+          isMobile
+            ? {
+                display: mobileMenuOpen ? "none" : undefined,
+                flexDirection: "column",
+                alignItems: "stretch",
+              }
+            : undefined
+        }
+      >
         {!dockOpen && !isMobile && (
-          <div
-            className={`dockHandle ${isMobile ? "dockHandleMobile" : ""}`}
+          <button
+            type="button"
+            ref={dockHandleRef}
+            className="dockHandle"
             title="Abrir camadas"
+            aria-label="Abrir camadas"
+            aria-expanded={false}
+            aria-controls="mapLayersPanel"
             onClick={() => {
               setDockOpen(true);
               bumpDockAutoHide();
             }}
           >
-            {isMobile ? <Layers size={20} strokeWidth={2.1} aria-hidden="true" /> : <><Layers size={14} strokeWidth={2.2} aria-hidden="true" /><span>Camadas</span></>}
-          </div>
+            <Layers size={20} strokeWidth={2.1} aria-hidden="true" />
+          </button>
         )}
 
         {dockOpen && (
           <>
-            <div className="dock" id="mapLayersPanel">
+            {!isMobile && (
+              <button
+                type="button"
+                className="dockBackdrop"
+                aria-label="Fechar camadas"
+                onClick={() => setDockOpen(false)}
+              />
+            )}
+            <div
+              className="dock"
+              ref={dockPanelRef}
+              id="mapLayersPanel"
+              role={!isMobile ? "dialog" : undefined}
+              aria-modal={!isMobile ? true : undefined}
+              aria-labelledby={!isMobile ? "desktopLayersTitle" : undefined}
+            >
+              {!isMobile && (
+                <div className="dockDesktopHeader">
+                  <h2 id="desktopLayersTitle">Camadas</h2>
+                  <button
+                    type="button"
+                    ref={dockCloseRef}
+                    className="dockDesktopClose"
+                    onClick={() => setDockOpen(false)}
+                    aria-label="Fechar camadas"
+                    title="Fechar camadas"
+                  >
+                    <X size={20} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
               {isMobile && (
                 <div className="dockMobileTitle">Camadas</div>
               )}
@@ -7077,44 +7380,31 @@ export default function MapPage() {
                   type="button"
                   className="dockMobileClose"
                   onClick={() => setDockOpen(false)}
-                  aria-label="Recolher camadas"
-                  title="Recolher camadas"
+                  aria-label="Voltar ao mapa"
+                  title="Voltar ao mapa"
                 >
-                  <X size={18} strokeWidth={2.4} />
+                  Voltar
                 </button>
               )}
               <div className="dockSectionLabel">Base do mapa</div>
               <div className="dockBase">
-                <div className="dockBaseToggle">
-                  <button
-                    type="button"
-                    className={`dockBaseOption ${mapBaseStyle === "streets" ? "dockBaseOptionActive" : ""}`}
-                    onClick={() => switchMapBaseStyle("streets")}
-                    aria-pressed={mapBaseStyle === "streets"}
-                  >
-                    <span className="dockBaseIcon" aria-hidden="true">
-                      <MapPinned size={15} strokeWidth={2.1} />
-                    </span>
-                    <span className="dockBaseText">
-                      <span className="dockBaseTextMain">Mapa</span>
-                      <span className="dockBaseTextSub">Visual escuro</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`dockBaseOption ${mapBaseStyle === "satellite" ? "dockBaseOptionActive" : ""}`}
-                    onClick={() => switchMapBaseStyle("satellite")}
-                    aria-pressed={mapBaseStyle === "satellite"}
-                  >
-                    <span className="dockBaseIcon" aria-hidden="true">
-                      <Satellite size={15} strokeWidth={2.1} />
-                    </span>
-                    <span className="dockBaseText">
-                      <span className="dockBaseTextMain">Satélite</span>
-                      <span className="dockBaseTextSub">Imagem aérea</span>
-                    </span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label="Visualização por satélite"
+                  aria-checked={mapBaseStyle === "satellite"}
+                  className={`dockBaseToggle ${mapBaseStyle === "satellite" ? "dockBaseToggleSatellite" : ""}`}
+                  onClick={() => switchMapBaseStyle(mapBaseStyle === "streets" ? "satellite" : "streets")}
+                >
+                  <span className="dockBaseChoice">
+                    <MapPinned size={15} strokeWidth={2.1} aria-hidden="true" />
+                    Mapa
+                  </span>
+                  <span className="dockBaseChoice">
+                    <Satellite size={15} strokeWidth={2.1} aria-hidden="true" />
+                    Satélite
+                  </span>
+                </button>
               </div>
 
               <div className="dockDivider" />
@@ -7123,11 +7413,13 @@ export default function MapPage() {
             {canViewCameras && (
               <button
                 className={`dockChip ${showCameras ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showCameras}
                 onClick={() => {
                   setShowCameras((v) => !v);
                   bumpDockAutoHide();
                 }}
-                title={showCameras ? "Câmeras ON" : "Câmeras OFF"}
+                title={showCameras ? "Desativar Câmeras" : "Ativar Câmeras"}
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
@@ -7137,20 +7429,21 @@ export default function MapPage() {
                     <span>Câmeras</span>
                     <span className="chipLegend">Gravação de imagens</span>
                   </span>
-                  <span className="chipDot" style={{ background: showCameras ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipState">{showCameras ? "ON" : "OFF"}</span>
+                <LayerToggle checked={showCameras} />
               </button>
             )}
 
             {canViewCamerasIntel && (
               <button
                 className={`dockChip ${showCamerasIntel ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showCamerasIntel}
                 onClick={() => {
                   setShowCamerasIntel((v) => !v);
                   bumpDockAutoHide();
                 }}
-                title={showCamerasIntel ? "Inteligentes ON" : "Inteligentes OFF"}
+                title={showCamerasIntel ? "Desativar Super Câmeras Inteligentes" : "Ativar Super Câmeras Inteligentes"}
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
@@ -7160,20 +7453,21 @@ export default function MapPage() {
                     <span>Super Câmeras Inteligentes</span>
                     <span className="chipLegend">Gravações e analíticos de IA</span>
                   </span>
-                  <span className="chipDot" style={{ background: showCamerasIntel ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipState">{showCamerasIntel ? "ON" : "OFF"}</span>
+                <LayerToggle checked={showCamerasIntel} />
               </button>
             )}
 
             {canViewCamerasLpr && (
               <button
                 className={`dockChip ${showCamerasLpr ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showCamerasLpr}
                 onClick={() => {
                   setShowCamerasLpr((v) => !v);
                   bumpDockAutoHide();
                 }}
-                title={showCamerasLpr ? "LPR ON" : "LPR OFF"}
+                title={showCamerasLpr ? "Desativar LPR" : "Ativar LPR"}
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
@@ -7183,20 +7477,21 @@ export default function MapPage() {
                     <span>LPR</span>
                     <span className="chipLegend">Leitura de radar</span>
                   </span>
-                  <span className="chipDot" style={{ background: showCamerasLpr ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipState">{showCamerasLpr ? "ON" : "OFF"}</span>
+                <LayerToggle checked={showCamerasLpr} />
               </button>
             )}
 
             {canViewRadares && (
               <button
                 className={`dockChip ${showRadares ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showRadares}
                 onClick={() => {
                   setShowRadares((v) => !v);
                   bumpDockAutoHide();
                 }}
-                title={showRadares ? "Radares ON" : "Radares OFF"}
+                title={showRadares ? "Desativar Radares" : "Ativar Radares"}
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
@@ -7206,131 +7501,174 @@ export default function MapPage() {
                     <span>Radares</span>
                     <span className="chipLegend">Leitura de radar</span>
                   </span>
-                  <span className="chipDot" style={{ background: showRadares ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipState">{showRadares ? "ON" : "OFF"}</span>
+                <LayerToggle checked={showRadares} />
               </button>
             )}
 
-            {canViewBairros && (
+            {canViewRisp && (
               <button
-                className={`dockChip ${showBairros ? "dockChipOn" : ""}`}
+                className={`dockChip ${showRisp ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showRisp}
                 onClick={() => {
-                  setShowBairros((prev) => {
-                    const next = !prev;
+                  setShowRisp((v) => {
+                    const next = !v;
                     if (next) {
-                      setSelectedBairro("");
-                      setBairroQuery("");
-                      setBairroReportMsg(null);
+                      setShowAisp(false);
+                      setShowCisp(false);
                     }
                     return next;
                   });
                   bumpDockAutoHide();
                 }}
-                title={showBairros ? "Bairros ON" : "Bairros OFF"}
+                title={showRisp ? "Desativar RISP" : "Ativar RISP"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <Shield size={15} strokeWidth={2.1} />
+                  </span>
+                  <span className="chipText">
+                    <span>RISP</span>
+                    <span className="chipLegend">Regiões Integradas de Segurança Pública</span>
+                  </span>
+                </span>
+                <LayerToggle checked={showRisp} />
+              </button>
+            )}
+            {canViewRisp && showRisp && multiCodeWarnings.risp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.risp.length} bairros com mais de uma RISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.risp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
+            {canViewAisp && (
+              <button
+                className={`dockChip ${showAisp ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showAisp}
+                onClick={() => {
+                  setShowAisp((v) => {
+                    const next = !v;
+                    if (next) {
+                      setShowRisp(false);
+                      setShowCisp(false);
+                    }
+                    return next;
+                  });
+                  bumpDockAutoHide();
+                }}
+                title={showAisp ? "Desativar AISP" : "Ativar AISP"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <ShieldAlert size={15} strokeWidth={2.1} />
+                  </span>
+                  <span className="chipText">
+                    <span>AISP</span>
+                    <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
+                  </span>
+                </span>
+                <LayerToggle checked={showAisp} />
+              </button>
+            )}
+            {canViewAisp && showAisp && multiCodeWarnings.aisp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.aisp.length} bairros com mais de uma AISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.aisp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
+            {canViewCisp && (
+              <button
+                className={`dockChip ${showCisp ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showCisp}
+                onClick={() => {
+                  setShowCisp((v) => {
+                    const next = !v;
+                    if (next) {
+                      setShowRisp(false);
+                      setShowAisp(false);
+                    }
+                    return next;
+                  });
+                  bumpDockAutoHide();
+                }}
+                title={showCisp ? "Desativar CISP" : "Ativar CISP"}
+              >
+                <span className="chipLeft">
+                  <span className="chipIcon" aria-hidden="true">
+                    <ShieldCheck size={15} strokeWidth={2.1} />
+                  </span>
+                  <span className="chipText">
+                    <span>CISP</span>
+                    <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>
+                  </span>
+                </span>
+                <LayerToggle checked={showCisp} />
+              </button>
+            )}
+            {canViewCisp && showCisp && multiCodeWarnings.cisp.length > 0 && (
+              <div className="dockNote">
+                Aviso: {multiCodeWarnings.cisp.length} bairros com mais de uma CISP não foram coloridos. Ex.:{" "}
+                {multiCodeWarnings.cisp.slice(0, 4).join(", ")}
+              </div>
+            )}
+
+            <div className="dockDivider" />
+            <div className="dockTitle dockToolsTitle">Ferramentas</div>
+
+            {canViewBairros && (
+              <button
+                className={`dockChip ${showBairros ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={showBairros}
+                onClick={() => {
+                  const next = !showBairros;
+                  setShowBairros(next);
+                  setBairroIntroOpen(next);
+                  setBairroSearchMinimized(false);
+                  if (next && areaDrawMode) setAreaDrawMinimized(true);
+                  setSelectedBairro("");
+                  setBairroQuery("");
+                  setBairroReportMsg(null);
+                  if (next) setDockOpen(false);
+                  bumpDockAutoHide();
+                }}
+                title={showBairros ? "Desativar Bairros" : "Ativar Bairros"}
               >
                 <span className="chipLeft">
                   <span className="chipIcon" aria-hidden="true">
                     <Building2 size={15} strokeWidth={2.1} />
                   </span>
                   <span>Bairros</span>
-                  <span className="chipDot" style={{ background: showBairros ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipState">{showBairros ? "ON" : "OFF"}</span>
+                <LayerToggle checked={showBairros} />
               </button>
-            )}
-
-            {canViewBairros && showBairros && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(0,0,0,0.65)" }}>
-                  Buscar bairro
-                </label>
-                <input
-                  value={bairroQuery}
-                  onChange={(e) => setBairroQuery(e.target.value)}
-                  placeholder="Digite para buscar..."
-                  style={{ ...inputStyle(), padding: "8px 10px", borderRadius: 12 }}
-                />
-                <div
-                  className="scrollbarHidden"
-                  style={{
-                    border: "1px solid rgba(0,0,0,0.08)",
-                    borderRadius: 12,
-                    background: "rgba(255,255,255,0.85)",
-                    maxHeight: 180,
-                    overflowY: "auto",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 4,
-                    padding: 6,
-                  }}
-                >
-                  <button
-                    className="btnGhost"
-                    onClick={() => {
-                      setSelectedBairro("");
-                    }}
-                    style={{
-                      textAlign: "left",
-                      padding: "6px 8px",
-                      borderRadius: 10,
-                      fontWeight: 800,
-                      background: selectedBairro ? "transparent" : "rgba(0,0,0,0.08)",
-                    }}
-                  >
-                    Todos os bairros
-                  </button>
-                  {bairrosFiltered.length === 0 && (
-                    <div className="dockNote" style={{ padding: "4px 6px" }}>
-                      Nenhum bairro encontrado
-                    </div>
-                  )}
-                  {bairrosFiltered.map((nome) => (
-                    <button
-                      key={nome}
-                      className="btnGhost"
-                      onClick={() => {
-                        setSelectedBairro(nome);
-                        setBairroQuery("");
-                      }}
-                      style={{
-                        textAlign: "left",
-                        padding: "6px 8px",
-                        borderRadius: 10,
-                        fontWeight: 800,
-                        background: selectedBairro === nome ? "rgba(0,0,0,0.08)" : "transparent",
-                      }}
-                    >
-                      {nome}
-                    </button>
-                  ))}
-                </div>
-                {bairrosGeo?.features?.length ? (
-                  <div className="dockNote">Bairros carregados: {bairrosGeo.features.length}</div>
-                ) : null}
-                {loadingBairros && <div className="dockNote">Carregando bairros...</div>}
-                {bairrosErr && <div className="dockNote">{bairrosErr}</div>}
-                {!canExtractBairroData && selectedBairro && (
-                  <div className="dockNote">
-                    Esta camada exibe somente o contorno do bairro, sem resumo e sem download de PDF.
-                  </div>
-                )}
-              </div>
             )}
 
             {canUseAreaDraw && (
               <button
-                className="dockChip"
+                className={`dockChip ${areaDrawMode ? "dockChipOn" : ""}`}
+                role="switch"
+                aria-checked={areaDrawMode}
                 onClick={() => {
                   if (areaDrawMode) {
                     clearAreaDrawing();
                     setAreaDrawMode(false);
+                    setAreaDrawAwaitingStart(false);
+                    setAreaDrawMinimized(false);
                     setAreaToolsOpen(false);
                     return;
                   }
                   setAreaToolsOpen(true);
                   setAreaDrawMode(true);
+                  setAreaDrawAwaitingStart(true);
+                  setAreaDrawMinimized(false);
                   setAreaReportMsg(null);
+                  setDockOpen(false);
                 }}
                 title="Desenhar área"
               >
@@ -7342,9 +7680,8 @@ export default function MapPage() {
                     <span>Desenhar área</span>
                     <span className="chipLegend">Abrir relatório por área</span>
                   </span>
-                  <span className="chipDot" style={{ background: areaDrawMode ? "#22c55e" : "#9ca3af" }} />
                 </span>
-                <span className="chipState">{areaDrawMode ? "ON" : "OFF"}</span>
+                <LayerToggle checked={areaDrawMode} />
               </button>
             )}
 
@@ -7454,162 +7791,43 @@ export default function MapPage() {
               </div>
             )}
 
-            {canViewRisp && (
-              <button
-                className={`dockChip ${showRisp ? "dockChipOn" : ""}`}
-                onClick={() => {
-                  setShowRisp((v) => {
-                    const next = !v;
-                    if (next) {
-                      setShowAisp(false);
-                      setShowCisp(false);
-                    }
-                    return next;
-                  });
-                  bumpDockAutoHide();
-                }}
-                title={showRisp ? "RISP ON" : "RISP OFF"}
-              >
-                <span className="chipLeft">
-                  <span className="chipIcon" aria-hidden="true">
-                    <Shield size={15} strokeWidth={2.1} />
-                  </span>
-                  <span className="chipText">
-                    <span>RISP</span>
-                    <span className="chipLegend">Regiões Integradas de Segurança Pública</span>
-                  </span>
-                  <span className="chipDot" style={{ background: showRisp ? "#22c55e" : "#9ca3af" }} />
-                </span>
-                <span className="chipState">{showRisp ? "ON" : "OFF"}</span>
-              </button>
-            )}
-            {canViewRisp && showRisp && multiCodeWarnings.risp.length > 0 && (
-              <div className="dockNote">
-                Aviso: {multiCodeWarnings.risp.length} bairros com mais de uma RISP não foram coloridos. Ex.:{" "}
-                {multiCodeWarnings.risp.slice(0, 4).join(", ")}
-              </div>
-            )}
-
-            {canViewAisp && (
-              <button
-                className={`dockChip ${showAisp ? "dockChipOn" : ""}`}
-                onClick={() => {
-                  setShowAisp((v) => {
-                    const next = !v;
-                    if (next) {
-                      setShowRisp(false);
-                      setShowCisp(false);
-                    }
-                    return next;
-                  });
-                  bumpDockAutoHide();
-                }}
-                title={showAisp ? "AISP ON" : "AISP OFF"}
-              >
-                <span className="chipLeft">
-                  <span className="chipIcon" aria-hidden="true">
-                    <ShieldAlert size={15} strokeWidth={2.1} />
-                  </span>
-                  <span className="chipText">
-                    <span>AISP</span>
-                    <span className="chipLegend">Áreas Integradas de Segurança Pública</span>
-                  </span>
-                  <span className="chipDot" style={{ background: showAisp ? "#22c55e" : "#9ca3af" }} />
-                </span>
-                <span className="chipState">{showAisp ? "ON" : "OFF"}</span>
-              </button>
-            )}
-            {canViewAisp && showAisp && multiCodeWarnings.aisp.length > 0 && (
-              <div className="dockNote">
-                Aviso: {multiCodeWarnings.aisp.length} bairros com mais de uma AISP não foram coloridos. Ex.:{" "}
-                {multiCodeWarnings.aisp.slice(0, 4).join(", ")}
-              </div>
-            )}
-
-            {canViewCisp && (
-              <button
-                className={`dockChip ${showCisp ? "dockChipOn" : ""}`}
-                onClick={() => {
-                  setShowCisp((v) => {
-                    const next = !v;
-                    if (next) {
-                      setShowRisp(false);
-                      setShowAisp(false);
-                    }
-                    return next;
-                  });
-                  bumpDockAutoHide();
-                }}
-                title={showCisp ? "CISP ON" : "CISP OFF"}
-              >
-                <span className="chipLeft">
-                  <span className="chipIcon" aria-hidden="true">
-                    <ShieldCheck size={15} strokeWidth={2.1} />
-                  </span>
-                  <span className="chipText">
-                    <span>CISP</span>
-                    <span className="chipLegend">Circunscrições Integradas de Segurança Pública</span>
-                  </span>
-                  <span className="chipDot" style={{ background: showCisp ? "#22c55e" : "#9ca3af" }} />
-                </span>
-                <span className="chipState">{showCisp ? "ON" : "OFF"}</span>
-              </button>
-            )}
-            {canViewCisp && showCisp && multiCodeWarnings.cisp.length > 0 && (
-              <div className="dockNote">
-                Aviso: {multiCodeWarnings.cisp.length} bairros com mais de uma CISP não foram coloridos. Ex.:{" "}
-                {multiCodeWarnings.cisp.slice(0, 4).join(", ")}
-              </div>
-            )}
-
             {canUseGps && (
               <button
                 className={`dockChip ${gpsOn ? "dockChipOn" : ""} ${gpsErr ? "dockChipDisabled" : ""}`}
+                role="switch"
+                aria-checked={gpsOn}
+                aria-disabled={!!gpsErr}
                 onClick={() => {
                   if (gpsErr) return;
                   toggleGps();
                 }}
-                title={gpsOn ? "GPS ON" : "GPS OFF"}
+                title={gpsOn ? "Desativar GPS" : "Ativar GPS"}
               >
                 <span className="chipLeft">
                   <span className="chipIcon">
                     <img src={mapPinRed} alt="" />
                   </span>
                   <span>GPS</span>
-                  <span
-                    className={`chipDot ${gpsOn ? "gpsPulse" : ""}`}
-                    style={{ background: gpsOn ? "#22c55e" : "#9ca3af" }}
-                  />
                 </span>
-                <span className="chipState">{gpsOn ? "ON" : "OFF"}</span>
-              </button>
-            )}
-
-            {canUseGps && gpsOn && gps && !gpsErr && (
-              <button
-                className="dockCenterBtn"
-                onClick={() => {
-                  flyToPoint(gps.lng, gps.lat, 16);
-                  bumpDockAutoHide();
-                }}
-                title="Centralizar no GPS"
-              >
-                Centralizar GPS
+                <LayerToggle checked={gpsOn} />
               </button>
             )}
 
             {canUseGps && gpsErr && <div className="dockNote">GPS com erro</div>}
 
-            <div className="dockDivider" />
-
-            <button
-              className="btnGhost"
-              onClick={() => setDockOpen(false)}
-              style={{ borderRadius: 999, padding: "8px 10px" }}
-              title="Esconder"
-            >
-              Esconder
-            </button>
+            {isMobile && (
+              <>
+                <div className="dockDivider" />
+                <button
+                  className="btnGhost"
+                  onClick={() => setDockOpen(false)}
+                  style={{ borderRadius: 999, padding: "8px 10px" }}
+                  title="Esconder"
+                >
+                  Esconder
+                </button>
+              </>
+            )}
           </div>
           </>
         )}
@@ -7897,7 +8115,7 @@ export default function MapPage() {
                   }}
                   title="Limpar"
                 >
-                  ✕
+                  {isMobile ? "Limpar" : "✕"}
                 </button>
               </div>
 
@@ -8374,7 +8592,7 @@ export default function MapPage() {
               <span aria-current="page">Acionar CIVITAS</span>
             </nav>
             <button type="button" className="adminWorkspaceClose civitasWorkspaceClose" aria-label="Voltar ao mapa" onClick={() => { setPanel(null); setPanelOpen(false); }}>
-              <X size={16} aria-hidden="true" />
+              <X size={16} className="workspaceCloseIcon" aria-hidden="true" />
               <span>Voltar ao mapa</span>
             </button>
           </div>
@@ -8418,7 +8636,7 @@ export default function MapPage() {
                 <p>{activeAdminIsEquipment ? activeAdminLabel : "Gerenciamento completo"}</p>
               </div>
               <button type="button" className="adminWorkspaceClose" aria-label="Voltar ao mapa" onClick={() => { setPanel(null); setPanelOpen(false); }}>
-                <X size={16} aria-hidden="true" />
+                <X size={16} className="workspaceCloseIcon" aria-hidden="true" />
                 <span>Voltar ao mapa</span>
               </button>
             </div>
@@ -8435,6 +8653,33 @@ export default function MapPage() {
               )}
               {activeAdminTab === "usage" && (
                 <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+              )}
+              {activeAdminTab === "cinematic" && (
+                <section className="adminCard adminCinematicCard" aria-labelledby="adminCinematicTitle">
+                  <div className="adminCinematicHeading">
+                    <span className="adminCinematicIcon"><Clapperboard size={22} aria-hidden="true" /></span>
+                    <div>
+                      <h2 id="adminCinematicTitle">Modo cinematográfico</h2>
+                      <p>Mostra cada equipamento das camadas ativas no mapa, sem agrupamentos.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`adminCinematicToggle ${cinematicMode ? "adminCinematicToggleOn" : ""}`}
+                    role="switch"
+                    aria-checked={cinematicMode}
+                    onClick={() => setCinematicMode((enabled) => !enabled)}
+                  >
+                    <span>{cinematicMode ? "Modo ativado" : "Ativar modo"}</span>
+                    <LayerToggle checked={cinematicMode} />
+                  </button>
+                  <p className="adminCinematicNote">
+                    {poisGeo.features.length.toLocaleString("pt-BR")} equipamentos nas camadas ativas. O mapa carrega os pontos em uma única fonte e desenha apenas os trechos visíveis na tela.
+                  </p>
+                  <button type="button" className="adminCinematicMapButton" onClick={() => { setPanel(null); setPanelOpen(false); }}>
+                    Ver mapa
+                  </button>
+                </section>
               )}
               {activeAdminTab === "organizations" && (
                 <AdminOrganizationsPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
@@ -8509,12 +8754,12 @@ export default function MapPage() {
                 setMobileMenuOpen((v) => !v);
               }}
               type="button"
-              aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+              aria-label={mobileMenuOpen ? "Voltar ao mapa" : "Abrir menu"}
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-quick-menu"
-              title={mobileMenuOpen ? "Fechar menu" : "Menu"}
+              title={mobileMenuOpen ? "Voltar ao mapa" : "Menu"}
             >
-              {mobileMenuOpen ? <X size={18} strokeWidth={2.4} /> : <Menu size={18} strokeWidth={2.4} />}
+              {mobileMenuOpen ? "Voltar" : <Menu size={18} strokeWidth={2.4} />}
             </button>
 
             {mobileMenuOpen && (
@@ -8534,6 +8779,9 @@ export default function MapPage() {
                     <div className="mobileMenuBrandCopy">
                       <div className="mobileMenuEyebrow">Acesso rápido</div>
                     </div>
+                    <button type="button" className="mobileMenuClose" onClick={() => setMobileMenuOpen(false)}>
+                      Voltar
+                    </button>
                   </div>
 
                   <div className="mobileMenuActions">
@@ -8727,7 +8975,7 @@ export default function MapPage() {
                     }}
                     title="Limpar"
                   >
-                    ✕
+                    Limpar
                   </button>
                 </div>
 
@@ -9351,10 +9599,10 @@ export default function MapPage() {
                 type="button"
                 className="mobileSearchCloseBtn"
                 onClick={() => setMobileSearchOpen(false)}
-                aria-label="Fechar busca"
-                title="Fechar"
+                aria-label="Voltar ao mapa"
+                title="Voltar ao mapa"
               >
-                <X size={15} strokeWidth={2.8} aria-hidden="true" />
+                Voltar
               </button>
             </div>
 
@@ -9408,7 +9656,7 @@ export default function MapPage() {
                   aria-label="Limpar busca"
                   title="Limpar"
                 >
-                  <X size={14} strokeWidth={2.8} aria-hidden="true" />
+                  Limpar
                 </button>
               )}
             </div>

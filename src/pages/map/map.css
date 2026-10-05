@@ -1290,6 +1290,16 @@
 .adminWorkspaceContent { min-width: 0; padding: 0 28px 48px; }
 .adminWorkspaceContentDropdownOpen { padding-bottom: 180px; }
 .adminWorkspace .adminCard { border-color: #dce5ed !important; border-radius: 12px !important; background: #fff !important; box-shadow: 0 5px 16px rgba(15, 35, 56, .05); }
+.adminCinematicCard { display: grid; gap: 20px; max-width: 680px; padding: 24px; }
+.adminCinematicHeading { display: flex; align-items: flex-start; gap: 14px; }
+.adminCinematicIcon { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 10px; color: #0a284b; background: #eaf4f8; }
+.adminCinematicHeading h2 { margin: 0 0 5px; color: #0a284b; font-size: 18px; }
+.adminCinematicHeading p, .adminCinematicNote { margin: 0; color: #64748b; font-size: 13px; line-height: 1.45; }
+.adminCinematicToggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 54px; padding: 10px 14px; border: 1px solid #dce5ed; border-radius: 10px; background: #f8fafc; color: #24425d; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.adminCinematicToggleOn { border-color: #b4d8e8; background: #edf8fc; color: #0a284b; }
+.adminCinematicToggle:focus-visible, .adminCinematicMapButton:focus-visible { outline: 2px solid #00a9de; outline-offset: 2px; }
+.adminCinematicMapButton { justify-self: start; min-height: 38px; padding: 0 16px; border: 0; border-radius: 8px; background: #0a284b; color: #fff; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+.adminCinematicMapButton:hover { background: #163f70; }
 .adminWorkspace .adminCard input,
 .adminWorkspace .adminCard .customSelectBtn { border-color: #d9e3eb !important; background: #fbfdff !important; }
 .adminWorkspace .adminCard .btnGhost { border-color: #cbdbe5; background: #fff; color: #20415e; }
@@ -1336,6 +1346,190 @@
   min-height: var(--vvh, 100dvh);
   overflow: hidden;
   background: #0b0b0f;
+}
+
+.areaDrawIntroBackdrop {
+  position: absolute;
+  z-index: 80;
+  top: 56px;
+  right: 0;
+  bottom: 0;
+  left: 60px;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.areaDrawIntro {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 26px 28px;
+  border: 1px solid #e3e9f2;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(10, 31, 60, 0.28);
+  color: #132f50;
+  text-align: center;
+}
+.areaDrawIntroArt {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #edf5ff, #f5f8ff);
+}
+.areaDrawIntroArt svg { display: block; width: 100%; height: 150px; fill: #3156d7; }
+.bairroIntroArt { display: grid; place-items: center; height: 174px; color: #3156d7; }
+.areaDrawIntroShape { fill: rgba(70, 105, 209, 0.18); stroke: #3156d7; stroke-width: 2; }
+.areaDrawIntroPending { fill: none; stroke: #3156d7; stroke-width: 2; stroke-dasharray: 6 6; }
+.areaDrawIntro h2 { margin: 20px 0 8px; font-size: 20px; line-height: 1.2; }
+.areaDrawIntro p { margin: 0; color: #52657c; font-size: 14px; line-height: 1.45; }
+.areaDrawIntroStart {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 22px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #3156d7;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.areaDrawIntroStart:hover { background: #2447bd; }
+.areaDrawIntroStart:focus-visible { outline: 2px solid #132f50; outline-offset: 2px; }
+.areaDrawIntroCancel { margin-top: 10px; padding: 5px 10px; border: 0; background: transparent; color: #52657c; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.areaDrawIntroCancel:hover { color: #132f50; }
+
+.mapTaskPanels {
+  position: absolute;
+  z-index: 25;
+  bottom: 24px;
+  left: 76px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: calc(100vw - 100px);
+  pointer-events: none;
+}
+.mapTaskPanels > * { pointer-events: auto; }
+.areaDrawToolbar,
+.bairroSearchToolbar {
+  width: min(340px, calc(100vw - 100px));
+  max-height: min(60vh, calc(100dvh - 120px));
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid #dce5ef;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 12px 32px rgba(10, 31, 60, 0.18);
+}
+.bairroSearchRestore,
+.areaDrawRestore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 20px rgba(10, 31, 60, 0.16);
+  color: #1e426b;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.areaDrawToolbarHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.areaDrawToolbarHeader > div { display: grid; gap: 3px; }
+.mapTaskPanelHeaderActions { display: flex; flex: none; gap: 4px; }
+.areaDrawToolbarHeader strong { color: #132f50; font-size: 15px; }
+.areaDrawToolbarHeader span { color: #65778b; font-size: 11px; }
+.areaDrawToolbarHeader button { min-height: 28px; padding: 4px 8px; border: 0; border-radius: 7px; background: #fff0ef; color: #a02b28; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.areaDrawToolbarActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.areaDrawToolbarActions button { min-height: 36px; padding: 6px; border: 1px solid #d6e2ee; border-radius: 8px; background: #f7faff; color: #1e426b; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.areaDrawToolbarActions button:hover:not(:disabled) { background: #eaf1fb; }
+.areaDrawToolbarActions button:disabled { opacity: 0.48; cursor: not-allowed; }
+.areaDrawToolbarActions .areaDrawToolbarDownload { border-color: #3156d7; background: #3156d7; color: #fff; }
+.areaDrawToolbarActions .areaDrawToolbarDownload:hover:not(:disabled) { background: #2447bd; }
+.areaDrawToolbarMessage { margin: 12px 0 0; color: #52657c; font-size: 11px; line-height: 1.35; }
+.bairroSearchInput { width: 100%; height: 38px; margin-top: 14px; padding: 0 12px; border: 1px solid #cfdcea; border-radius: 9px; background: #fff; color: #132f50; font: inherit; font-size: 12px; }
+.bairroSearchInput:focus { outline: 2px solid #9db3f1; outline-offset: 1px; }
+.bairroSearchResults { display: grid; gap: 3px; max-height: 200px; margin-top: 8px; overflow-y: auto; }
+.bairroSearchResults button { width: 100%; min-height: 32px; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: #24425d; font: inherit; font-size: 12px; font-weight: 650; text-align: left; cursor: pointer; }
+.bairroSearchResults button:hover, .bairroSearchResults .bairroSearchResultSelected { background: #edf2ff; color: #3156d7; }
+.bairroSearchResults p { margin: 8px; color: #65778b; font-size: 12px; }
+
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
+  .areaDrawIntroBackdrop { top: 0; left: 0; }
+  .mapTaskPanels {
+    left: calc(12px + env(safe-area-inset-left));
+    right: calc(12px + env(safe-area-inset-right));
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: none;
+    max-height: calc(100dvh - 170px);
+    overflow-y: auto;
+  }
+  .areaDrawToolbar,
+  .bairroSearchToolbar {
+    width: min(340px, 100%);
+    max-height: min(42vh, calc(100dvh - 230px));
+  }
+}
+
+.mapActiveLayers {
+  position: absolute;
+  z-index: 20;
+  top: 68px;
+  left: 76px;
+  right: 76px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  pointer-events: none;
+  transition: left 230ms cubic-bezier(0.2, 0.82, 0.25, 1);
+}
+.mapActiveLayersWithPanel { top: 76px; left: var(--map-active-panel-right); }
+.mapRoot:has(.appSidebar:hover) .mapActiveLayersWithPanel,
+.mapRoot:has(.appSidebar:focus-within) .mapActiveLayersWithPanel {
+  left: calc(var(--map-active-panel-right) + 180px);
+}
+.mapActiveLayer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid #dbe3ff;
+  border-radius: 999px;
+  color: #3156d7;
+  background: #eef1ff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.mapActiveLayer:hover { background: #e4eaff; }
+.mapActiveLayer:focus-visible { outline: 2px solid #3156d7; outline-offset: 2px; }
+
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
+  .mapActiveLayers,
+  .mapActiveLayersWithPanel {
+    top: calc(76px + env(safe-area-inset-top));
+    left: calc(12px + env(safe-area-inset-left));
+    right: calc(12px + env(safe-area-inset-right));
+  }
+  .mapActiveLayerEquipment { display: none; }
 }
 
 .mobileBottomNav { display: none; }
@@ -1397,8 +1591,8 @@
   .adminWorkspaceHeader { align-items: center; gap: 10px; padding: 8px 16px 18px; }
   .adminWorkspaceHeader h1 { font-size: 23px; }
   .adminWorkspaceHeader p { font-size: 12px; }
-  .adminWorkspaceClose { width: 34px; min-width: 34px; padding: 7px; }
-  .adminWorkspaceClose span { display: none; }
+  .adminWorkspaceClose { width: auto; min-width: 64px; min-height: 36px; padding: 7px 10px; }
+  .adminWorkspaceClose .workspaceCloseIcon { display: none; }
   .adminWorkspaceContent { padding: 0 16px calc(36px + env(safe-area-inset-bottom)); }
   .adminWorkspaceContentDropdownOpen { padding-bottom: 180px; }
   .adminWorkspace .adminGrid2 { grid-template-columns: 1fr !important; }
@@ -1566,6 +1760,19 @@
     justify-content: space-between;
     gap: 12px;
     padding-bottom: 4px;
+  }
+  .mobileMenuClose {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 7px 11px;
+    border: 1px solid #d4e0e8;
+    border-radius: 8px;
+    color: #25435d;
+    background: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
   }
   .mobileMenuBrandCopy {
     min-width: 0;
@@ -1819,14 +2026,14 @@
     -webkit-appearance: none;
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border-radius: 999px;
+    min-width: 64px;
+    min-height: 36px;
+    padding: 5px 10px;
+    border-radius: 8px;
     border: 1px solid rgba(148, 163, 184, 0.24);
     background: rgba(255, 255, 255, 0.94);
     color: #0f172a;
-    font-size: 18px;
+    font-size: 12px;
     font-weight: 700;
     line-height: 1;
     box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
@@ -1925,14 +2132,15 @@
     -webkit-appearance: none;
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: 999px;
+    min-width: 54px;
+    min-height: 28px;
+    padding: 4px 8px;
+    border-radius: 8px;
     border: 1px solid rgba(148, 163, 184, 0.2);
     background: rgba(15, 23, 42, 0.05);
     color: rgba(15, 23, 42, 0.72);
-    font-size: 18px;
+    font-size: 11px;
+    font-weight: 700;
     line-height: 1;
     transition: background 0.16s ease, transform 0.16s ease;
   }
@@ -2138,25 +2346,6 @@
     left: 12px;
     max-height: min(62vh, calc(var(--vvh, 100dvh) - 150px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
   }
-  .dockHandle {
-    height: 32px;
-    padding: 0 10px;
-    font-size: 11px;
-    border-radius: 999px;
-  }
-  .dockHandleMobile {
-    width: 44px;
-    height: 44px;
-    margin-right: 0;
-    padding: 0;
-    transform: none;
-    border: 1px solid #d7e2ea;
-    border-radius: 14px;
-    color: #0a284b;
-    background: rgba(255, 255, 255, .98);
-    box-shadow: 0 8px 20px rgba(10, 40, 75, .18);
-  }
-  .dockHandleMobile:hover { transform: translateY(-1px); background: #fff; }
   .dock {
     position: relative;
     padding: 10px;
@@ -2168,19 +2357,21 @@
     border-radius: 16px;
   }
   .dockWrap:has(.dock) .dock { width: 100%; max-width: 100%; max-height: inherit; padding: 16px 12px 12px; border-radius: 20px; }
-  .dockMobileTitle { margin: 0 40px 14px 2px; color: #0a284b; font-size: 15px; font-weight: 800; }
+  .dockMobileTitle { margin: 0 72px 14px 2px; color: #0a284b; font-size: 15px; font-weight: 800; }
   .dockMobileClose {
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 30px;
-    height: 30px;
-    display: grid;
-    place-items: center;
-    border: 0;
-    border-radius: 0;
+    min-width: 64px;
+    min-height: 36px;
+    padding: 6px 10px;
+    border: 1px solid #d4e0e8;
+    border-radius: 8px;
     color: #0a284b;
-    background: transparent;
+    background: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
     cursor: pointer;
   }
   .dock .dockSectionLabel:first-of-type { padding-right: 36px; }
@@ -2193,26 +2384,11 @@
     border-radius: 12px;
   }
   .dockBaseToggle {
-    gap: 5px;
-  }
-  .dockBaseOption {
-    padding: 8px 8px 8px 7px;
     border-radius: 11px;
-    gap: 7px;
   }
-  .dockBaseIcon {
-    width: 28px;
-    height: 28px;
-  }
-  .dockBaseText {
-    gap: 1px;
-  }
-  .dockBaseTextMain {
+  .dockBaseChoice {
+    min-height: 36px;
     font-size: 11px;
-  }
-  .dockBaseTextSub {
-    font-size: 9px;
-    line-height: 1.1;
   }
   .dockTitle {
     font-size: 11px;
@@ -2464,17 +2640,6 @@
   background: rgba(226, 232, 240, 0.98);
 }
 
-@media (max-width: 900px) {
-  .cameraPopupCloseBtn {
-    top: -14px;
-    right: -14px;
-    width: 26px;
-    height: 26px;
-    line-height: 24px;
-    font-size: 16px;
-  }
-}
-
 .cameraPopupHead {
   display: flex;
   align-items: flex-start;
@@ -2696,13 +2861,6 @@
   background: rgba(226, 232, 240, 0.98);
 }
 
-@media (max-width: 900px) {
-  .stackPopupCloseBtn {
-    top: -18px;
-    right: -18px;
-  }
-}
-
 .stackPopupChips {
   display: flex;
   flex-wrap: wrap;
@@ -2914,6 +3072,34 @@
   background: rgba(203, 213, 225, 0.945);
 }
 
+.geometrySummaryWrap {
+  position: fixed;
+  z-index: 26;
+  top: 72px;
+  right: 0;
+  width: 352px;
+  max-width: calc(100vw - 92px);
+  pointer-events: none;
+}
+.geometrySummaryCard {
+  width: 100%;
+  min-width: 0;
+  max-height: calc(100dvh - 96px);
+  padding: 16px;
+  border-radius: 16px;
+  box-shadow: 0 14px 32px rgba(15, 35, 56, 0.2);
+  pointer-events: auto;
+}
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
+  .geometrySummaryWrap {
+    top: calc(72px + env(safe-area-inset-top));
+    right: env(safe-area-inset-right);
+    width: min(360px, calc(100vw - 24px));
+    max-width: none;
+  }
+  .geometrySummaryCard { max-height: min(54vh, calc(100dvh - 170px)); }
+}
+
 .dockWrap {
   position: absolute;
   top: 96px;
@@ -2929,9 +3115,9 @@
   pointer-events: auto;
 }
 .dockHandle {
+  width: 42px;
   height: 42px;
-  gap: 8px;
-  padding: 0 14px;
+  padding: 0;
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid #d5e0e7;
@@ -2947,6 +3133,10 @@
   letter-spacing: 0.01em;
   pointer-events: auto;
   transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.dockHandle:focus-visible {
+  outline: 2px solid #00a9de;
+  outline-offset: 2px;
 }
 .dockHandle:hover {
   background: #f5fafc;
@@ -3005,77 +3195,51 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 .dockBaseToggle {
+  appearance: none;
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-.dockBaseOption {
-  appearance: none;
   border: 1px solid rgba(15, 23, 42, 0.1);
   background: rgba(255, 255, 255, 0.92);
   border-radius: 12px;
-  padding: 10px 10px 10px 9px;
+  padding: 3px;
   cursor: pointer;
-  color: rgba(15, 23, 42, 0.82);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-align: left;
   font-family: inherit;
-  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease,
-    color 0.12s ease;
 }
-.dockBaseOption:hover {
-  transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.98);
-  border-color: rgba(10, 40, 75, 0.18);
+.dockBaseToggle::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 2);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #123865 0%, #0a284b 100%);
+  box-shadow: 0 4px 10px rgba(10, 40, 75, 0.22);
+  transition: transform 0.18s ease;
 }
-.dockBaseOption:focus-visible {
+.dockBaseToggleSatellite::before {
+  transform: translateX(100%);
+}
+.dockBaseToggle:focus-visible {
   outline: 2px solid rgba(0, 192, 243, 0.4);
   outline-offset: 2px;
 }
-.dockBaseOptionActive {
-  background: linear-gradient(180deg, #123865 0%, #0a284b 100%);
-  border-color: rgba(10, 40, 75, 0.18);
-  color: #fff;
-  box-shadow: 0 10px 22px rgba(10, 40, 75, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-.dockBaseOptionActive:hover {
-  background: linear-gradient(180deg, #163f70 0%, #0c3156 100%);
-  border-color: rgba(10, 40, 75, 0.22);
-}
-.dockBaseIcon {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  background: rgba(10, 40, 75, 0.08);
-  color: #0a284b;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.dockBaseOptionActive .dockBaseIcon {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-}
-.dockBaseText {
+.dockBaseChoice {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 2px;
-  line-height: 1.08;
-}
-.dockBaseTextMain {
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
   font-size: 12px;
-  font-weight: 900;
-}
-.dockBaseTextSub {
-  font-size: 10px;
   font-weight: 700;
-  color: rgba(15, 23, 42, 0.6);
+  color: #0a284b;
+  transition: color 0.18s ease;
 }
-.dockBaseOptionActive .dockBaseTextSub {
-  color: rgba(255, 255, 255, 0.74);
+.dockBaseToggle:not(.dockBaseToggleSatellite) .dockBaseChoice:first-child,
+.dockBaseToggleSatellite .dockBaseChoice:last-child {
+  color: #fff;
 }
 .dockChip {
   width: 100%;
@@ -3096,6 +3260,10 @@
   transform: translateY(-1px);
   border-color: #b8d7e5;
   background: #f7fbfd;
+}
+.dockChip:focus-visible {
+  outline: 2px solid #00a9de;
+  outline-offset: 2px;
 }
 .dockChipOn {
   border-color: #b4d8e8;
@@ -3140,30 +3308,29 @@
   object-fit: contain;
   display: block;
 }
-.chipDot {
-  width: 8px;
-  height: 8px;
+.chipToggle {
+  display: flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  padding: 3px;
   border-radius: 999px;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+  background: #b9c7d3;
+  flex: 0 0 auto;
+  transition: background 160ms ease;
 }
-.gpsPulse {
-  animation: gpsPulse 1.6s ease-out infinite;
+.chipToggleOn { background: #0a284b; }
+.chipToggleThumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(10, 40, 75, 0.25);
+  transition: transform 160ms ease;
 }
-@keyframes gpsPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-  }
-}
-.chipState {
-  font-size: 10px;
-  font-weight: 900;
-  color: rgba(0, 0, 0, 0.65);
+.chipToggleOn .chipToggleThumb { transform: translateX(16px); }
+@media (prefers-reduced-motion: reduce) {
+  .chipToggle, .chipToggleThumb { transition: none; }
 }
 .dockDivider {
   height: 1px;
@@ -3193,30 +3360,27 @@
 .dockFab:active {
   transform: translateY(0px) scale(0.98);
 }
-.dockCenterBtn {
-  width: 100%;
-  height: 32px;
-  border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: linear-gradient(90deg, rgba(0, 192, 243, 0.16), rgba(10, 40, 75, 0.08));
-  color: rgba(10, 40, 75, 0.9);
-  display: inline-flex;
+.gpsMapCenter {
+  position: fixed;
+  z-index: 25;
+  right: 10px;
+  bottom: 178px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid #d5e0e7;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0a284b;
+  box-shadow: 0 9px 20px rgba(15, 35, 56, 0.14);
+  display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-weight: 900;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
-.dockCenterBtn:hover {
-  transform: translateY(-1px);
-  background: linear-gradient(90deg, rgba(0, 192, 243, 0.22), rgba(10, 40, 75, 0.12));
-  border-color: rgba(0, 0, 0, 0.2);
-}
-.dockCenterBtn:active {
-  transform: translateY(0px);
-}
+.gpsMapCenter:hover:not(:disabled) { background: #f5fafc; border-color: #b8d6e4; }
+.gpsMapCenter:focus-visible { outline: 2px solid #00a9de; outline-offset: 2px; }
+.gpsMapCenter:disabled { opacity: 0.55; cursor: not-allowed; }
 .dockNote {
   font-size: 10px;
   color: rgba(0, 0, 0, 0.65);
@@ -3528,10 +3692,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    min-width: 104px;
-    height: 40px;
-    padding: 0 13px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
     border: 1px solid rgba(214, 225, 233, 0.92);
     border-radius: 12px;
     color: #0a284b;
@@ -3547,6 +3710,15 @@
   .mobileLayersToggleActive {
     border-color: #80c3d8;
     background: rgba(255, 255, 255, 0.98);
+  }
+  .mobileLayersToggleWithGps { top: calc(63px + env(safe-area-inset-top)); }
+  .gpsMapCenter {
+    top: calc(11px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+    bottom: auto;
+    z-index: 34;
+    width: 44px;
+    height: 44px;
   }
   .mobileLayersToggle:focus-visible {
     outline: 2px solid #00a9de;
@@ -3564,4 +3736,116 @@
     overflow: auto;
     align-items: stretch;
   }
+}
+
+.dockWrapDesktop {
+  position: fixed;
+  top: auto;
+  right: 10px;
+  bottom: 126px;
+}
+.dockWrapDesktop:has(#mapLayersPanel) {
+  z-index: 90;
+}
+.dockWrapDesktop .dockBackdrop {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.5);
+  cursor: default;
+  pointer-events: auto;
+  animation: dockBackdropIn 180ms ease-out;
+}
+.dockWrapDesktop #mapLayersPanel {
+  position: fixed;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(460px, 100vw);
+  height: 100dvh;
+  max-height: none;
+  min-width: 0;
+  padding: 0 24px 32px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: -16px 0 42px rgba(15, 35, 56, 0.18);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #a0a8b0 transparent;
+  gap: 14px;
+  animation: dockSidebarIn 220ms ease-out;
+}
+@keyframes dockBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dockSidebarIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dockWrapDesktop .dockBackdrop,
+  .dockWrapDesktop #mapLayersPanel {
+    animation: none;
+  }
+}
+.dockWrapDesktop #mapLayersPanel::-webkit-scrollbar {
+  width: 8px;
+}
+.dockWrapDesktop #mapLayersPanel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #a0a8b0;
+}
+.dockDesktopHeader {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 72px;
+  margin: 0 -24px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e4eaf0;
+  background: #fff;
+}
+.dockDesktopHeader h2 {
+  margin: 0;
+  color: #0a284b;
+  font-size: 18px;
+  line-height: 1.3;
+}
+.dockDesktopClose {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: #0a284b;
+  background: transparent;
+  cursor: pointer;
+}
+.dockDesktopClose:hover {
+  background: #edf4f7;
+}
+.dockDesktopClose:focus-visible {
+  outline: 2px solid #00a9de;
+  outline-offset: 2px;
+}
+.dockWrapDesktop #mapLayersPanel .dockTitle {
+  display: none;
+}
+.dockWrapDesktop #mapLayersPanel .dockToolsTitle {
+  display: block;
 }
