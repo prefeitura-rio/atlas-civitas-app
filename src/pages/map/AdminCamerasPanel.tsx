@@ -14,9 +14,12 @@ import Swal from "sweetalert2";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
+import { LayerToggle } from "./LayerToggle";
+import { EquipmentStatus } from "./EquipmentStatus";
 
 const ADMIN_PAGE_SIZE = 50;
 type StatusFilter = "all" | "active" | "inactive";
+type CameraScope = "cameras" | "inteligentes" | "lpr";
 
 function coerceCoord(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -39,11 +42,13 @@ function getLng(value: any) {
 export function AdminCamerasPanel({
   apiBase,
   token,
+  scope,
   onStatusChanged,
   isMobile,
 }: {
   apiBase: string;
   token: string;
+  scope: CameraScope;
   onStatusChanged?: () => void;
   isMobile: boolean;
 }) {
@@ -59,8 +64,6 @@ export function AdminCamerasPanel({
   const [lprLoading, setLprLoading] = useState(false);
   const [lprItems, setLprItems] = useState<CameraLpr[]>([]);
 
-  const [camTab, setCamTab] = useState<"cameras" | "civitas">("cameras");
-  const [civitasTab, setCivitasTab] = useState<"inteligentes" | "lpr">("inteligentes");
   const [pageCams, setPageCams] = useState(1);
   const [pageIntel, setPageIntel] = useState(1);
   const [pageLpr, setPageLpr] = useState(1);
@@ -98,32 +101,6 @@ export function AdminCamerasPanel({
     background: "rgba(248,250,252,0.95)",
     color: "rgba(15,23,42,0.85)",
   } as const;
-  const statusSwitchStyle = (active: boolean, disabled: boolean) =>
-    ({
-      width: 46,
-      height: 28,
-      borderRadius: 999,
-      border: active ? "1px solid rgba(22,163,74,0.65)" : "1px solid rgba(100,116,139,0.42)",
-      background: active ? "linear-gradient(135deg, #34d399, #22c55e)" : "linear-gradient(135deg, #d4d4d8, #cbd5e1)",
-      position: "relative",
-      padding: 0,
-      cursor: disabled ? "not-allowed" : "pointer",
-      transition: "all .2s ease",
-      boxShadow: active ? "0 6px 16px rgba(34,197,94,0.28)" : "0 4px 12px rgba(15,23,42,0.12)",
-      opacity: disabled ? 0.7 : 1,
-    }) as const;
-  const statusKnobStyle = (active: boolean) =>
-    ({
-      position: "absolute",
-      top: 2,
-      left: active ? 20 : 2,
-      width: 22,
-      height: 22,
-      borderRadius: "50%",
-      background: "#fff",
-      boxShadow: "0 3px 8px rgba(15,23,42,0.22)",
-      transition: "left .2s ease",
-    }) as const;
   const swalBase = {
     customClass: {
       popup: "atlasSwalPopup",
@@ -136,8 +113,6 @@ export function AdminCamerasPanel({
     buttonsStyling: false,
     backdrop: "rgba(2, 6, 23, 0.74)",
   } as const;
-
-  type CameraScope = "cameras" | "inteligentes" | "lpr";
 
   function applyStatusFilter<T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(
     list: T[],
@@ -455,16 +430,12 @@ export function AdminCamerasPanel({
   }
 
   useEffect(() => {
-    load();
+    setErr(null);
+    if (scope === "cameras") load();
+    if (scope === "inteligentes") loadIntel();
+    if (scope === "lpr") loadLpr();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (camTab !== "civitas") return;
-    if (civitasTab === "inteligentes") loadIntel();
-    if (civitasTab === "lpr") loadLpr();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camTab, civitasTab]);
+  }, [scope]);
 
   useEffect(() => {
     setPageCams(1);
@@ -474,8 +445,7 @@ export function AdminCamerasPanel({
     setMobileCountIntel(ADMIN_PAGE_SIZE);
     setMobileCountLpr(ADMIN_PAGE_SIZE);
   }, [
-    camTab,
-    civitasTab,
+    scope,
     items.length,
     intelItems.length,
     lprItems.length,
@@ -489,122 +459,13 @@ export function AdminCamerasPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      {!isMobile ? (
-        <div className="tabsRail tabsRailSection">
-          <button className={`subTab ${camTab === "cameras" ? "subTabActive" : ""}`} onClick={() => setCamTab("cameras")}>
-            Câmeras
-          </button>
-          <button className={`subTab ${camTab === "civitas" ? "subTabActive" : ""}`} onClick={() => setCamTab("civitas")}>
-            Câmeras Civitas
-          </button>
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gap: 6,
-            padding: "10px 12px",
-            borderRadius: 16,
-            border: "1px solid rgba(10,40,75,0.08)",
-            background: "rgba(255,255,255,0.88)",
-          }}
-        >
-          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>ORIGEM</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {[
-              { key: "cameras" as const, label: "Câmeras" },
-              { key: "civitas" as const, label: "Câmeras Civitas" },
-            ].map((option) => {
-              const active = camTab === option.key;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => setCamTab(option.key)}
-                  style={{
-                    padding: "7px 12px",
-                    borderRadius: 999,
-                    border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
-                    background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
-                    color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    whiteSpace: "nowrap",
-                    cursor: "pointer",
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {camTab === "civitas" && (
-        !isMobile ? (
-          <div className="tabsRail tabsRailSection tabsRailCompact">
-            <button
-              className={`subTab ${civitasTab === "inteligentes" ? "subTabActive" : ""}`}
-              onClick={() => setCivitasTab("inteligentes")}
-            >
-              Inteligentes
-            </button>
-            <button className={`subTab ${civitasTab === "lpr" ? "subTabActive" : ""}`} onClick={() => setCivitasTab("lpr")}>
-              LPR
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gap: 6,
-              padding: "10px 12px",
-              borderRadius: 16,
-              border: "1px solid rgba(10,40,75,0.08)",
-              background: "rgba(255,255,255,0.88)",
-            }}
-          >
-            <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: "rgba(10,40,75,0.58)" }}>TIPO</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {[
-                { key: "inteligentes" as const, label: "Inteligentes" },
-                { key: "lpr" as const, label: "LPR" },
-              ].map((option) => {
-                const active = civitasTab === option.key;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => setCivitasTab(option.key)}
-                    style={{
-                      padding: "7px 12px",
-                      borderRadius: 999,
-                      border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
-                      background: active ? "rgba(10,40,75,0.10)" : "rgba(255,255,255,0.96)",
-                      color: active ? "#0a284b" : "rgba(10,40,75,0.76)",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      whiteSpace: "nowrap",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )
-      )}
-
       {err && (
         <div style={{ fontSize: 12, opacity: 0.9, color: "#991b1b" }}>
           {err}
         </div>
       )}
 
-      {camTab === "cameras" && (
+      {scope === "cameras" && (
         <>
           <div
             className="adminCard"
@@ -703,24 +564,15 @@ export function AdminCamerasPanel({
                         type="button"
                         onClick={() => toggleCameraStatus("cameras", c)}
                         disabled={loadingStatus}
-                        style={statusSwitchStyle(active, loadingStatus)}
+                        className="equipmentStatusSwitch"
+                        role="switch"
+                        aria-checked={active}
                         title={active ? "Desativar câmera" : "Ativar câmera"}
                         aria-label={active ? "Desativar câmera" : "Ativar câmera"}
                       >
-                        <span style={statusKnobStyle(active)} />
+                        <LayerToggle checked={active} />
                       </button>
-                      <span
-                        style={{
-                          ...chipStyle,
-                          minWidth: 72,
-                          justifyContent: "center",
-                          borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
-                          background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
-                          color: active ? "#166534" : "#475569",
-                        }}
-                      >
-                        {active ? "ATIVO" : "INATIVO"}
-                      </span>
+                      <EquipmentStatus active={active} />
                     </div>
                   </div>
                 );
@@ -760,7 +612,7 @@ export function AdminCamerasPanel({
         </>
       )}
 
-      {camTab === "civitas" && civitasTab === "inteligentes" && (
+      {scope === "inteligentes" && (
         <div
           className="adminCard"
           style={{
@@ -856,24 +708,15 @@ export function AdminCamerasPanel({
                       type="button"
                       onClick={() => toggleCameraStatus("inteligentes", c)}
                       disabled={loadingStatus}
-                      style={statusSwitchStyle(active, loadingStatus)}
+                      className="equipmentStatusSwitch"
+                      role="switch"
+                      aria-checked={active}
                       title={active ? "Desativar câmera inteligente" : "Ativar câmera inteligente"}
                       aria-label={active ? "Desativar câmera inteligente" : "Ativar câmera inteligente"}
                     >
-                      <span style={statusKnobStyle(active)} />
+                      <LayerToggle checked={active} />
                     </button>
-                    <span
-                      style={{
-                        ...chipStyle,
-                        minWidth: 72,
-                        justifyContent: "center",
-                        borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
-                        background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
-                        color: active ? "#166534" : "#475569",
-                      }}
-                    >
-                      {active ? "ATIVO" : "INATIVO"}
-                    </span>
+                    <EquipmentStatus active={active} />
                   </div>
                 </div>
               );
@@ -913,7 +756,7 @@ export function AdminCamerasPanel({
         </div>
       )}
 
-      {camTab === "civitas" && civitasTab === "lpr" && (
+      {scope === "lpr" && (
         <div
           className="adminCard"
           style={{
@@ -1010,24 +853,15 @@ export function AdminCamerasPanel({
                       type="button"
                       onClick={() => toggleCameraStatus("lpr", c)}
                       disabled={loadingStatus}
-                      style={statusSwitchStyle(active, loadingStatus)}
+                      className="equipmentStatusSwitch"
+                      role="switch"
+                      aria-checked={active}
                       title={active ? "Desativar câmera LPR" : "Ativar câmera LPR"}
                       aria-label={active ? "Desativar câmera LPR" : "Ativar câmera LPR"}
                     >
-                      <span style={statusKnobStyle(active)} />
+                      <LayerToggle checked={active} />
                     </button>
-                    <span
-                      style={{
-                        ...chipStyle,
-                        minWidth: 72,
-                        justifyContent: "center",
-                        borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
-                        background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
-                        color: active ? "#166534" : "#475569",
-                      }}
-                    >
-                      {active ? "ATIVO" : "INATIVO"}
-                    </span>
+                    <EquipmentStatus active={active} />
                   </div>
                 </div>
               );
