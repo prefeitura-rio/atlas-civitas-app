@@ -3707,7 +3707,11 @@
 .searchEquipmentResults { display: grid; gap: 8px; margin: 0 0 14px; padding: 10px; border: 1px solid #d8e3ec; border-radius: 12px; background: #f7fafc; }
 .searchEquipmentResultsScrollable { height: min(360px, calc(100vh - 190px)); max-height: min(360px, calc(100vh - 190px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; -ms-overflow-style: none; }
 .searchEquipmentResultsScrollable::-webkit-scrollbar { display: none; }
+.searchEquipmentResultsHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .searchEquipmentResultsTitle { color: #0a284b; font-size: 13px; font-weight: 800; }
+.searchEquipmentResultsClose { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; padding: 0; border: 0; border-radius: 50%; color: #49647d; background: transparent; cursor: pointer; }
+.searchEquipmentResultsClose:hover { color: #0a284b; background: #e7eff5; }
+.searchEquipmentResultsClose:focus-visible { outline: 2px solid #168cc2; outline-offset: 2px; }
 .searchEquipmentResultCard { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; padding: 10px; border: 1px solid #dbe5ed; border-radius: 10px; text-align: left; background: #fff; cursor: pointer; }
 .searchEquipmentResultCard:hover { border-color: #a9c6da; background: #f8fcff; }
 .searchEquipmentResultIcon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: #0a284b; background: #e5f1f8; flex: 0 0 28px; }

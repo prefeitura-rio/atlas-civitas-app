@@ -2313,6 +2313,14 @@ export default function MapPage() {
     flyToPoint(lng, lat, zoom);
   }
 
+  function closeSearchEquipmentResults() {
+    setSearchEquipmentPoint(null);
+    setSearchedEquipment([]);
+    setSearchEquipmentTitle("");
+    setPanel(null);
+    setPanelOpen(false);
+  }
+
   function ensureSourcesAndLayers(map: mapboxgl.Map, style: MapBaseStyle = mapBaseStyleRef.current) {
     const cameraImageId = getCameraMarkerImageId(style, "camera");
     const cameraIntelImageId = getCameraMarkerImageId(style, "camera_intel");
@@ -8036,7 +8044,12 @@ export default function MapPage() {
                     setNearbyVisibleCount((count) => Math.min(count + 7, displayedSearchEquipment.length));
                   }
                 }}>
-                  <div className="searchEquipmentResultsTitle">{searchEquipmentTitle || "Equipamentos próximos da busca"}</div>
+                  <div className="searchEquipmentResultsHeader">
+                    <div className="searchEquipmentResultsTitle">{searchEquipmentTitle || "Equipamentos próximos da busca"}</div>
+                    <button type="button" className="searchEquipmentResultsClose" onClick={closeSearchEquipmentResults} aria-label="Fechar equipamentos encontrados" title="Fechar">
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                  </div>
                   {displayedSearchEquipment.length ? (
                     displayedSearchEquipment.slice(0, nearbyVisibleCount).map(({ item, kind, meters }, index) => (
                       <button
@@ -8046,7 +8059,7 @@ export default function MapPage() {
                         onClick={() => {
                           const lng = getLng(item);
                           const lat = getLat(item);
-                          if (lng != null && lat != null) flyToPoint(lng, lat, 18);
+                          if (lng != null && lat != null) focusOnDetection(lng, lat, 18);
                         }}
                         title="Centralizar equipamento no mapa"
                       >
@@ -8865,7 +8878,12 @@ export default function MapPage() {
                     }
                   }}
                 >
-                  <div className="searchEquipmentResultsTitle">{searchEquipmentTitle || "Equipamentos próximos da busca"}</div>
+                  <div className="searchEquipmentResultsHeader">
+                    <div className="searchEquipmentResultsTitle">{searchEquipmentTitle || "Equipamentos próximos da busca"}</div>
+                    <button type="button" className="searchEquipmentResultsClose" onClick={closeSearchEquipmentResults} aria-label="Fechar equipamentos encontrados" title="Fechar">
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                  </div>
                   {displayedSearchEquipment.length ? displayedSearchEquipment.slice(0, nearbyVisibleCount).map(({ item, kind, meters }, index) => (
                     <button
                       type="button"
@@ -8875,7 +8893,7 @@ export default function MapPage() {
                         const lng = getLng(item);
                         const lat = getLat(item);
                         if (lng != null && lat != null) {
-                          flyToPoint(lng, lat, 18);
+                          focusOnDetection(lng, lat, 18);
                           setPanelOpen(false);
                         }
                       }}
