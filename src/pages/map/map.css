@@ -857,7 +857,7 @@
 .mapUtilityProfile { appearance: none; height: 40px; display: inline-flex; align-items: center; gap: 9px; padding: 2px 5px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; transition: background 140ms ease; }
 .mapUtilityProfile:hover, .mapUtilityProfileActive { background: #f2f7fa; }
 .mapUtilityProfileAvatar { width: 29px; height: 29px; display: grid; place-items: center; flex: 0 0 29px; border-radius: 50%; color: #fff; background: #0a284b; font-size: 10px; font-weight: 750; }
-.mapUtilityProfileCopy { max-width: 136px; display: grid; gap: 1px; }
+.mapUtilityProfileCopy { width: max-content; max-width: min(420px, 34vw); display: grid; gap: 1px; }
 .mapUtilityProfileCopy strong, .mapUtilityProfileCopy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mapUtilityProfileCopy strong { font-size: 11px; line-height: 1.1; }
 .mapUtilityProfileCopy small { color: #7c8a9b; font-size: 10px; font-weight: 500; line-height: 1.1; }

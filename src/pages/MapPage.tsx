@@ -3426,7 +3426,9 @@ export default function MapPage() {
           title: (p.name || "Câmera sem nome").toString(),
           meta: `Zona: ${(p.zona_camera || "-").toString()}`,
         };
-       return {
+      }
+      if (kind === "camera_intel") {
+        return {
           kind,
           title: (p.name || "Super Câmera Inteligente").toString(),
           meta: `Responsável: ${(p.responsavel || "-").toString()}`,
