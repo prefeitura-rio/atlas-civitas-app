@@ -72,6 +72,7 @@ import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
 import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
 import { AdminUsageDashboardPanel } from "./map/AdminUsageDashboardPanel";
+import { LayerToggle } from "./map/LayerToggle";
 import {
   cleanString,
   firstNonEmptyString,
@@ -1489,14 +1490,6 @@ function makeAreaDrawGeoJSON(
   return { type: "FeatureCollection", features } as FeatureCollection<any, any>;
 }
 
-function LayerToggle({ checked }: { checked: boolean }) {
-  return (
-    <span className={`chipToggle ${checked ? "chipToggleOn" : ""}`} aria-hidden="true">
-      <span className="chipToggleThumb" />
-    </span>
-  );
-}
-
 export default function MapPage() {
   const auth = useAuth();
   const nav = useNavigate();
@@ -2110,16 +2103,16 @@ export default function MapPage() {
   const role = normalizeRole(me?.role ?? me?.roles?.[0]);
   const canAccessAdmin = canAccessAdminBackoffice(role);
   useEffect(() => {
-    if (!canAccessAdmin) setCinematicMode(false);
-  }, [canAccessAdmin]);
+    if (!canAccessAdmin || isMobile) setCinematicMode(false);
+  }, [canAccessAdmin, isMobile]);
   const hasStreamingAccess = canAccessStreaming(role);
   const hasSmartCameraStreamingAccess = canAccessSmartCameraStreaming(role);
   const adminTabOptions = useMemo(() => {
-    if (role === "manager") {
-      return ADMIN_TAB_OPTIONS.filter((option) => option.key === "users" || option.key === "organizations" || option.key === "cinematic");
-    }
-    return ADMIN_TAB_OPTIONS;
-  }, [role]);
+    return ADMIN_TAB_OPTIONS.filter((option) =>
+      (!isMobile || option.key !== "cinematic") &&
+      (role !== "manager" || option.key === "users" || option.key === "organizations" || option.key === "cinematic")
+    );
+  }, [role, isMobile]);
   const activeAdminTab = adminTabOptions.some((option) => option.key === adminTab)
     ? adminTab
     : adminTabOptions[0]?.key ?? "users";
@@ -8602,7 +8595,7 @@ export default function MapPage() {
 
       {panel === "admin" && canAccessAdmin && (
         <section className="adminWorkspace" aria-label="Administração">
-          <main className="adminWorkspaceMain" ref={adminWorkspaceMainRef}>
+          <main className={`adminWorkspaceMain ${activeAdminIsEquipment ? "adminWorkspaceMainEquipment" : ""}`} ref={adminWorkspaceMainRef}>
             <nav className="adminWorkspaceMobileNav" aria-label="Seções da administração">
               {adminTabOptions.map((option) => (
                 <button
@@ -8641,7 +8634,7 @@ export default function MapPage() {
               </button>
             </div>
 
-            <div className={`adminWorkspaceContent ${adminUsersOrgOpen ? "adminWorkspaceContentDropdownOpen" : ""}`}>
+            <div className={`adminWorkspaceContent ${activeAdminIsEquipment ? "adminWorkspaceContentEquipment" : ""} ${adminUsersOrgOpen ? "adminWorkspaceContentDropdownOpen" : ""}`}>
               {activeAdminTab === "users" && (
                 <AdminUsersPanel
                   apiBase={API_BASE}
@@ -8654,7 +8647,7 @@ export default function MapPage() {
               {activeAdminTab === "usage" && (
                 <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
               )}
-              {activeAdminTab === "cinematic" && (
+              {!isMobile && activeAdminTab === "cinematic" && (
                 <section className="adminCard adminCinematicCard" aria-labelledby="adminCinematicTitle">
                   <div className="adminCinematicHeading">
                     <span className="adminCinematicIcon"><Clapperboard size={22} aria-hidden="true" /></span>
@@ -8674,7 +8667,7 @@ export default function MapPage() {
                     <LayerToggle checked={cinematicMode} />
                   </button>
                   <p className="adminCinematicNote">
-                    {poisGeo.features.length.toLocaleString("pt-BR")} equipamentos nas camadas ativas. O mapa carrega os pontos em uma única fonte e desenha apenas os trechos visíveis na tela.
+                    {poisGeo.features.length.toLocaleString("pt-BR")} equipamentos nas camadas ativas. O mapa carrega os pontos em uma única fonte e desenha apenas os trechos visíveis na tela. O sistema deve ficar bem mais lento.
                   </p>
                   <button type="button" className="adminCinematicMapButton" onClick={() => { setPanel(null); setPanelOpen(false); }}>
                     Ver mapa

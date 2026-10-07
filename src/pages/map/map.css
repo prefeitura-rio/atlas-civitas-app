@@ -1289,6 +1289,37 @@
 .adminWorkspaceClose:hover { background: #edf7fb; }
 .adminWorkspaceContent { min-width: 0; padding: 0 28px 48px; }
 .adminWorkspaceContentDropdownOpen { padding-bottom: 180px; }
+@media (min-width: 1211px) {
+  .adminWorkspaceMainEquipment {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .adminWorkspaceContentEquipment {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    padding-bottom: 28px;
+  }
+  .adminWorkspaceContentEquipment > div {
+    display: flex !important;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .adminWorkspaceContentEquipment .adminCard {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .adminWorkspaceContentEquipment .adminCard > .scrollbarHidden {
+    flex: 1;
+    min-height: 0;
+    max-height: none !important;
+    align-content: start;
+  }
+}
 .adminWorkspace .adminCard { border-color: #dce5ed !important; border-radius: 12px !important; background: #fff !important; box-shadow: 0 5px 16px rgba(15, 35, 56, .05); }
 .adminCinematicCard { display: grid; gap: 20px; max-width: 680px; padding: 24px; }
 .adminCinematicHeading { display: flex; align-items: flex-start; gap: 14px; }
@@ -3329,6 +3360,47 @@
   transition: transform 160ms ease;
 }
 .chipToggleOn .chipToggleThumb { transform: translateX(16px); }
+.equipmentStatusSwitch {
+  display: inline-flex;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.equipmentStatusSwitch .chipToggle {
+  width: 48px;
+  height: 28px;
+  padding: 4px;
+}
+.equipmentStatusSwitch .chipToggleThumb {
+  width: 20px;
+  height: 20px;
+}
+.equipmentStatusSwitch .chipToggleOn .chipToggleThumb { transform: translateX(20px); }
+.equipmentStatusSwitch:disabled { cursor: wait; opacity: .6; }
+.equipmentStatusSwitch:focus-visible { outline: 2px solid #00a9de; outline-offset: 3px; }
+.equipmentStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+.equipmentStatusActive { color: #167344; }
+.equipmentStatusInactive { color: #64748b; }
+.equipmentStatusDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+}
 @media (prefers-reduced-motion: reduce) {
   .chipToggle, .chipToggleThumb { transition: none; }
 }

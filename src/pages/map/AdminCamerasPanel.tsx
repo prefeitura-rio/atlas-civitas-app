@@ -14,6 +14,8 @@ import Swal from "sweetalert2";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
+import { LayerToggle } from "./LayerToggle";
+import { EquipmentStatus } from "./EquipmentStatus";
 
 const ADMIN_PAGE_SIZE = 50;
 type StatusFilter = "all" | "active" | "inactive";
@@ -99,32 +101,6 @@ export function AdminCamerasPanel({
     background: "rgba(248,250,252,0.95)",
     color: "rgba(15,23,42,0.85)",
   } as const;
-  const statusSwitchStyle = (active: boolean, disabled: boolean) =>
-    ({
-      width: 46,
-      height: 28,
-      borderRadius: 999,
-      border: active ? "1px solid rgba(22,163,74,0.65)" : "1px solid rgba(100,116,139,0.42)",
-      background: active ? "linear-gradient(135deg, #34d399, #22c55e)" : "linear-gradient(135deg, #d4d4d8, #cbd5e1)",
-      position: "relative",
-      padding: 0,
-      cursor: disabled ? "not-allowed" : "pointer",
-      transition: "all .2s ease",
-      boxShadow: active ? "0 6px 16px rgba(34,197,94,0.28)" : "0 4px 12px rgba(15,23,42,0.12)",
-      opacity: disabled ? 0.7 : 1,
-    }) as const;
-  const statusKnobStyle = (active: boolean) =>
-    ({
-      position: "absolute",
-      top: 2,
-      left: active ? 20 : 2,
-      width: 22,
-      height: 22,
-      borderRadius: "50%",
-      background: "#fff",
-      boxShadow: "0 3px 8px rgba(15,23,42,0.22)",
-      transition: "left .2s ease",
-    }) as const;
   const swalBase = {
     customClass: {
       popup: "atlasSwalPopup",
@@ -588,24 +564,15 @@ export function AdminCamerasPanel({
                         type="button"
                         onClick={() => toggleCameraStatus("cameras", c)}
                         disabled={loadingStatus}
-                        style={statusSwitchStyle(active, loadingStatus)}
+                        className="equipmentStatusSwitch"
+                        role="switch"
+                        aria-checked={active}
                         title={active ? "Desativar câmera" : "Ativar câmera"}
                         aria-label={active ? "Desativar câmera" : "Ativar câmera"}
                       >
-                        <span style={statusKnobStyle(active)} />
+                        <LayerToggle checked={active} />
                       </button>
-                      <span
-                        style={{
-                          ...chipStyle,
-                          minWidth: 72,
-                          justifyContent: "center",
-                          borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
-                          background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
-                          color: active ? "#166534" : "#475569",
-                        }}
-                      >
-                        {active ? "ATIVO" : "INATIVO"}
-                      </span>
+                      <EquipmentStatus active={active} />
                     </div>
                   </div>
                 );
@@ -741,24 +708,15 @@ export function AdminCamerasPanel({
                       type="button"
                       onClick={() => toggleCameraStatus("inteligentes", c)}
                       disabled={loadingStatus}
-                      style={statusSwitchStyle(active, loadingStatus)}
+                      className="equipmentStatusSwitch"
+                      role="switch"
+                      aria-checked={active}
                       title={active ? "Desativar câmera inteligente" : "Ativar câmera inteligente"}
                       aria-label={active ? "Desativar câmera inteligente" : "Ativar câmera inteligente"}
                     >
-                      <span style={statusKnobStyle(active)} />
+                      <LayerToggle checked={active} />
                     </button>
-                    <span
-                      style={{
-                        ...chipStyle,
-                        minWidth: 72,
-                        justifyContent: "center",
-                        borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
-                        background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
-                        color: active ? "#166534" : "#475569",
-                      }}
-                    >
-                      {active ? "ATIVO" : "INATIVO"}
-                    </span>
+                    <EquipmentStatus active={active} />
                   </div>
                 </div>
               );
@@ -895,24 +853,15 @@ export function AdminCamerasPanel({
                       type="button"
                       onClick={() => toggleCameraStatus("lpr", c)}
                       disabled={loadingStatus}
-                      style={statusSwitchStyle(active, loadingStatus)}
+                      className="equipmentStatusSwitch"
+                      role="switch"
+                      aria-checked={active}
                       title={active ? "Desativar câmera LPR" : "Ativar câmera LPR"}
                       aria-label={active ? "Desativar câmera LPR" : "Ativar câmera LPR"}
                     >
-                      <span style={statusKnobStyle(active)} />
+                      <LayerToggle checked={active} />
                     </button>
-                    <span
-                      style={{
-                        ...chipStyle,
-                        minWidth: 72,
-                        justifyContent: "center",
-                        borderColor: active ? "rgba(22,163,74,0.35)" : "rgba(100,116,139,0.30)",
-                        background: active ? "rgba(220,252,231,0.95)" : "rgba(241,245,249,0.95)",
-                        color: active ? "#166534" : "#475569",
-                      }}
-                    >
-                      {active ? "ATIVO" : "INATIVO"}
-                    </span>
+                    <EquipmentStatus active={active} />
                   </div>
                 </div>
               );
