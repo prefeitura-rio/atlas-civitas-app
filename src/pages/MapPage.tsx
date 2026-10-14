@@ -6674,7 +6674,7 @@ export default function MapPage() {
   }, [isMobile]);
 
   useEffect(() => {
-    setMobileSearchFocused(false);
+    if (!mobileSearchOpen) setMobileSearchFocused(false);
   }, [mobileSearchOpen]);
 
   useEffect(() => {
@@ -9613,6 +9613,7 @@ export default function MapPage() {
             setSearchErr(null);
             setPanelOpen(false);
             setMobileMenuOpen(false);
+            setMobileSearchFocused(true);
             setMobileSearchOpen(true);
           }}
         >
@@ -9726,6 +9727,7 @@ export default function MapPage() {
               </span>
               <input
                 ref={mobileSearchInputRef}
+                autoFocus
                 value={searchQuery}
                 onFocus={() => setMobileSearchFocused(true)}
                 onBlur={() => setMobileSearchFocused(false)}
