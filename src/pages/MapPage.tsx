@@ -7430,6 +7430,16 @@ export default function MapPage() {
               className="dock"
               ref={dockPanelRef}
               id="mapLayersPanel"
+              onTouchStart={isMobile ? (event) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; } : undefined}
+              onTouchEnd={isMobile ? () => { touchStartYRef.current = null; } : undefined}
+              onTouchMove={isMobile ? (event) => {
+                const startY = touchStartYRef.current;
+                if (startY === null) return;
+                if (event.touches[0].clientY - startY > 70 && (dockPanelRef.current?.scrollTop ?? 0) <= 0) {
+                  setDockOpen(false);
+                  touchStartYRef.current = null;
+                }
+              } : undefined}
               role={!isMobile ? "dialog" : undefined}
               aria-modal={!isMobile ? true : undefined}
               aria-labelledby={!isMobile ? "desktopLayersTitle" : undefined}
@@ -7450,18 +7460,17 @@ export default function MapPage() {
                 </div>
               )}
               {isMobile && (
-                <div className="dockMobileTitle">Camadas</div>
-              )}
-              {isMobile && (
-                <button
-                  type="button"
-                  className="dockMobileClose"
-                  onClick={() => setDockOpen(false)}
-                  aria-label="Voltar ao mapa"
-                  title="Voltar ao mapa"
-                >
-                  Voltar
-                </button>
+                <div className="dockMobileHeader">
+                  <div className="mobileEquipmentDragHandle" aria-hidden="true"><span /></div>
+                  <div className="mobileEquipmentHeader">
+                    <div>
+                      <span className="mobileEquipmentEyebrow">MAPA · VISUALIZAÇÃO</span>
+                      <h2>Camadas</h2>
+                      <p>Escolha o que aparece no mapa</p>
+                    </div>
+                    <button type="button" onClick={() => setDockOpen(false)} aria-label="Voltar ao mapa">Voltar ao mapa</button>
+                  </div>
+                </div>
               )}
               <div className="dockSectionLabel">Base do mapa</div>
               <div className="dockBase">
@@ -8925,7 +8934,7 @@ export default function MapPage() {
         {panelOpen && panel !== "admin" && panel !== "civitas" && (
           <div
             ref={mobileDrawerRef}
-            className="mobileDrawer glassStrong scrollbarHidden"
+            className={`mobileDrawer glassStrong scrollbarHidden ${panel === "profile" ? "mobileProfileWorkspace" : ""} ${panel === "map" && !searchEquipmentPoint && !searchedEquipment.length ? "mobileEquipmentWorkspace" : ""}`}
             style={{ padding: 12, color: "#0b0b0f" }}
             onTouchStart={(e) => {
               touchStartYRef.current = e.touches[0]?.clientY ?? null;
@@ -8987,6 +8996,15 @@ export default function MapPage() {
                 </div>
               ) : (
               <>
+                <div className="mobileEquipmentDragHandle" aria-hidden="true"><span /></div>
+                <div className="mobileEquipmentHeader">
+                  <div>
+                    <span className="mobileEquipmentEyebrow">MAPA · EQUIPAMENTOS</span>
+                    <h2>Equipamentos</h2>
+                    <p>Explore os pontos disponíveis no mapa</p>
+                  </div>
+                  <button type="button" onClick={() => setPanelOpen(false)} aria-label="Voltar ao mapa">Voltar ao mapa</button>
+                </div>
                 <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
                   {!isMobile ? (
                     <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
@@ -9001,7 +9019,7 @@ export default function MapPage() {
                           ))}
                     </div>
                   ) : (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div className="mobileEquipmentTabs" role="tablist" aria-label="Tipos de equipamento">
                       {availableListModes.map((option) => {
                         const active = listMode === option.mode;
                         return (
@@ -9009,24 +9027,8 @@ export default function MapPage() {
                             key={option.mode}
                             type="button"
                             onClick={() => setListMode(option.mode)}
-                            style={{
-                              flex: "1 1 calc(50% - 4px)",
-                              minWidth: 0,
-                              padding: "8px 10px",
-                              borderRadius: 999,
-                              border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
-                              background: active ? "rgba(10,40,75,0.92)" : "rgba(255,255,255,0.92)",
-                              color: active ? "#fff" : "rgba(10,40,75,0.76)",
-                              fontSize: option.mode === "inteligentes" ? 10.5 : 11,
-                              fontWeight: 800,
-                              lineHeight: 1.15,
-                              minHeight: 38,
-                              textAlign: "center",
-                              whiteSpace: "normal",
-                              wordBreak: "break-word",
-                              cursor: "pointer",
-                              boxShadow: active ? "0 8px 20px rgba(10,40,75,0.14)" : "none",
-                            }}
+                            role="tab"
+                            aria-selected={active}
                           >
                             {option.label}
                           </button>
@@ -9072,7 +9074,7 @@ export default function MapPage() {
                 <div
                   key={listMode}
                   ref={listScrollMobileRef}
-                  className="scrollbarHidden"
+                  className="scrollbarHidden mobileEquipmentList"
                   style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
                   onScroll={(e) => {
                     if (!isMobile) return;
@@ -9375,6 +9377,15 @@ export default function MapPage() {
 
             {panel === "profile" && (
               <>
+                <div className="mobileEquipmentDragHandle" aria-hidden="true"><span /></div>
+                <div className="mobileEquipmentHeader">
+                  <div>
+                    <span className="mobileEquipmentEyebrow">MAPA · CONTA</span>
+                    <h2>Perfil</h2>
+                    <p>Dados da conta</p>
+                  </div>
+                  <button type="button" onClick={() => { setPanel(null); setPanelOpen(false); }} aria-label="Voltar ao mapa">Voltar ao mapa</button>
+                </div>
                 <div
                   style={{
                     padding: 12,
@@ -9701,10 +9712,10 @@ export default function MapPage() {
             </div>
 
             <div className="mobileSearchMode" role="group" aria-label="Tipo de busca">
-              <button type="button" className={searchMode === "address" ? "mobileSearchModeActive" : ""} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} title="Buscar local" aria-label="Buscar local">
+              <button type="button" className={searchMode === "address" ? "mobileSearchModeActive" : ""} onPointerDown={(event) => event.preventDefault()} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} title="Buscar local" aria-label="Buscar local">
                 <MapPinned size={17} aria-hidden="true" />
               </button>
-              <button type="button" className={searchMode === "equipment" ? "mobileSearchModeActive" : ""} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} title="Buscar equipamento" aria-label="Buscar equipamento">
+              <button type="button" className={searchMode === "equipment" ? "mobileSearchModeActive" : ""} onPointerDown={(event) => event.preventDefault()} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} title="Buscar equipamento" aria-label="Buscar equipamento">
                 <ScanLine size={17} aria-hidden="true" />
               </button>
             </div>
