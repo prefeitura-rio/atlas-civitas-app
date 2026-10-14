@@ -1888,9 +1888,11 @@ export default function MapPage() {
   const [searchErr, setSearchErr] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<{ lng: number; lat: number } | null>(null);
   const [searchEquipmentPoint, setSearchEquipmentPoint] = useState<{ lng: number; lat: number } | null>(null);
+  const [searchEquipmentViewport, setSearchEquipmentViewport] = useState<mapboxgl.LngLatBounds | null>(null);
   const [searchedEquipment, setSearchedEquipment] = useState<Array<{ item: any; kind: string; meters?: number }>>([]);
   const [searchEquipmentTitle, setSearchEquipmentTitle] = useState("");
   const [nearbyVisibleCount, setNearbyVisibleCount] = useState(7);
+  const addressSearchFlyPendingRef = useRef(false);
   const searchTimerRef = useRef<number | null>(null);
   const automaticSearchTimerRef = useRef<number | null>(null);
   const searchGenerationRef = useRef(0);
@@ -2313,8 +2315,32 @@ export default function MapPage() {
     flyToPoint(lng, lat, zoom);
   }
 
+  function focusOnEquipment(kind: "camera" | "camera_intel" | "camera_lpr" | "radar", lng: number, lat: number, zoom = 17.2) {
+    const layer = {
+      camera: { visible: showCameras, name: "Câmeras" },
+      camera_intel: { visible: showCamerasIntel, name: "Super Câmeras Inteligentes" },
+      camera_lpr: { visible: showCamerasLpr, name: "LPR" },
+      radar: { visible: showRadares, name: "Radares" },
+    }[kind];
+
+    if (!layer.visible) {
+      void Swal.fire({
+        icon: "info",
+        title: "Camada desativada",
+        text: `Ative a camada de ${layer.name} para visualizar este equipamento no mapa.`,
+        confirmButtonText: "Entendi",
+      });
+      return false;
+    }
+
+    focusOnDetection(lng, lat, zoom);
+    return true;
+  }
+
   function closeSearchEquipmentResults() {
+    addressSearchFlyPendingRef.current = false;
     setSearchEquipmentPoint(null);
+    setSearchEquipmentViewport(null);
     setSearchedEquipment([]);
     setSearchEquipmentTitle("");
     setPanel(null);
@@ -2332,7 +2358,7 @@ export default function MapPage() {
         cluster: !cinematicModeRef.current,
         clusterRadius: 60,
         clusterMaxZoom: 14,
-        ...(cinematicModeRef.current ? { maxzoom: 14 } : {}),
+        ...(cinematicModeRef.current ? { maxzoom: 14, buffer: 32 } : {}),
       });
     }
 
@@ -4768,6 +4794,44 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!searchEquipmentPoint) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    let zoomAtStart: number | null = null;
+    const updateViewport = () => {
+      if (addressSearchFlyPendingRef.current) return;
+      setSearchEquipmentViewport(map.getBounds());
+    };
+    const handleMoveEnd = () => {
+      addressSearchFlyPendingRef.current = false;
+      updateViewport();
+    };
+    const handleZoomStart = () => {
+      zoomAtStart = map.getZoom();
+    };
+    const handleZoomEnd = () => {
+      if (!addressSearchFlyPendingRef.current && zoomAtStart !== null && map.getZoom() < zoomAtStart - 0.01) {
+        closeSearchEquipmentResults();
+      }
+      zoomAtStart = null;
+    };
+
+    map.on("moveend", handleMoveEnd);
+    map.on("resize", updateViewport);
+    map.on("zoomstart", handleZoomStart);
+    map.on("zoomend", handleZoomEnd);
+    if (!addressSearchFlyPendingRef.current) updateViewport();
+
+    return () => {
+      map.off("moveend", handleMoveEnd);
+      map.off("resize", updateViewport);
+      map.off("zoomstart", handleZoomStart);
+      map.off("zoomend", handleZoomEnd);
+    };
+  }, [searchEquipmentPoint]);
+
   async function loadCameras() {
     if (!canViewCameras) {
       setCameras([]);
@@ -6336,6 +6400,8 @@ export default function MapPage() {
         }
         setSearchPin({ lng, lat });
         setSearchEquipmentPoint({ lng, lat });
+        setSearchEquipmentViewport(null);
+        addressSearchFlyPendingRef.current = true;
         setSearchedEquipment([]);
         setSearchEquipmentTitle("Equipamentos próximos da busca");
         setPanel("map");
@@ -6417,6 +6483,8 @@ export default function MapPage() {
       }
       setSearchPin({ lng, lat });
       setSearchEquipmentPoint({ lng, lat });
+      setSearchEquipmentViewport(null);
+      addressSearchFlyPendingRef.current = true;
       setSearchedEquipment([]);
       setSearchEquipmentTitle("Equipamentos próximos da busca");
       setPanel("map");
@@ -6553,7 +6621,7 @@ export default function MapPage() {
   const listItems = isMobile ? filtered.slice(0, mobileCount) : pagedItems;
 
   const nearbySearchEquipment = useMemo(() => {
-    if (!searchEquipmentPoint) return [];
+    if (!searchEquipmentPoint || !searchEquipmentViewport) return [];
     const { lng, lat } = searchEquipmentPoint;
     const distance = (item: any) => {
       const itemLat = getLat(item);
@@ -6564,19 +6632,25 @@ export default function MapPage() {
       return Math.sqrt(dLat * dLat + dLng * dLng);
     };
     const groups = [
-      ...cameras.map((item: any) => ({ item, kind: "Câmera" })),
-      ...camerasIntel.map((item: any) => ({ item, kind: "Super Câmera" })),
-      ...camerasLpr.map((item: any) => ({ item, kind: "LPR" })),
-      ...radares.map((item: any) => ({ item, kind: "Radar" })),
+      ...(showCameras ? cameras.map((item: any) => ({ item, kind: "Câmera" })) : []),
+      ...(showCamerasIntel ? camerasIntel.map((item: any) => ({ item, kind: "Super Câmera" })) : []),
+      ...(showCamerasLpr ? camerasLpr.map((item: any) => ({ item, kind: "LPR" })) : []),
+      ...(showRadares ? radares.map((item: any) => ({ item, kind: "Radar" })) : []),
     ];
     return groups
       .map((entry) => ({ ...entry, meters: distance(entry.item) }))
-      .filter((entry) => entry.meters <= 100)
-      .sort((a, b) => a.meters - b.meters)
-      .slice(0, 30);
-  }, [searchEquipmentPoint, cameras, camerasIntel, camerasLpr, radares]);
+      .filter((entry) => {
+        const itemLng = getLng(entry.item);
+        const itemLat = getLat(entry.item);
+        return itemLng != null && itemLat != null && searchEquipmentViewport.contains([itemLng, itemLat]);
+      })
+      .sort((a, b) => a.meters - b.meters);
+  }, [searchEquipmentPoint, searchEquipmentViewport, cameras, camerasIntel, camerasLpr, radares, showCameras, showCamerasIntel, showCamerasLpr, showRadares]);
 
   const displayedSearchEquipment = searchEquipmentPoint ? nearbySearchEquipment : searchedEquipment;
+  const visibleSearchEquipment = searchEquipmentPoint
+    ? displayedSearchEquipment
+    : displayedSearchEquipment.slice(0, nearbyVisibleCount);
 
   useEffect(() => {
     setNearbyVisibleCount(7);
@@ -7356,6 +7430,16 @@ export default function MapPage() {
               className="dock"
               ref={dockPanelRef}
               id="mapLayersPanel"
+              onTouchStart={isMobile ? (event) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; } : undefined}
+              onTouchEnd={isMobile ? () => { touchStartYRef.current = null; } : undefined}
+              onTouchMove={isMobile ? (event) => {
+                const startY = touchStartYRef.current;
+                if (startY === null) return;
+                if (event.touches[0].clientY - startY > 70 && (dockPanelRef.current?.scrollTop ?? 0) <= 0) {
+                  setDockOpen(false);
+                  touchStartYRef.current = null;
+                }
+              } : undefined}
               role={!isMobile ? "dialog" : undefined}
               aria-modal={!isMobile ? true : undefined}
               aria-labelledby={!isMobile ? "desktopLayersTitle" : undefined}
@@ -7376,18 +7460,17 @@ export default function MapPage() {
                 </div>
               )}
               {isMobile && (
-                <div className="dockMobileTitle">Camadas</div>
-              )}
-              {isMobile && (
-                <button
-                  type="button"
-                  className="dockMobileClose"
-                  onClick={() => setDockOpen(false)}
-                  aria-label="Voltar ao mapa"
-                  title="Voltar ao mapa"
-                >
-                  Voltar
-                </button>
+                <div className="dockMobileHeader">
+                  <div className="mobileEquipmentDragHandle" aria-hidden="true"><span /></div>
+                  <div className="mobileEquipmentHeader">
+                    <div>
+                      <span className="mobileEquipmentEyebrow">MAPA · VISUALIZAÇÃO</span>
+                      <h2>Camadas</h2>
+                      <p>Escolha o que aparece no mapa</p>
+                    </div>
+                    <button type="button" onClick={() => setDockOpen(false)} aria-label="Voltar ao mapa">Voltar ao mapa</button>
+                  </div>
+                </div>
               )}
               <div className="dockSectionLabel">Base do mapa</div>
               <div className="dockBase">
@@ -8053,7 +8136,7 @@ export default function MapPage() {
                     </button>
                   </div>
                   {displayedSearchEquipment.length ? (
-                    displayedSearchEquipment.slice(0, nearbyVisibleCount).map(({ item, kind, meters }, index) => (
+                    visibleSearchEquipment.map(({ item, kind, meters }, index) => (
                       <button
                         type="button"
                         className="searchEquipmentResultCard"
@@ -8061,7 +8144,9 @@ export default function MapPage() {
                         onClick={() => {
                           const lng = getLng(item);
                           const lat = getLat(item);
-                          if (lng != null && lat != null) focusOnDetection(lng, lat, 18);
+                          if (lng != null && lat != null) {
+                            focusOnEquipment(kind === "Câmera" ? "camera" : kind === "Super Câmera" ? "camera_intel" : kind === "LPR" ? "camera_lpr" : "radar", lng, lat, 18);
+                          }
                         }}
                         title="Centralizar equipamento no mapa"
                       >
@@ -8077,7 +8162,7 @@ export default function MapPage() {
                         </div>
                       </button>
                     ))
-                  ) : <div className="searchEquipmentEmpty">Nenhum equipamento encontrado próximo deste endereço.</div>}
+                  ) : <div className="searchEquipmentEmpty">{searchEquipmentPoint ? (!searchEquipmentViewport ? "Localizando equipamentos no mapa..." : "Nenhum equipamento visível nesta área do mapa.") : "Nenhum equipamento encontrado."}</div>}
                 </div>
               )}
               <div className="equipmentPanelHeader" style={{ marginBottom: 12, display: "grid", gap: 12 }}>
@@ -8148,9 +8233,9 @@ export default function MapPage() {
                         key={c.code}
                         className="listItem"
                         onClick={() => {
+                          if (!focusOnEquipment("camera", c.lng, c.lat)) return;
                           setSelectedCode(c.code);
                           setSelectedRadar(null);
-                          focusOnDetection(c.lng, c.lat);
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -8214,9 +8299,9 @@ export default function MapPage() {
                         key={smartId || c.code}
                         className="listItem"
                         onClick={() => {
+                          if (!focusOnEquipment("camera_intel", c.lng, c.lat)) return;
                           setSelectedCode(null);
                           setSelectedRadar(null);
-                          focusOnDetection(c.lng, c.lat);
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -8280,9 +8365,9 @@ export default function MapPage() {
                         key={getPointCollectionKey(c) || c.code}
                         className="listItem"
                         onClick={() => {
+                          if (!focusOnEquipment("camera_lpr", c.lng, c.lat)) return;
                           setSelectedCode(null);
                           setSelectedRadar(null);
-                          focusOnDetection(c.lng, c.lat);
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -8342,9 +8427,9 @@ export default function MapPage() {
                         className="listItem"
                         onClick={() => {
                           if (!ok) return;
+                          if (!focusOnEquipment("radar", lng, lat)) return;
                           setSelectedRadar(getPointCollectionKey(r) || r.codcet);
                           setSelectedCode(null);
-                          focusOnDetection(lng, lat);
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -8849,7 +8934,7 @@ export default function MapPage() {
         {panelOpen && panel !== "admin" && panel !== "civitas" && (
           <div
             ref={mobileDrawerRef}
-            className="mobileDrawer glassStrong scrollbarHidden"
+            className={`mobileDrawer glassStrong scrollbarHidden ${panel === "profile" ? "mobileProfileWorkspace" : ""} ${panel === "map" && !searchEquipmentPoint && !searchedEquipment.length ? "mobileEquipmentWorkspace" : ""}`}
             style={{ padding: 12, color: "#0b0b0f" }}
             onTouchStart={(e) => {
               touchStartYRef.current = e.touches[0]?.clientY ?? null;
@@ -8886,7 +8971,7 @@ export default function MapPage() {
                       <X size={16} aria-hidden="true" />
                     </button>
                   </div>
-                  {displayedSearchEquipment.length ? displayedSearchEquipment.slice(0, nearbyVisibleCount).map(({ item, kind, meters }, index) => (
+                  {displayedSearchEquipment.length ? visibleSearchEquipment.map(({ item, kind, meters }, index) => (
                     <button
                       type="button"
                       className="searchEquipmentResultCard"
@@ -8895,8 +8980,9 @@ export default function MapPage() {
                         const lng = getLng(item);
                         const lat = getLat(item);
                         if (lng != null && lat != null) {
-                          focusOnDetection(lng, lat, 18);
-                          setPanelOpen(false);
+                          if (focusOnEquipment(kind === "Câmera" ? "camera" : kind === "Super Câmera" ? "camera_intel" : kind === "LPR" ? "camera_lpr" : "radar", lng, lat, 18)) {
+                            setPanelOpen(false);
+                          }
                         }
                       }}
                     >
@@ -8906,10 +8992,19 @@ export default function MapPage() {
                         <span>{kind} · {getPointCollectionCode(item) || "Sem código"}{typeof meters === "number" ? ` · ${Math.round(meters)} m` : ""}</span>
                       </div>
                     </button>
-                  )) : <div className="searchEquipmentEmpty">Nenhum equipamento encontrado.</div>}
+                  )) : <div className="searchEquipmentEmpty">{searchEquipmentPoint ? (!searchEquipmentViewport ? "Localizando equipamentos no mapa..." : "Nenhum equipamento visível nesta área do mapa.") : "Nenhum equipamento encontrado."}</div>}
                 </div>
               ) : (
               <>
+                <div className="mobileEquipmentDragHandle" aria-hidden="true"><span /></div>
+                <div className="mobileEquipmentHeader">
+                  <div>
+                    <span className="mobileEquipmentEyebrow">MAPA · EQUIPAMENTOS</span>
+                    <h2>Equipamentos</h2>
+                    <p>Explore os pontos disponíveis no mapa</p>
+                  </div>
+                  <button type="button" onClick={() => setPanelOpen(false)} aria-label="Voltar ao mapa">Voltar ao mapa</button>
+                </div>
                 <div style={{ marginBottom: 12, display: "grid", gap: 12 }}>
                   {!isMobile ? (
                     <div className="tabsRail scrollbarHidden" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
@@ -8924,7 +9019,7 @@ export default function MapPage() {
                           ))}
                     </div>
                   ) : (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div className="mobileEquipmentTabs" role="tablist" aria-label="Tipos de equipamento">
                       {availableListModes.map((option) => {
                         const active = listMode === option.mode;
                         return (
@@ -8932,24 +9027,8 @@ export default function MapPage() {
                             key={option.mode}
                             type="button"
                             onClick={() => setListMode(option.mode)}
-                            style={{
-                              flex: "1 1 calc(50% - 4px)",
-                              minWidth: 0,
-                              padding: "8px 10px",
-                              borderRadius: 999,
-                              border: active ? "1px solid rgba(10,40,75,0.16)" : "1px solid rgba(15,23,42,0.12)",
-                              background: active ? "rgba(10,40,75,0.92)" : "rgba(255,255,255,0.92)",
-                              color: active ? "#fff" : "rgba(10,40,75,0.76)",
-                              fontSize: option.mode === "inteligentes" ? 10.5 : 11,
-                              fontWeight: 800,
-                              lineHeight: 1.15,
-                              minHeight: 38,
-                              textAlign: "center",
-                              whiteSpace: "normal",
-                              wordBreak: "break-word",
-                              cursor: "pointer",
-                              boxShadow: active ? "0 8px 20px rgba(10,40,75,0.14)" : "none",
-                            }}
+                            role="tab"
+                            aria-selected={active}
                           >
                             {option.label}
                           </button>
@@ -8995,7 +9074,7 @@ export default function MapPage() {
                 <div
                   key={listMode}
                   ref={listScrollMobileRef}
-                  className="scrollbarHidden"
+                  className="scrollbarHidden mobileEquipmentList"
                   style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
                   onScroll={(e) => {
                     if (!isMobile) return;
@@ -9016,9 +9095,9 @@ export default function MapPage() {
                           key={c.code}
                           className="listItem"
                           onClick={() => {
+                            if (!focusOnEquipment("camera", c.lng, c.lat)) return;
                             setSelectedCode(c.code);
                             setSelectedRadar(null);
-                            focusOnDetection(c.lng, c.lat);
                             setPanelOpen(false);
                           }}
                         >
@@ -9080,9 +9159,9 @@ export default function MapPage() {
                           key={smartId || c.code}
                           className="listItem"
                           onClick={() => {
+                            if (!focusOnEquipment("camera_intel", c.lng, c.lat)) return;
                             setSelectedCode(null);
                             setSelectedRadar(null);
-                            focusOnDetection(c.lng, c.lat);
                             setPanelOpen(false);
                           }}
                         >
@@ -9148,9 +9227,9 @@ export default function MapPage() {
                           key={getPointCollectionKey(c) || c.code}
                           className="listItem"
                           onClick={() => {
+                            if (!focusOnEquipment("camera_lpr", c.lng, c.lat)) return;
                             setSelectedCode(null);
                             setSelectedRadar(null);
-                            focusOnDetection(c.lng, c.lat);
                             setPanelOpen(false);
                           }}
                         >
@@ -9205,9 +9284,9 @@ export default function MapPage() {
                           className="listItem"
                           onClick={() => {
                             if (!ok) return;
+                            if (!focusOnEquipment("radar", lng, lat)) return;
                             setSelectedRadar(getPointCollectionKey(r) || r.codcet);
                             setSelectedCode(null);
-                            focusOnDetection(lng, lat);
                             setPanelOpen(false);
                           }}
                         >
@@ -9298,6 +9377,15 @@ export default function MapPage() {
 
             {panel === "profile" && (
               <>
+                <div className="mobileEquipmentDragHandle" aria-hidden="true"><span /></div>
+                <div className="mobileEquipmentHeader">
+                  <div>
+                    <span className="mobileEquipmentEyebrow">MAPA · CONTA</span>
+                    <h2>Perfil</h2>
+                    <p>Dados da conta</p>
+                  </div>
+                  <button type="button" onClick={() => { setPanel(null); setPanelOpen(false); }} aria-label="Voltar ao mapa">Voltar ao mapa</button>
+                </div>
                 <div
                   style={{
                     padding: 12,
@@ -9624,10 +9712,10 @@ export default function MapPage() {
             </div>
 
             <div className="mobileSearchMode" role="group" aria-label="Tipo de busca">
-              <button type="button" className={searchMode === "address" ? "mobileSearchModeActive" : ""} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} title="Buscar local" aria-label="Buscar local">
+              <button type="button" className={searchMode === "address" ? "mobileSearchModeActive" : ""} onPointerDown={(event) => event.preventDefault()} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} title="Buscar local" aria-label="Buscar local">
                 <MapPinned size={17} aria-hidden="true" />
               </button>
-              <button type="button" className={searchMode === "equipment" ? "mobileSearchModeActive" : ""} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} title="Buscar equipamento" aria-label="Buscar equipamento">
+              <button type="button" className={searchMode === "equipment" ? "mobileSearchModeActive" : ""} onPointerDown={(event) => event.preventDefault()} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} title="Buscar equipamento" aria-label="Buscar equipamento">
                 <ScanLine size={17} aria-hidden="true" />
               </button>
             </div>
