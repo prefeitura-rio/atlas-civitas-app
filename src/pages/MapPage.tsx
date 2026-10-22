@@ -8048,11 +8048,19 @@ export default function MapPage() {
         <img className="appTopbarBrand" src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" />
         <div className="mapCommandBar">
           <div className="mapSearchMode" role="group" aria-label="Tipo de busca">
-            <button type="button" className={searchMode === "address" ? "mapSearchModeActive" : ""} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} title="Buscar endereço" aria-label="Buscar endereço">
+            <button type="button" className={searchMode === "address" ? "mapSearchModeActive" : ""} onClick={() => { setSearchMode("address"); scheduleAutomaticSearch(searchQuery, "address"); }} aria-label="Buscar endereço" aria-describedby="address-search-tooltip">
               <MapPinned size={16} aria-hidden="true" />
+              <span className="mapSearchTooltip" id="address-search-tooltip" role="tooltip">
+                <strong>Buscar endereço</strong>
+                <small>Ruas, bairros ou coordenadas</small>
+              </span>
             </button>
-            <button type="button" className={searchMode === "equipment" ? "mapSearchModeActive" : ""} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} title="Buscar equipamento" aria-label="Buscar equipamento">
+            <button type="button" className={searchMode === "equipment" ? "mapSearchModeActive" : ""} onClick={() => { setSearchMode("equipment"); scheduleAutomaticSearch(searchQuery, "equipment"); }} aria-label="Buscar equipamento" aria-describedby="equipment-search-tooltip">
               <ScanLine size={16} aria-hidden="true" />
+              <span className="mapSearchTooltip" id="equipment-search-tooltip" role="tooltip">
+                <strong>Buscar equipamento</strong>
+                <small>Encontre pelo código numérico</small>
+              </span>
             </button>
           </div>
           <Search size={17} strokeWidth={2.2} aria-hidden="true" />
