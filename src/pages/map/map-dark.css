@@ -1,0 +1,431 @@
+/* App theme. The map tiles already use Mapbox's dark style; these tokens cover the UI around it. */
+.atlasDark,
+.mapRoot.themeDark {
+  --theme-action: #00c0f3;
+  --theme-action-hover: #45cff4;
+  --theme-on-action: hsl(200 7% 8%);
+}
+
+.mapRoot.themeDark {
+  --theme-base: hsl(200 7% 8%);
+  --theme-surface: hsl(200 7% 11%);
+  --theme-raised: hsl(200 7% 15%);
+  --theme-hover: hsl(200 7% 20%);
+  --theme-border: hsl(200 7% 25%);
+  --theme-text: #f0f4f6;
+  --theme-muted: #a9b7c0;
+  --theme-accent: #74d5f2;
+  color-scheme: dark;
+  color: var(--theme-text);
+  background: var(--theme-base);
+}
+.themeDark > .mapCanvas { background: var(--theme-base); }
+.themeDark .mapActiveLayer { color: var(--theme-accent); background: var(--theme-raised); border-color: var(--theme-border); }
+.themeDark .mapActiveLayer:hover { background: var(--theme-hover); }
+.themeDark .mapboxgl-ctrl-group { background: var(--theme-raised); border: 1px solid var(--theme-border); }
+.themeDark .mapboxgl-ctrl-group button + button { border-color: var(--theme-border); }
+.themeDark .mapboxgl-ctrl-group button:hover { background: var(--theme-hover); }
+.themeDark .mapboxgl-ctrl-icon { filter: invert(1); }
+
+.themeDark .appTopbar,
+.themeDark .appSidebar,
+.themeDark .adminWorkspace,
+.themeDark .civitasWorkspace,
+.themeDark .civitasPanelLayout,
+.themeDark .civitasPanelScroll,
+.themeDark .civitasHero,
+.themeDark .dockWrapDesktop #mapLayersPanel,
+.themeDark .dockDesktopHeader {
+  color: var(--theme-text);
+  background: var(--theme-base);
+  border-color: var(--theme-border);
+}
+.themeDark .appTopbarBrand,
+.themeDark .mobileMapBrandPill img { filter: brightness(0) invert(1); }
+.themeDark .appSidebarFooter,
+.themeDark .appSidebarEquipmentChildren,
+.themeDark .civitasWorkspaceTopline,
+.themeDark .dockDesktopHeader,
+.themeDark .equipmentPanelHeader,
+.themeDark .panelHeader { border-color: var(--theme-border); }
+.themeDark .appSidebarItem,
+.themeDark .appSidebarItem svg,
+.themeDark .appSidebarSubitem,
+.themeDark .appSidebarSubitem svg,
+.themeDark .mapUtilityBarIdentity,
+.themeDark .mapUtilityProfileCopy strong { color: var(--theme-text); }
+.themeDark .appSidebarItem:hover,
+.themeDark .appSidebarSubitem:hover,
+.themeDark .appSidebarItemActive,
+.themeDark .appSidebarSubitemActive,
+.themeDark .mapUtilityProfile:hover,
+.themeDark .mapUtilityProfileActive { color: var(--theme-text); background: var(--theme-hover); }
+.themeDark .appSidebarCivitas.appSidebarItemActive { color: var(--theme-accent); border-color: var(--theme-border); background: var(--theme-raised); }
+.themeDark .appSidebarItemActive svg,
+.themeDark .appSidebarSubitemActive svg,
+.themeDark .appSidebarCivitas.appSidebarItemActive svg { color: var(--theme-accent); }
+.themeDark .appSidebarSectionLabel,
+.themeDark .mapUtilityProfileCopy small { color: var(--theme-muted); }
+.themeDark .mapUtilityBar { border-color: var(--theme-border); }
+.themeDark .mapUtilityProfileAvatar { color: var(--theme-base); background: var(--theme-accent); }
+
+.themeDark .mapCommandBar,
+.themeDark .mapSearchMode,
+.themeDark .mapSearchTooltip,
+.themeDark .mapSearchTooltip::before,
+.themeDark .mapSearchMode button.mapSearchModeActive,
+.themeDark .mapCommandBar .mapSearchMode button.mapSearchModeActive {
+  color: var(--theme-text);
+  background: var(--theme-raised);
+  border-color: var(--theme-border);
+}
+.themeDark .mapCommandBar input,
+.themeDark .mapSearchTooltip small { color: var(--theme-text); }
+.themeDark .mapCommandBar input::placeholder { color: var(--theme-muted); }
+.themeDark .mapSearchMode button,
+.themeDark .mapCommandBar .mapSearchMode button { color: var(--theme-muted); }
+.themeDark .mapSearchMode button:hover,
+.themeDark .mapCommandBar .mapSearchMode button:hover { color: var(--theme-text); background: var(--theme-hover); }
+.themeDark .mapSearchTooltip strong::before { background: var(--theme-accent); }
+
+.themeDark .panelCard,
+.themeDark .desktopPanels.panelCard:not(.profilePanel),
+.themeDark .profilePanel.panelCard,
+.themeDark .glass,
+.themeDark .glassStrong,
+.themeDark .dock,
+.themeDark .areaDrawToolbar,
+.themeDark .bairroSearchToolbar,
+.themeDark .areaDrawIntro,
+.themeDark .geometrySummaryCard,
+.themeDark .mobileMenuSheet {
+  color: var(--theme-text) !important;
+  background: var(--theme-surface) !important;
+  border-color: var(--theme-border) !important;
+}
+.themeDark .desktopPanels.panelCard .adminCard,
+.themeDark .adminWorkspace .adminCard,
+.themeDark .adminCard,
+.themeDark .profileSummaryCard,
+.themeDark .profilePasswordCard,
+.themeDark .equipmentList .listItem,
+.themeDark .searchEquipmentResultCard,
+.themeDark .usageMetricCard,
+.themeDark .usagePanel,
+.themeDark .civitasSummaryRow,
+.themeDark .civitasSummaryMobileCard,
+.themeDark .civitasGuideRequirements {
+  color: var(--theme-text) !important;
+  background: var(--theme-raised) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: none;
+}
+.themeDark .equipmentList .listItem:hover,
+.themeDark .searchEquipmentResultCard:hover { background: var(--theme-hover) !important; }
+.themeDark .searchEquipmentResults,
+.themeDark .pageControls,
+.themeDark .desktopPanels.panelCard .panelSearch,
+.themeDark .dockBase,
+.themeDark .dockBaseToggle,
+.themeDark .dockChip,
+.themeDark .dockChipOn,
+.themeDark .customSelectBtn,
+.themeDark .customSelectMenu,
+.themeDark .btnGhost,
+.themeDark .subTab,
+.themeDark .tabBtnActive,
+.themeDark .civitasGuide,
+.themeDark .usageViewTabs,
+.themeDark .adminCinematicToggle {
+  color: var(--theme-text);
+  background: var(--theme-raised);
+  border-color: var(--theme-border);
+}
+.themeDark .dockChipOn,
+.themeDark .tabBtnActive,
+.themeDark .desktopPanels.panelCard .tabBtnActive,
+.themeDark .usageViewTabs button.usageViewTabActive { color: var(--theme-text); background: var(--theme-hover); border-color: var(--theme-accent); }
+.themeDark .dockChip:hover,
+.themeDark .btnGhost:hover,
+.themeDark .customSelectItem:hover,
+.themeDark .customSelectItemActive { color: var(--theme-text); background: var(--theme-hover); }
+.themeDark .customSelectItem,
+.themeDark .tabBtn,
+.themeDark .dockBaseChoice,
+.themeDark .pageControls .btnGhost,
+.themeDark .desktopPanels.panelCard .adminCard .btnGhost,
+.themeDark .adminWorkspace .adminCard .btnGhost { color: var(--theme-text); }
+.themeDark .tabsRail { --tabs-btn-text: var(--theme-muted) !important; }
+.themeDark .tabsRail .subTab:hover,
+.themeDark .tabsRail .subTabActive,
+.themeDark .desktopPanels.panelCard .tabsRail .subTabActive { color: var(--theme-text); }
+
+.themeDark :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]),
+.themeDark .desktopPanels.panelCard .adminCard input,
+.themeDark .adminWorkspace .adminCard input,
+.themeDark .adminWorkspace .adminCard .customSelectBtn,
+.themeDark .profilePasswordCard input {
+  color: var(--theme-text) !important;
+  background: var(--theme-raised) !important;
+  border-color: var(--theme-border) !important;
+}
+.themeDark :is(input, textarea)::placeholder { color: var(--theme-muted) !important; }
+.themeDark :is(input, textarea, select):focus-visible,
+.themeDark button:focus-visible { outline-color: var(--theme-accent); }
+.themeDark .mapCommandBar input,
+.themeDark .desktopPanels.panelCard .panelSearch > input { background: transparent !important; border: 0 !important; }
+
+.themeDark .adminWorkspaceHeader h1,
+.themeDark .adminWorkspaceHeader p,
+.themeDark .adminBreadcrumb [aria-current="page"],
+.themeDark .adminCinematicHeading h2,
+.themeDark .civitasWorkspaceBreadcrumb [aria-current="page"],
+.themeDark .civitasHeroTitle,
+.themeDark .civitasSectionTitle,
+.themeDark .civitasSummaryToolName,
+.themeDark .civitasGuideTitle,
+.themeDark .civitasGuideRequirementsTitle,
+.themeDark .profileTitle,
+.themeDark .profileIdentityHeader .profileTitle,
+.themeDark .profilePasswordTitle,
+.themeDark .desktopPanels.panelCard .panelTitle,
+.themeDark .dockTitle,
+.themeDark .dockDesktopHeader h2,
+.themeDark .areaDrawToolbarHeader strong,
+.themeDark .areaDrawIntro h2,
+.themeDark .searchEquipmentResultsTitle,
+.themeDark .usageDashboard,
+.themeDark .usageBlockHeading h2,
+.themeDark .usageMetricValue,
+.themeDark .usageSectionTitle h2 { color: var(--theme-text) !important; }
+.themeDark .profileDetails > div:nth-child(even) { color: var(--theme-text) !important; }
+.themeDark .profileDetails > div:nth-child(odd),
+.themeDark .profileEyebrow,
+.themeDark .profilePasswordHint,
+.themeDark .civitasHeroSubtitle,
+.themeDark .civitasSummaryLabel,
+.themeDark .civitasSummaryText,
+.themeDark .civitasGuideText,
+.themeDark .civitasGuideList,
+.themeDark .adminCinematicHeading p,
+.themeDark .adminCinematicNote,
+.themeDark .areaDrawIntro p,
+.themeDark .areaDrawToolbarHeader span,
+.themeDark .dockSectionLabel,
+.themeDark .dockNote,
+.themeDark .usageMetricLabel,
+.themeDark .usageMetricHint,
+.themeDark .usageSectionTitle p { color: var(--theme-muted) !important; }
+.themeDark .adminBreadcrumb,
+.themeDark .adminBreadcrumb button,
+.themeDark .civitasWorkspaceBreadcrumb,
+.themeDark .civitasWorkspaceBreadcrumb button { color: var(--theme-muted); }
+.themeDark .adminWorkspaceClose,
+.themeDark .civitasActionBtnGhost,
+.themeDark .dockHandle,
+.themeDark .gpsMapCenter,
+.themeDark .bairroSearchRestore,
+.themeDark .areaDrawRestore {
+  color: var(--theme-text);
+  background: var(--theme-raised);
+  border-color: var(--theme-border);
+}
+.themeDark .adminWorkspaceClose:hover,
+.themeDark .dockHandle:hover,
+.themeDark .gpsMapCenter:hover:not(:disabled) { background: var(--theme-hover); }
+.themeDark .areaDrawIntroArt,
+.themeDark .profileAvatar,
+.themeDark .profileOrganizationBadge,
+.themeDark .adminCinematicIcon,
+.themeDark .usageViewTabs button.usageViewTabActive { color: var(--theme-text); background: var(--theme-hover); border-color: var(--theme-border); }
+.themeDark .civitasSummaryCol,
+.themeDark .civitasSummaryMobileBlock { border-color: var(--theme-border); }
+.themeDark .civitasActionBtnGhost .civitasActionBtnIconImg { filter: brightness(0) invert(1); }
+.themeDark .usageHero { border-color: var(--theme-border); background: var(--theme-raised); }
+.themeDark .usageViewTabs button { color: var(--theme-muted); }
+.themeDark .usageRankTrack { background: var(--theme-border); }
+/* Administrative forms also contain inline light surfaces. */
+.themeDark .adminWorkspace [style*="background: rgba(255"],
+.themeDark .adminWorkspace [style*="background: rgba(248"],
+.themeDark .adminWorkspace [style*="background: rgba(241"],
+.themeDark .adminWorkspace [style*="background: #fff"],
+.themeDark .adminWorkspace [style*="background: #f8"] {
+  color: var(--theme-text) !important;
+  background: var(--theme-raised) !important;
+  border-color: var(--theme-border) !important;
+}
+.themeDark .adminWorkspace button[style*="color: rgba(0"],
+.themeDark .adminWorkspace button[style*="color: rgba(10"],
+.themeDark .adminWorkspace button[style*="color: #0"] { color: var(--theme-text) !important; }
+.themeDark .adminWorkspace [style*="color: #991b1b"],
+.themeDark .adminWorkspace [style*="color: rgb(153, 27, 27)"] { color: #ff9999 !important; }
+.themeDark .adminWorkspace [style*="color: #166534"],
+.themeDark .adminWorkspace [style*="color: #15803d"] { color: #8de2ae !important; }
+.themeDark .areaReportCard,
+.themeDark .mobileProfileCard,
+.themeDark .mobileProfileWorkspace [style*="background: rgba(255"],
+.themeDark .mobileEquipmentWorkspace button[title="Limpar"],
+.themeDark .desktopPanels.panelCard button[title="Limpar"] {
+  color: var(--theme-text) !important;
+  background: var(--theme-raised) !important;
+  border-color: var(--theme-border) !important;
+}
+.themeDark .areaReportTitle,
+.themeDark .profilePasswordCard button[aria-label^="Mostrar"],
+.themeDark .profilePasswordCard button[aria-label^="Ocultar"],
+.themeDark .mobileProfileWorkspace button[aria-label^="Mostrar"],
+.themeDark .mobileProfileWorkspace button[aria-label^="Ocultar"] { color: var(--theme-text) !important; }
+.themeDark :is(.adminWorkspace, .mapWorkspacePanel, .mobileDrawer, .dock, .civitasWorkspace) :is(div, span, strong, small, label, p, h1, h2, h3)[style*="color: #0"],
+.themeDark :is(.adminWorkspace, .mapWorkspacePanel, .mobileDrawer, .dock, .civitasWorkspace) :is(div, span, strong, small, label, p, h1, h2, h3)[style*="color: #1"],
+.themeDark :is(.adminWorkspace, .mapWorkspacePanel, .mobileDrawer, .dock, .civitasWorkspace) :is(div, span, strong, small, label, p, h1, h2, h3)[style*="color: rgba(0,"],
+.themeDark :is(.adminWorkspace, .mapWorkspacePanel, .mobileDrawer, .dock, .civitasWorkspace) :is(div, span, strong, small, label, p, h1, h2, h3)[style*="color: rgba(10,"],
+.themeDark :is(.adminWorkspace, .mapWorkspacePanel, .mobileDrawer, .dock, .civitasWorkspace) :is(div, span, strong, small, label, p, h1, h2, h3)[style*="color: rgba(15,"] { color: var(--theme-text) !important; }
+.themeDark .mapWorkspacePanel,
+.themeDark .mobileDrawer { color: var(--theme-text) !important; }
+.themeDark .dockDivider { background: var(--theme-border); }
+.themeDark .dockBaseToggle::before { background: var(--theme-hover); box-shadow: none; }
+.themeDark .dockBaseToggle:not(.dockBaseToggleSatellite) .dockBaseChoice:first-child,
+.themeDark .dockBaseToggleSatellite .dockBaseChoice:last-child { color: var(--theme-accent); }
+.themeDark .chipToggleOn { background: #138bb0; }
+.themeDark .mapboxgl-popup-content { color: var(--theme-text); background: var(--theme-surface); border: 1px solid var(--theme-border); }
+.themeDark .mapboxgl-popup-tip { border-top-color: var(--theme-surface); border-bottom-color: var(--theme-surface); }
+.themeDark .mapboxgl-popup-close-button { color: var(--theme-text); border-color: var(--theme-border); background: var(--theme-raised); }
+
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
+  .themeDark .mobileDrawer.mobileEquipmentWorkspace,
+  .themeDark .mobileDrawer.mobileProfileWorkspace { background: var(--theme-base) !important; }
+  .themeDark .mobileEquipmentDragHandle,
+  .themeDark .mobileEquipmentHeader,
+  .themeDark .adminWorkspaceMobileNav { background: var(--theme-base); border-color: var(--theme-border); }
+  .themeDark .mobileEquipmentHeader h2,
+  .themeDark .mobileEquipmentWorkspace .panelTitle { color: var(--theme-text); }
+  .themeDark .mobileEquipmentHeader p,
+  .themeDark .mobileEquipmentEyebrow { color: var(--theme-muted); }
+  .themeDark .mobileEquipmentHeader button,
+  .themeDark .mobileEquipmentTabs button[aria-selected="true"],
+  .themeDark .adminWorkspaceMobileNav button.adminWorkspaceMobileNavActive { color: var(--theme-text); background: var(--theme-raised); border-color: var(--theme-border); }
+  .themeDark .mobileEquipmentTabs button,
+  .themeDark .adminWorkspaceMobileNav button { color: var(--theme-muted); }
+  .themeDark .mobileBottomNav,
+  .themeDark:has(.mobileEquipmentWorkspace) .mobileBottomNav,
+  .themeDark:has(.mobileProfileWorkspace) .mobileBottomNav,
+  .themeDark:has(.dockWrapMobile .dock) .mobileBottomNav,
+  .themeDark .mobileMapBrandPill { background: hsl(200 7% 11% / .94); border-color: var(--theme-border); }
+  .themeDark .mobileBottomNav button { color: var(--theme-muted); }
+  .themeDark .mobileBottomNav button.mobileBottomNavActive { color: var(--theme-accent); background: var(--theme-hover); }
+  .themeDark .mobileBottomNav .mobileBottomNavCivitas { border-color: var(--theme-border); background: var(--theme-base); }
+  .themeDark .mobileLayersToggle,
+  .themeDark .mobileLayersToggleActive { color: var(--theme-accent); background: var(--theme-raised); border-color: var(--theme-border); }
+  .themeDark:has(.mobileEquipmentWorkspace)::after,
+  .themeDark:has(.mobileProfileWorkspace)::after,
+  .themeDark:has(.dockWrapMobile .dock)::after { background: hsl(200 7% 8% / .28); }
+  .themeDark .mobileMenuAction,
+  .themeDark .mobileMenuClose { color: var(--theme-text); background: var(--theme-raised); border-color: var(--theme-border); }
+  .themeDark .mobileMenuAction:hover { background: var(--theme-hover); }
+  .themeDark .mobileMenuActionIcon { color: var(--theme-accent); background: var(--theme-hover); }
+  .themeDark .mobileMenuActionSub,
+  .themeDark .mobileMenuEyebrow { color: var(--theme-muted); }
+  .themeDark .mobileMenuActionDanger { background: #2b1a1c; border-color: #63363c; }
+  .themeDark .mobileMenuActionDanger .mobileMenuActionIcon { background: #51262c; }
+  .themeDark .mobileMenuActionDanger .mobileMenuActionLabel,
+  .themeDark .mobileMenuActionDanger .mobileMenuActionSub { color: #ff9a9a; }
+  .themeDark .mobileSearchSheet { color: var(--theme-text); background: var(--theme-base); border-color: var(--theme-border); }
+  .themeDark .mobileSearchTitle { color: var(--theme-text); }
+  .themeDark .mobileSearchEyebrow,
+  .themeDark .mobileSearchCopy,
+  .themeDark .mobileSearchSectionLabel,
+  .themeDark .mobileSearchHint { color: var(--theme-muted); }
+  .themeDark .mobileSearchMode,
+  .themeDark .mobileSearchFieldShell,
+  .themeDark .mobileSearchChip,
+  .themeDark .mobileSearchBadge,
+  .themeDark .mobileSearchClearBtn,
+  .themeDark .mobileSearchCloseBtn { color: var(--theme-text); background: var(--theme-raised); border-color: var(--theme-border); }
+  .themeDark .mobileSearchMode button { color: var(--theme-muted); }
+  .themeDark .mobileSearchMode button.mobileSearchModeActive { color: var(--theme-accent); background: var(--theme-hover); }
+  .themeDark .mobileSearchFieldIcon { color: var(--theme-accent); background: var(--theme-hover); }
+  .themeDark .mobileSearchFieldShell .mobileSearchInput { color: var(--theme-text); background: transparent !important; border: 0 !important; }
+  .themeDark .mobileSearchChip:hover,
+  .themeDark .mobileSearchCloseBtn:hover { background: var(--theme-hover); }
+}
+
+/* SweetAlert mounts outside mapRoot. */
+.atlasDark .swal2-popup { color: #f0f4f6 !important; background: hsl(200 7% 11%) !important; border-color: hsl(200 7% 25%) !important; }
+.atlasDark .swal2-title { color: #f0f4f6 !important; }
+.atlasDark .swal2-html-container { color: #a9b7c0 !important; }
+.atlasDark .swal2-styled.swal2-cancel,
+.atlasDark .swal2-actions .atlasSwalBtnGhost { color: #f0f4f6 !important; background: hsl(200 7% 15%) !important; border-color: hsl(200 7% 25%) !important; }
+.atlasDark .swal2-close { color: #a9b7c0 !important; }
+.atlasDark .swal2-close:hover { color: #f0f4f6 !important; background: hsl(200 7% 20%) !important; }
+
+/* Cyan actions across desktop, mobile and dialogs. */
+.themeDark :is(
+  .appPrimaryAction,
+  .mapCivitasAction,
+  .civitasActionBtnPrimary,
+  .civitasSearchBtn,
+  .profilePasswordSubmit,
+  .areaDrawIntroStart,
+  .areaDrawToolbarDownload,
+  .adminCinematicMapButton,
+  .usageRefresh,
+  .mobileBottomNavCivitas
+) {
+  color: var(--theme-on-action) !important;
+  background: var(--theme-action) !important;
+  border-color: var(--theme-action) !important;
+  box-shadow: none;
+}
+.themeDark :is(
+  .appPrimaryAction,
+  .mapCivitasAction,
+  .civitasActionBtnPrimary,
+  .civitasSearchBtn,
+  .profilePasswordSubmit,
+  .areaDrawIntroStart,
+  .areaDrawToolbarDownload,
+  .adminCinematicMapButton,
+  .usageRefresh,
+  .mobileBottomNavCivitas
+):hover:not(:disabled) {
+  background: var(--theme-action-hover) !important;
+  border-color: var(--theme-action-hover) !important;
+}
+.themeDark :is(
+  .btnGhost,
+  .civitasActionBtnGhost,
+  .adminWorkspaceClose,
+  .mobileEquipmentHeader button,
+  .mobileMenuClose,
+  .mobileSearchCloseBtn,
+  .mobileSearchClearBtn,
+  .areaDrawToolbarActions button:not(.areaDrawToolbarDownload),
+  .bairroSearchRestore,
+  .areaDrawRestore,
+  .dockHandle,
+  .gpsMapCenter,
+  .mobileLayersToggle,
+  .usagePreset,
+  .listStreamPill
+),
+.themeDark .adminWorkspace button:is([style*="background: rgba(255"], [style*="color: rgba(0"], [style*="color: rgba(10"], [style*="color: #0"]),
+.themeDark .mobileEquipmentWorkspace button[title="Limpar"],
+.themeDark .desktopPanels.panelCard button[title="Limpar"] {
+  color: var(--theme-action) !important;
+  background: var(--theme-raised) !important;
+  border-color: var(--theme-action) !important;
+}
+.themeDark :is(.mapCivitasActionLogo img, .civitasActionBtnPrimary .civitasActionBtnIconImg, .mobileBottomNavCivitasLogo img) { filter: brightness(0); }
+.atlasDark .swal2-styled.swal2-confirm,
+.atlasDark .swal2-actions .atlasSwalBtnPrimary {
+  color: var(--theme-on-action) !important;
+  background: var(--theme-action) !important;
+  border-color: var(--theme-action) !important;
+}
+.atlasDark .swal2-styled.swal2-confirm:hover,
+.atlasDark .swal2-actions .atlasSwalBtnPrimary:hover {
+  background: var(--theme-action-hover) !important;
+  border-color: var(--theme-action-hover) !important;
+}
+.atlasDark .swal2-styled.swal2-cancel,
+.atlasDark .swal2-actions .atlasSwalBtnGhost { color: var(--theme-action) !important; border-color: var(--theme-action) !important; }

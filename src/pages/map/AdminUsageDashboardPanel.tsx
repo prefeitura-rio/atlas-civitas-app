@@ -648,6 +648,7 @@ export function AdminUsageDashboardPanel({
 
                 <button
                   type="button"
+                  className="appPrimaryAction"
                   onClick={() => handleDownloadReport(item, index)}
                   disabled={isDownloading}
                   style={{

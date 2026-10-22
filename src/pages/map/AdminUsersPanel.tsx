@@ -970,6 +970,7 @@ export function AdminUsersPanel({
 
         <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
           <button
+            className="appPrimaryAction"
             onClick={save}
             style={{
               padding: "10px 12px",
@@ -1228,7 +1229,7 @@ export function AdminUsersPanel({
                   {user.is_active && !isExpired ? (
                     <button
                       onClick={() => deactivate(user.id)}
-                      className="adminRowBtn"
+                      className="adminRowBtn appPrimaryAction"
                       style={{
                         padding: "8px 10px",
                         borderRadius: 12,
@@ -1244,7 +1245,7 @@ export function AdminUsersPanel({
                   ) : (
                     <button
                       onClick={() => reactivate(user.id)}
-                      className="adminRowBtn"
+                      className="adminRowBtn appPrimaryAction"
                       style={{
                         padding: "8px 10px",
                         borderRadius: 12,

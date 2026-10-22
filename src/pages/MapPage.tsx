@@ -28,6 +28,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Moon,
   PenTool,
   RadioTower,
   Search,
@@ -37,6 +38,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
+  Sun,
   UserRound,
   X,
 } from "lucide-react";
@@ -50,6 +52,7 @@ import {
   normalizeRole,
 } from "./map/roles";
 import "./map/map.css";
+import "./map/map-dark.css";
 import atlasBrand from "@/assets/atlas-brand.png";
 import cameraIcon from "@/assets/camera-icon.png";
 import radarIconSatellite from "@/assets/radar-icon-satellite.png";
@@ -1578,6 +1581,22 @@ export default function MapPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSearchFocused, setMobileSearchFocused] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return window.localStorage.getItem("atlas_theme") === "dark";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("atlas_theme", darkMode ? "dark" : "light");
+    } catch {
+      // The theme remains usable when browser storage is unavailable.
+    }
+    document.documentElement.classList.toggle("atlasDark", darkMode);
+    return () => document.documentElement.classList.remove("atlasDark");
+  }, [darkMode]);
   const [unavailableSmartCameraIds, setUnavailableSmartCameraIds] = useState<Record<string, true>>({});
   const [mapBaseStyle, setMapBaseStyle] = useState<MapBaseStyle>(() => {
     if (typeof window === "undefined") return "streets";
@@ -7111,7 +7130,7 @@ export default function MapPage() {
   const activeLayerPanelOpen = !isMobile && (panel === "map" || panel === "profile");
 
   return (
-    <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""}`}>
+    <div className={`mapRoot ${panelOpen || mobileMenuOpen ? "menuOpen" : ""} ${darkMode ? "themeDark" : ""}`}>
       <div
         ref={mapContainerRef}
         className="mapCanvas"
@@ -7773,6 +7792,7 @@ export default function MapPage() {
 
             {canUseAreaDraw && areaToolsOpen && (
               <div
+                className="areaReportCard"
                 style={{
                   marginTop: 6,
                   border: "1px solid rgba(0,0,0,0.08)",
@@ -7784,7 +7804,7 @@ export default function MapPage() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.8)" }}>
+                  <div className="areaReportTitle" style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.8)" }}>
                     Relatório por Área Desenhada
                   </div>
                 </div>
@@ -8016,6 +8036,17 @@ export default function MapPage() {
         </nav>
 
         <div className="appSidebarFooter">
+          <button
+            type="button"
+            className="appSidebarItem themeToggle"
+            onClick={() => setDarkMode((current) => !current)}
+            title={darkMode ? "Ativar modo claro" : "Ativar modo escuro"}
+            aria-label="Modo escuro"
+            aria-pressed={darkMode}
+          >
+            {darkMode ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+            <span>{darkMode ? "Modo claro" : "Modo escuro"}</span>
+          </button>
           <a
             className="appSidebarItem"
             href={civitasContactWhatsappHref}
@@ -8886,6 +8917,22 @@ export default function MapPage() {
                   </div>
 
                   <div className="mobileMenuActions">
+                    <button
+                      type="button"
+                      className="mobileMenuAction"
+                      onClick={() => setDarkMode((current) => !current)}
+                      aria-label="Modo escuro"
+                      aria-pressed={darkMode}
+                    >
+                      <span className="mobileMenuActionIcon">
+                        {darkMode ? <Sun size={16} strokeWidth={2.4} /> : <Moon size={16} strokeWidth={2.4} />}
+                      </span>
+                      <span className="mobileMenuActionText">
+                        <span className="mobileMenuActionLabel">{darkMode ? "Modo claro" : "Modo escuro"}</span>
+                        <span className="mobileMenuActionSub">{darkMode ? "Usar aparência clara" : "Usar aparência escura"}</span>
+                      </span>
+                      <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} />
+                    </button>
                     {canAccessAdmin && (
                       <button
                         type="button"
@@ -9395,6 +9442,7 @@ export default function MapPage() {
                   <button type="button" onClick={() => { setPanel(null); setPanelOpen(false); }} aria-label="Voltar ao mapa">Voltar ao mapa</button>
                 </div>
                 <div
+                  className="mobileProfileCard"
                   style={{
                     padding: 12,
                     borderRadius: 16,
@@ -9426,6 +9474,7 @@ export default function MapPage() {
                 </div>
 
                 <div
+                  className="mobileProfileCard"
                   style={{
                     display: "grid",
                     gap: 10,
@@ -9561,6 +9610,7 @@ export default function MapPage() {
                     </button>
                   </div>
                   <button
+                    className="profilePasswordSubmit"
                     onClick={changePassword}
                     disabled={pwLoading}
                     style={{

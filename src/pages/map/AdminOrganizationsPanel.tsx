@@ -1010,6 +1010,7 @@ export function AdminOrganizationsPanel({
 
           <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
             <button
+              className="appPrimaryAction"
               onClick={save}
               disabled={saving}
               style={{
