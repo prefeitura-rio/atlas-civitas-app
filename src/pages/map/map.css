@@ -848,10 +848,16 @@
 .mapCommandBar button:hover { border: 0; background: #123b69; }
 .mapCommandBarError { position: absolute; top: calc(100% + 8px); left: 0; max-width: 100%; padding: 6px 9px; color: #991b1b; border: 1px solid rgba(185, 28, 28, .16); border-radius: 8px; background: rgba(255, 244, 244, .96); font-size: 11px; font-weight: 650; }
 .mapSearchMode { display: inline-flex; align-self: stretch; align-items: center; gap: 2px; padding: 3px; border-right: 1px solid #e0e8ef; background: #f3f6f9; flex: 0 0 auto; }
-.mapSearchMode button, .mapCommandBar .mapSearchMode button { display: inline-flex; width: 29px; align-items: center; justify-content: center; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 7px; color: #6a7d90; background: transparent; box-shadow: none; line-height: 1; cursor: pointer; }
+.mapSearchMode button, .mapCommandBar .mapSearchMode button { position: relative; display: inline-flex; width: 29px; align-items: center; justify-content: center; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 7px; color: #6a7d90; background: transparent; box-shadow: none; line-height: 1; cursor: pointer; }
 .mapSearchMode button:hover, .mapCommandBar .mapSearchMode button:hover { color: #163d63; background: #e7eef4; }
 .mapSearchMode button.mapSearchModeActive, .mapCommandBar .mapSearchMode button.mapSearchModeActive { color: #0a284b; background: #fff; box-shadow: 0 1px 4px rgba(23, 52, 78, .14); }
 .mapSearchMode button.mapSearchModeActive svg { color: #00a9de; }
+.mapSearchTooltip { position: absolute; z-index: 80; top: calc(100% + 13px); left: 50%; display: grid; gap: 5px; width: max-content; padding: 11px 13px; border: 1px solid #e2e8f0; border-radius: 10px; color: #0a284b; background: #fff; box-shadow: 0 12px 28px rgba(15, 35, 56, .12); text-align: left; line-height: 1.3; white-space: nowrap; pointer-events: none; opacity: 0; visibility: hidden; transform: translate(-50%, -4px); transition: opacity 150ms ease, transform 150ms ease, visibility 150ms ease; }
+.mapSearchTooltip::before { position: absolute; top: -6px; left: calc(50% - 5px); width: 10px; height: 10px; border-top: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; background: #fff; content: ""; transform: rotate(45deg); }
+.mapSearchTooltip strong { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 750; }
+.mapSearchTooltip strong::before { width: 6px; height: 6px; border-radius: 50%; background: #0a284b; content: ""; }
+.mapSearchTooltip small { color: #0a284b; font-size: 11px; font-weight: 500; }
+.mapSearchMode button:hover .mapSearchTooltip, .mapSearchMode button:focus-visible .mapSearchTooltip { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
 .mapUtilityBar { display: flex; align-items: center; padding-left: 12px; border-left: 1px solid #d6e1e9; }
 .mapUtilityBarIdentity { min-width: 0; color: #193852; font-size: 12px; font-weight: 700; letter-spacing: -0.01em; text-align: left; }
 .mapUtilityProfile { appearance: none; height: 40px; display: inline-flex; align-items: center; gap: 9px; padding: 2px 5px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; transition: background 140ms ease; }
@@ -1742,12 +1748,13 @@
     bottom: 0;
     left: 0;
     z-index: 25;
-    height: calc(84px + env(safe-area-inset-bottom));
+    height: calc(72px + env(safe-area-inset-bottom));
     background: rgba(245, 247, 249, .28);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     pointer-events: none;
   }
+  .mapRoot:has(.dockWrapMobile .dock)::after { z-index: 27; }
   .mobileMapBrandPill {
     position: fixed;
     top: calc(11px + env(safe-area-inset-top));
@@ -3910,6 +3917,7 @@
     right: 0;
     bottom: 0;
     left: 0;
+    z-index: 26;
     max-height: none;
     overflow: visible;
   }
