@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, ArrowRight, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useAuth } from "../app/auth";
 
-import civitasLogo from "@/assets/logo_civitasrio.png";
-import prefeituraLogo from "@/assets/prefeitura_icon.png";
+import atlasBrand from "@/assets/atlas-brand.png";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import "./login.css";
 
 export default function Login() {
   const nav = useNavigate();
@@ -100,240 +100,105 @@ export default function Login() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        background:
-          "radial-gradient(900px 500px at 15% 10%, rgba(255,255,255,0.08), transparent 60%)," +
-          "radial-gradient(900px 500px at 85% 90%, rgba(255,255,255,0.06), transparent 60%)," +
-          "linear-gradient(180deg, #050505, #0b0b0f)",
-      }}
-    >
+    <div className="loginShell">
       {authToast && (
-        <div
-          style={{
-            position: "fixed",
-            top: 16,
-            right: 16,
-            zIndex: 60,
-            maxWidth: 320,
-            width: "calc(100vw - 32px)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "12px 14px",
-              borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.08)",
-              background: "rgba(255,255,255,0.95)",
-              color: "rgba(0,0,0,0.85)",
-              fontSize: 13,
-              boxShadow: "0 12px 30px rgba(0,0,0,0.25)",
-              backdropFilter: "blur(10px)",
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            <AlertTriangle size={16} />
-            <div style={{ lineHeight: 1.3 }}>
-              {authToast}
-              {authToastSeconds !== null && authToastSeconds >= 0 && (
-                <span style={{ marginLeft: 6, opacity: 0.7 }}>({authToastSeconds}s)</span>
-              )}
-            </div>
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                bottom: 0,
-                height: 3,
-                width: `${authToastProgress}%`,
-                background: "#00c0f3",
-                transition: "width 0.1s linear",
-              }}
-            />
+        <div className="loginToast" role="status">
+          <AlertTriangle size={17} aria-hidden="true" />
+          <div className="loginToastCopy">
+            <strong>{authToast}</strong>
+            {authToastSeconds !== null && authToastSeconds >= 0 && (
+              <span>Esta mensagem fecha em {authToastSeconds}s</span>
+            )}
           </div>
+          <div className="loginToastProgress" style={{ width: `${authToastProgress}%` }} />
         </div>
       )}
-      <style>{`
-        @media (max-width: 640px) {
-          .loginHeader {
-            height: 64px !important;
-            padding: 0 12px !important;
-          }
-          .loginLogo {
-            height: 28px !important;
-          }
-          .loginTitle {
-            font-size: 18px !important;
-          }
-        }
-        .loginInput {
-          background-color: #0b0b0f !important;
-          color: #ffffff !important;
-        }
-        .loginInput::placeholder {
-          color: rgba(255,255,255,0.45) !important;
-        }
-        .loginInput:-webkit-autofill,
-        .loginInput:-webkit-autofill:hover,
-        .loginInput:-webkit-autofill:focus,
-        .loginInput:-webkit-autofill:active {
-          -webkit-text-fill-color: #ffffff !important;
-          box-shadow: 0 0 0 1000px #0b0b0f inset !important;
-          transition: background-color 9999s ease-in-out 0s;
-        }
-      `}</style>
-      {/* TOP BAR */}
-      <header
-        className="loginHeader"
-        style={{
-          height: 88,
-          display: "flex",
-          alignItems: "center",
-          padding: "0 18px",
-          color: "#fff",
-          background: "linear-gradient(180deg, rgba(10,10,10,0.92), rgba(10,10,10,0.78))",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          backdropFilter: "blur(8px)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", flex: 1 }}>
-          <img
-            src={prefeituraLogo}
-            alt="Prefeitura do Rio"
-            className="loginLogo"
-            style={{ height: 44, width: "auto", opacity: 0.95, filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
-          />
-        </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, minWidth: 180 }}>
-          <img
-            src={civitasLogo}
-            alt="Civitas Rio"
-            className="loginLogo"
-            style={{ height: 44, width: "auto", filter: "drop-shadow(0 2px 10px rgba(0,0,0,0.35))" }}
-          />
-        </div>
-        
+      <header className="loginTopbar">
+        <img src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" className="loginBrand" />
       </header>
 
-      {/* CONTENT */}
-      <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <div
-          className="loginCard"
-          style={{
-            width: "100%",
-            maxWidth: 420,
-            border: "none",
-            borderRadius: 0,
-            padding: 0,
-            background: "transparent",
-            boxShadow: "none",
-            color: "#ffffff",
-            backdropFilter: "none",
-          }}
-        >
-         
+      <main className="loginMain">
+        <div className="loginLayout">
+          <section className="loginIdentity" aria-labelledby="login-product-title">
+            <span className="loginIdentityRule" aria-hidden="true" />
+            <h1 id="login-product-title">Atlas CIVITAS</h1>
+            <p>Monitoramento da cidade do Rio de Janeiro.</p>
+            <div className="loginIdentityFooter">Prefeitura do Rio de Janeiro · CIVITAS Rio</div>
+          </section>
 
-          {err && (
-            <div style={{ marginBottom: 12 }}>
-              <Alert variant="destructive">
-                <AlertTriangle size={18} />
+          <section className="loginCard" aria-labelledby="login-title">
+            <div className="loginCardHeader">
+              <span className="loginSecureIcon" aria-hidden="true"><ShieldCheck size={20} /></span>
+              <div>
+                <span className="loginCardEyebrow">Acesso institucional</span>
+                <h2 id="login-title">Entrar</h2>
+              </div>
+            </div>
+            <p className="loginCardDescription">Use seu e-mail e senha para acessar o sistema.</p>
+
+            {err && (
+              <Alert variant="destructive" className="loginAlert" role="alert">
+                <AlertTriangle size={18} aria-hidden="true" />
                 <div>
-                  <AlertTitle>O login falhou!</AlertTitle>
+                  <AlertTitle>Não foi possível entrar</AlertTitle>
                   <AlertDescription>{err}</AlertDescription>
                 </div>
               </Alert>
-            </div>
-          )}
+            )}
 
-          <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              <Label htmlFor="email" className="text-white/80">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="email@prefeitura.rio"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-                className="loginInput !border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
-                style={{ width: "100%", backgroundColor: "#0b0b0f", color: "#fff" }}
-              />
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <Label htmlFor="password" className="text-white/80">
-                Senha
-              </Label>
-
-              <div style={{ position: "relative", width: "100%" }}>
+            <form onSubmit={onSubmit} className="loginForm">
+              <div className="loginField">
+                <Label htmlFor="email" className="loginFieldLabel">E-mail institucional</Label>
                 <Input
-                  id="password"
-                  type={passwordType}
-                  placeholder="********"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  className="loginInput !border-white/15 !bg-[#0b0b0f] !text-white placeholder:!text-white/45 focus-visible:!ring-white/30"
-                  style={{ width: "100%", paddingRight: 44, backgroundColor: "#0b0b0f", color: "#fff" }}
+                  id="email"
+                  type="email"
+                  placeholder="email@prefeitura.rio"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="username"
+                  className="loginInput"
+                  required
                 />
-
-                <button
-                  type="button"
-                  onClick={() => setPasswordType(passwordType === "password" ? "text" : "password")}
-                  title={passwordType === "password" ? "Mostrar senha" : "Ocultar senha"}
-                  aria-label={passwordType === "password" ? "Mostrar senha" : "Ocultar senha"}
-                  style={{
-                    position: "absolute",
-                    right: 6,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 32,
-                    height: 32,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "#0b0b0f",
-                    borderRadius: 10,
-                    cursor: "pointer",
-                    color: "rgba(255,255,255,0.9)",
-                    display: "grid",
-                    placeItems: "center",
-                    padding: 0,
-                    boxShadow: "0 6px 16px rgba(0,0,0,0.35)",
-                  }}
-                >
-                  {passwordType === "password" ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
               </div>
-            </div>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full border shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl"
-              style={{
-                backgroundColor: "#00c0f3",
-                borderColor: "#00c0f3",
-                color: "#001018",
-              }}
-            >
-              {loading ? "Entrando..." : "Login"}
-            </Button>
-          </form>
+              <div className="loginField">
+                <Label htmlFor="password" className="loginFieldLabel">Senha</Label>
+                <div className="loginPasswordField">
+                  <Input
+                    id="password"
+                    type={passwordType}
+                    placeholder="********"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="loginInput"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="loginPasswordToggle"
+                    onClick={() => setPasswordType(passwordType === "password" ? "text" : "password")}
+                    title={passwordType === "password" ? "Mostrar senha" : "Ocultar senha"}
+                    aria-label={passwordType === "password" ? "Mostrar senha" : "Ocultar senha"}
+                  >
+                    {passwordType === "password" ? <Eye size={18} /> : <EyeOff size={18} />}
+                  </button>
+                </div>
+              </div>
 
-          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6, textAlign: "center" }}>
-            © 2026 Prefeitura do Rio de Janeiro - CIVITAS
-          </div>
+              <Button type="submit" disabled={loading} className="loginSubmit">
+                <span>{loading ? "Entrando..." : "Login"}</span>
+                {!loading && <ArrowRight size={17} aria-hidden="true" />}
+              </Button>
+            </form>
+
+            <div className="loginCardFooter">Acesso restrito a usuários autorizados.</div>
+          </section>
         </div>
       </main>
+
+      <footer className="loginFooter">© 2026 Prefeitura da Cidade do Rio de Janeiro</footer>
     </div>
   );
 }

@@ -1,0 +1,295 @@
+.loginShell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #f3f6f9;
+  color: #0a284b;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.loginTopbar {
+  height: 56px;
+  flex: 0 0 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid #e4eaf0;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(15, 35, 56, .04);
+}
+.loginBrand {
+  width: 260px;
+  max-width: 70vw;
+  height: 40px;
+  object-fit: contain;
+  object-position: left center;
+}
+.loginMain {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 48px 28px;
+}
+.loginLayout {
+  width: min(1000px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+  align-items: center;
+  gap: clamp(48px, 8vw, 110px);
+}
+.loginIdentity { min-width: 0; padding-bottom: 12px; }
+.loginCardEyebrow {
+  color: #0788b4;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.loginIdentity h1 {
+  margin: 0;
+  color: #0a284b;
+  font-size: clamp(40px, 4.4vw, 58px);
+  font-weight: 700;
+  letter-spacing: -.05em;
+  line-height: 1.06;
+}
+.loginIdentityRule {
+  width: 44px;
+  height: 3px;
+  display: block;
+  margin: 0 0 22px;
+  border-radius: 2px;
+  background: #0a91bd;
+}
+.loginIdentity p {
+  max-width: 400px;
+  margin: 22px 0 0;
+  color: #526b80;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.loginIdentityFooter {
+  max-width: 400px;
+  margin-top: 62px;
+  padding-top: 18px;
+  border-top: 1px solid #dbe4eb;
+  color: #718598;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.loginCard {
+  min-width: 0;
+  padding: 38px 40px 32px;
+  border: 1px solid #dce5ed;
+  border-top: 3px solid #0a91bd;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(12, 45, 76, .07);
+}
+.loginCardHeader { display: flex; align-items: center; gap: 13px; }
+.loginSecureIcon {
+  width: 43px;
+  height: 43px;
+  flex: 0 0 43px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cbeaf5;
+  border-radius: 11px;
+  background: #eaf8fd;
+  color: #078fbc;
+}
+.loginCard h2 {
+  margin: 3px 0 0;
+  color: #0a284b;
+  font-size: 25px;
+  font-weight: 750;
+  letter-spacing: -.035em;
+  line-height: 1.2;
+}
+.loginCardDescription {
+  margin: 23px 0 27px;
+  color: #64788b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.loginForm { display: grid; gap: 20px; }
+.loginField { display: grid; gap: 8px; }
+.loginCard .loginFieldLabel {
+  color: #28415a;
+  font-size: 13px;
+  font-weight: 650;
+}
+.loginCard .loginInput {
+  width: 100%;
+  height: 43px;
+  padding: 0 13px;
+  border: 1px solid #cdd9e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #0a284b;
+  font-size: 14px;
+  box-shadow: none;
+}
+.loginCard .loginInput::placeholder { color: #9aabba; }
+.loginCard .loginInput:focus-visible {
+  border-color: #0a91bd;
+  outline: 3px solid rgba(10, 145, 189, .14);
+  outline-offset: 0;
+}
+.loginPasswordField { position: relative; }
+.loginPasswordField .loginInput { padding-right: 46px; }
+.loginPasswordToggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+  color: #64788b;
+  cursor: pointer;
+}
+.loginPasswordToggle:hover { color: #0a284b; }
+.loginPasswordToggle:focus-visible { outline: 2px solid #0a91bd; outline-offset: -3px; }
+.loginCard .loginSubmit {
+  width: 100%;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 7px;
+  border: 1px solid #0a284b;
+  border-radius: 7px;
+  background: #0a284b;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: none;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.loginCard .loginSubmit:hover:not(:disabled) {
+  border-color: #164674;
+  background: #164674;
+}
+.loginCard .loginSubmit:focus-visible {
+  outline: 3px solid rgba(10, 145, 189, .3);
+  outline-offset: 3px;
+}
+.loginCard .loginSubmit:disabled { cursor: wait; opacity: .65; }
+.loginCardFooter {
+  margin-top: 29px;
+  padding-top: 18px;
+  border-top: 1px solid #e9eef3;
+  color: #7b8c9a;
+  font-size: 12px;
+  text-align: center;
+}
+.loginAlert { display: flex; gap: 10px; margin-bottom: 22px; }
+.loginAlert svg { flex: 0 0 auto; }
+.loginFooter {
+  padding: 16px 20px;
+  color: #8293a3;
+  font-size: 11px;
+  text-align: center;
+}
+.loginToast {
+  position: fixed;
+  z-index: 50;
+  top: 72px;
+  right: 22px;
+  width: min(380px, calc(100vw - 44px));
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  overflow: hidden;
+  padding: 14px 16px 19px;
+  border: 1px solid #f0cdca;
+  border-radius: 9px;
+  background: #fff;
+  color: #a52f2b;
+  box-shadow: 0 10px 30px rgba(36, 56, 75, .13);
+}
+.loginToast > svg { flex: 0 0 auto; margin-top: 1px; }
+.loginToastCopy { display: grid; gap: 4px; font-size: 12px; line-height: 1.4; }
+.loginToastCopy strong { font-size: 13px; font-weight: 650; }
+.loginToastCopy span { color: #8b6870; }
+.loginToastProgress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: #c8433f;
+  transition: width 100ms linear;
+}
+@media (max-width: 780px) {
+  .loginMain { padding: 35px 22px; }
+  .loginLayout { width: min(510px, 100%); grid-template-columns: 1fr; gap: 30px; }
+  .loginIdentity h1 { font-size: clamp(36px, 7vw, 46px); }
+  .loginIdentityRule { margin: 0 0 14px; }
+  .loginIdentity p { margin-top: 16px; font-size: 14px; }
+  .loginIdentityFooter { display: none; }
+}
+@media (max-width: 480px) {
+  .loginShell { background: #fff; }
+  .loginTopbar {
+    position: relative;
+    z-index: 1;
+    height: 64px;
+    flex-basis: 64px;
+    padding: 0 24px;
+    border-bottom: 1px solid #e4eaf0;
+    box-shadow: 0 3px 12px rgba(15, 35, 56, .1);
+  }
+  .loginBrand { width: 238px; max-width: calc(100vw - 48px); height: 36px; }
+  .loginMain { display: block; padding: 0; background: #fff; }
+  .loginLayout { width: 100%; gap: 0; }
+  .loginIdentity {
+    padding: 28px 24px 26px;
+    border-bottom: 1px solid #e7edf2;
+    background: #fff;
+  }
+  .loginIdentity h1 {
+    margin: 0;
+    color: #0a284b;
+    font-size: clamp(30px, 8vw, 36px);
+    letter-spacing: -.045em;
+  }
+  .loginIdentityRule { width: 36px; margin: 0 0 16px; }
+  .loginIdentity p {
+    max-width: 300px;
+    margin-top: 14px;
+    color: #526b80;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .loginCard {
+    padding: 28px 24px 24px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .loginCardHeader { gap: 0; }
+  .loginSecureIcon { display: none; }
+  .loginCard h2 { font-size: 28px; }
+  .loginCardDescription { margin: 8px 0 26px; font-size: 14px; }
+  .loginCard .loginInput { height: 50px; background: #f8fafc; font-size: 16px; }
+  .loginCard .loginInput:-webkit-autofill {
+    -webkit-text-fill-color: #0a284b;
+    box-shadow: 0 0 0 1000px #f8fafc inset;
+  }
+  .loginPasswordToggle { width: 50px; height: 50px; }
+  .loginCard .loginSubmit { height: 52px; font-size: 15px; }
+  .loginFooter { padding: 14px 24px calc(18px + env(safe-area-inset-bottom)); background: #fff; }
+  .loginToast { top: 72px; right: 16px; width: calc(100vw - 32px); }
+
+  .loginShell:has(.loginInput:focus) .loginIdentity,
+  .loginShell:has(.loginInput:focus) .loginCardFooter,
+  .loginShell:has(.loginInput:focus) .loginFooter { display: none; }
+  .loginShell:has(.loginInput:focus) .loginMain { padding-bottom: 35vh; }
+  .loginShell:has(.loginInput:focus) .loginCard { padding-top: 18px; }
+  .loginShell:has(.loginInput:focus) .loginCardDescription { margin-bottom: 18px; }
+}
