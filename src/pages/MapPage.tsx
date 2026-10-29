@@ -41,7 +41,6 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../app/auth";
-import { API_BASE } from "../app/apiBase";
 import { fetchJson, inputStyle } from "./map/shared";
 import type { Camera, CameraIntel, CameraLpr, Radar, SmartCameraSessionResponse } from "./map/types";
 import {
@@ -119,6 +118,11 @@ const LIST_MODE_OPTIONS: Array<{ mode: ListMode; feature: string; label: string 
   { mode: "lpr", feature: "cameras_lpr", label: "LPR" },
   { mode: "radares", feature: "radares", label: "Radares" },
 ];
+
+const API_BASE =
+  (import.meta as any).env?.VITE_API_URL?.toString() ||
+  (import.meta as any).env?.VITE_API_BASE_URL?.toString() ||
+  "http://localhost:8000";
 
 const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN?.toString() || "";
 
