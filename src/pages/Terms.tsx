@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { ChevronRight, FileText } from "lucide-react";
 import pdfWorkerUrl from "../workers/pdf.worker.ts?worker&url";
+import atlasBrand from "../assets/atlas-brand.png";
 import { fetchJson } from "./map/shared";
+import "./terms.css";
 
 type Props = {
   apiBase: string;
@@ -189,264 +192,105 @@ export default function Terms({
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px 16px",
-        background:
-          "radial-gradient(1200px 600px at 10% 10%, rgba(0,186,255,0.12), transparent 60%)," +
-          "radial-gradient(1200px 600px at 90% 90%, rgba(255,160,64,0.10), transparent 60%)," +
-          "linear-gradient(180deg, #0b0b10, #141418)",
-        color: "#fff",
-      }}
-    >
-      <style>{`
-        .termsCard {
-          width: min(980px, 100%);
-          background: rgba(15,15,20,0.92);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 18px;
-          padding: 22px;
-          box-shadow: 0 24px 60px rgba(0,0,0,0.45);
-          backdrop-filter: blur(10px);
-        }
-        .termsTitle {
-          font-size: 20px;
-          letter-spacing: 2px;
-          font-weight: 700;
-          text-transform: uppercase;
-          margin: 0 0 12px 0;
-        }
-        .termsBody {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 12px;
-          padding: 10px;
-          max-height: 70vh;
-          overflow-y: auto;
-          overflow-x: hidden;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-        }
-        .termsBody::-webkit-scrollbar {
-          display: none;
-          width: 0;
-          height: 0;
-        }
-        .termsPages {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-        .termsPage {
-          width: 100%;
-          display: block;
-          border-radius: 8px;
-          user-select: none;
-          pointer-events: none;
-          background: #fff;
-        }
-        .termsLoading {
-          min-height: 52vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: rgba(255,255,255,0.72);
-          font-size: 14px;
-        }
-        .termsHint {
-          margin-top: 10px;
-          font-size: 12px;
-          color: rgba(255,255,255,0.62);
-        }
-        .termsRow {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-top: 14px;
-          position: relative;
-        }
-        .termsRowDisabled {
-          opacity: 0.62;
-          cursor: not-allowed;
-        }
-        .termsCheckboxInput {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 18px;
-          height: 18px;
-          margin: 0;
-          opacity: 0.0001;
-          cursor: pointer;
-        }
-        .termsCheckboxInput:disabled {
-          cursor: not-allowed;
-        }
-        .termsCheck {
-          width: 18px;
-          height: 18px;
-          border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.35);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(255,255,255,0.06);
-        }
-        .termsCheck[data-checked="true"] {
-          background: #00c0f3;
-          border-color: #00c0f3;
-          color: #ffffff;
-          font-weight: 700;
-        }
-        .termsButton {
-          margin-top: 18px;
-          width: 100%;
-          border: none;
-          border-radius: 999px;
-          padding: 12px 16px;
-          color: #fff;
-          font-weight: 700;
-          letter-spacing: 0.3px;
-          cursor: pointer;
-          background: linear-gradient(90deg, #00c0f3, #0a284b);
-          box-shadow: 0 12px 30px rgba(0, 24, 48, 0.35);
-          transition: transform 0.15s ease, opacity 0.15s ease;
-        }
-        .termsButton:hover {
-          transform: translateY(-1px);
-        }
-        .termsButton:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          transform: none;
-        }
-        .termsMeta {
-          margin-top: 8px;
-          font-size: 12px;
-          color: rgba(255,255,255,0.55);
-        }
-        .termsError {
-          margin-top: 10px;
-          color: #ffd4d4;
-          background: rgba(255,50,50,0.12);
-          border: 1px solid rgba(255,50,50,0.35);
-          padding: 10px 12px;
-          border-radius: 10px;
-          font-size: 13px;
-        }
-        .termsActions {
-          margin-top: 10px;
-          display: flex;
-          gap: 10px;
-        }
-        .termsRetry {
-          background: transparent;
-          color: #fff;
-          border: 1px solid rgba(255,255,255,0.35);
-          border-radius: 999px;
-          padding: 8px 12px;
-          cursor: pointer;
-          font-size: 12px;
-        }
-        @media (max-width: 640px) {
-          .termsCard {
-            padding: 16px;
-          }
-          .termsTitle {
-            font-size: 18px;
-          }
-          .termsBody {
-            max-height: 62vh;
-          }
-        }
-      `}</style>
+    <div className="termsScreen">
+      <header className="termsTopbar">
+        <img src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" className="termsTopbarBrand" />
+      </header>
 
-      <div className="termsCard">
-        <h1 className="termsTitle">TERMOS E CONDIÇÕES</h1>
+      <main className="termsMain">
+        <section className="termsCard" aria-labelledby="terms-title">
+          <div className="termsCardHeader">
+            <span className="termsHeaderIcon" aria-hidden="true"><FileText size={23} /></span>
+            <div className="termsHeaderCopy">
+              <span className="termsEyebrow">Confirmação de acesso</span>
+              <h1 className="termsTitle" id="terms-title">TERMOS E CONDIÇÕES</h1>
+              <p>Leia o documento até o final para continuar no sistema.</p>
+            </div>
+          </div>
 
-        <div className="termsBody" ref={termsBodyRef} data-testid="terms-scroll-container">
-          {pdfLoading && <div className="termsLoading">Carregando documento...</div>}
-          {!pdfLoading && pdfLoadErr && (
-            <div className="termsError">
-              {pdfLoadErr}
-              <div className="termsActions">
-                <button className="termsRetry" onClick={handleRetryPdfLoad} type="button">
-                  Recarregar documento
-                </button>
+          <div className="termsBody" ref={termsBodyRef} data-testid="terms-scroll-container">
+            {pdfLoading && <div className="termsLoading">Carregando documento...</div>}
+            {!pdfLoading && pdfLoadErr && (
+              <div className="termsError" role="alert">
+                {pdfLoadErr}
+                <div className="termsActions">
+                  <button className="termsRetry" onClick={handleRetryPdfLoad} type="button">
+                    Recarregar documento
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-          {!pdfLoading && !pdfLoadErr && (
-            <div className="termsPages">
-              {pdfPages.map((src, idx) => (
-                <img
-                  key={`terms-page-${idx + 1}`}
-                  src={src}
-                  alt={`Página ${idx + 1} do termo`}
-                  className="termsPage"
-                  loading={idx <= 1 ? "eager" : "lazy"}
-                  draggable={false}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-        {pdfLoading && (
-          <div className="termsHint">Aguarde o carregamento do documento para habilitar o aceite.</div>
-        )}
-        {pdfReady && !scrolledToEnd && (
-          <div className="termsHint">Role até o final do documento para habilitar o aceite.</div>
-        )}
-
-        <label
-          className={`termsRow ${!scrolledToEnd ? "termsRowDisabled" : ""}`}
-          data-testid="terms-agree-row"
-          data-scrolled-to-end={scrolledToEnd ? "true" : "false"}
-        >
-          <input
-            type="checkbox"
-            checked={agree}
-            onChange={(e) => setAgree(e.target.checked)}
-            disabled={!pdfReady || !scrolledToEnd}
-            className="termsCheckboxInput"
-            aria-label="Concordo com os termos e condições"
-          />
-          <span className="termsCheck" data-checked={agree ? "true" : "false"}>
-            {agree ? "✓" : ""}
-          </span>
-          <span>Concordo com os termos e condições</span>
-        </label>
-
-        <button
-          className="termsButton"
-          type="button"
-          onClick={handleAccept}
-          disabled={!canSubmit}
-          data-testid="terms-accept-button"
-        >
-          {submitting ? "Aceitando..." : "Aceitar"}
-        </button>
-
-        {currentVersion && <div className="termsMeta">Versão atual: {currentVersion}</div>}
-        {!currentVersion && <div className="termsMeta">Versão indisponível no momento.</div>}
-
-        {(error || submitErr) && (
-          <div className="termsError">
-            {error || submitErr}
-            {onRetry && (
-              <div className="termsActions">
-                <button className="termsRetry" onClick={onRetry} type="button">
-                  Tentar novamente
-                </button>
+            )}
+            {!pdfLoading && !pdfLoadErr && (
+              <div className="termsPages">
+                {pdfPages.map((src, idx) => (
+                  <img
+                    key={`terms-page-${idx + 1}`}
+                    src={src}
+                    alt={`Página ${idx + 1} do termo`}
+                    className="termsPage"
+                    loading={idx <= 1 ? "eager" : "lazy"}
+                    draggable={false}
+                  />
+                ))}
               </div>
             )}
           </div>
-        )}
-      </div>
+
+          <div className="termsFooter">
+            {pdfLoading && (
+              <div className="termsHint">Aguarde o carregamento do documento para habilitar o aceite.</div>
+            )}
+            {pdfReady && !scrolledToEnd && (
+              <div className="termsHint">Role até o final do documento para habilitar o aceite.</div>
+            )}
+
+            <div className="termsFooterActions">
+              <label
+                className={`termsRow ${!scrolledToEnd ? "termsRowDisabled" : ""}`}
+                data-testid="terms-agree-row"
+                data-scrolled-to-end={scrolledToEnd ? "true" : "false"}
+              >
+                <input
+                  type="checkbox"
+                  checked={agree}
+                  onChange={(e) => setAgree(e.target.checked)}
+                  disabled={!pdfReady || !scrolledToEnd}
+                  className="termsCheckboxInput"
+                  aria-label="Concordo com os termos e condições"
+                />
+                <span className="termsCheck" data-checked={agree ? "true" : "false"}>
+                  {agree ? "✓" : ""}
+                </span>
+                <span>Concordo com os termos e condições</span>
+              </label>
+
+              <button
+                className="termsButton"
+                type="button"
+                onClick={handleAccept}
+                disabled={!canSubmit}
+                data-testid="terms-accept-button"
+              >
+                {submitting ? "Aceitando..." : "Aceitar e continuar"}
+                {!submitting && <ChevronRight size={17} aria-hidden="true" />}
+              </button>
+            </div>
+
+            {(error || submitErr) && (
+              <div className="termsError" role="alert">
+                {error || submitErr}
+                {onRetry && (
+                  <div className="termsActions">
+                    <button className="termsRetry" onClick={onRetry} type="button">
+                      Tentar novamente
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
