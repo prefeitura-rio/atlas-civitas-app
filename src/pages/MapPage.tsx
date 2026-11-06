@@ -1133,6 +1133,25 @@ function makePoisGeoJSON(
 type PoiKind = "camera" | "camera_intel" | "camera_lpr" | "radar";
 
 const POI_KIND_ORDER: PoiKind[] = ["camera_intel", "camera_lpr", "camera", "radar"];
+const POI_MARKER_PIXEL_SIZES: Record<PoiKind, number> = {
+  camera: 24 * CAMERA_MARKER_ICON_SIZE,
+  camera_intel: 24 * CAMERA_INTEL_MARKER_ICON_SIZE,
+  camera_lpr: 24 * CAMERA_LPR_MARKER_ICON_SIZE,
+  radar: 24 * RADAR_MARKER_ICON_SIZE,
+};
+
+function sortStackedPoiFeatures(stack: Feature<Point, Record<string, unknown>>[]) {
+  return stack.slice().sort((a, b) => {
+    const aKind = asPoiKind(a.properties?.kind);
+    const bKind = asPoiKind(b.properties?.kind);
+    const aWeight = aKind ? POI_KIND_ORDER.indexOf(aKind) : 999;
+    const bWeight = bKind ? POI_KIND_ORDER.indexOf(bKind) : 999;
+    if (aWeight !== bWeight) return aWeight - bWeight;
+    const aCode = getPointCollectionCode(a.properties) || "";
+    const bCode = getPointCollectionCode(b.properties) || "";
+    return String(aCode).localeCompare(String(bCode), "pt-BR", { numeric: true });
+  });
+}
 
 function asPoiKind(value: unknown): PoiKind | null {
   if (value === "camera" || value === "camera_intel" || value === "camera_lpr" || value === "radar") {
@@ -1561,6 +1580,14 @@ export default function MapPage() {
   const hoverPreviewCountdownTimerRef = useRef<number | null>(null);
   const hoverPreviewGenerationRef = useRef(0);
   const poiCoordIndexRef = useRef<Map<string, Feature<Point, any>[]>>(new Map());
+  const stackCircleMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const stackCircleConnectionsRef = useRef<mapboxgl.Marker | null>(null);
+  const stackCircleLayerOpacityRef = useRef<Array<{ layerId: string; opacity: mapboxgl.DataDrivenPropertyValueSpecification<number> | undefined }>>([]);
+  const stackCircleKeyRef = useRef<string | null>(null);
+  const stackCircleCenterRef = useRef<[number, number] | null>(null);
+  const stackCircleRadiusRef = useRef(0);
+  const stackCircleAnimationRef = useRef(0);
+  const stackCirclePointerLeaveRef = useRef<(() => void) | null>(null);
   const suppressHoverHideRef = useRef(false);
   const suppressHoverHideTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -3016,6 +3043,22 @@ export default function MapPage() {
     if (src && typeof src.setData === "function") src.setData(geo);
   }
 
+  function clearStackCircle() {
+    stackCircleAnimationRef.current += 1;
+    const map = mapRef.current;
+    for (const { layerId, opacity } of stackCircleLayerOpacityRef.current) {
+      if (map?.getLayer(layerId)) map.setPaintProperty(layerId, "icon-opacity", opacity ?? 1);
+    }
+    stackCircleLayerOpacityRef.current = [];
+    stackCircleConnectionsRef.current?.remove();
+    stackCircleConnectionsRef.current = null;
+    stackCircleMarkersRef.current.forEach((marker) => marker.remove());
+    stackCircleMarkersRef.current = [];
+    stackCircleKeyRef.current = null;
+    stackCircleCenterRef.current = null;
+    stackCircleRadiusRef.current = 0;
+  }
+
   function updateSearchPin(map: mapboxgl.Map, pin: { lng: number; lat: number } | null) {
     if (!pin) {
       searchMarkerRef.current?.remove();
@@ -3207,6 +3250,7 @@ export default function MapPage() {
 
   function switchMapBaseStyle(next: MapBaseStyle) {
     if (mapBaseStyleRef.current === next) return;
+    clearStackCircle();
     mapBaseStyleRef.current = next;
     setMapBaseStyle(next);
     const map = mapRef.current;
@@ -3486,9 +3530,9 @@ export default function MapPage() {
       return null;
     }
 
-    function openStackedPopupIfNeeded(coords: [number, number]) {
+    function openStackedPopupIfNeeded(coords: [number, number], selectedIndex = -1) {
       const key = poiCoordKey(Number(coords[0]), Number(coords[1]));
-      const stack = (poiCoordIndexRef.current.get(key) || []).slice();
+      const stack = sortStackedPoiFeatures(poiCoordIndexRef.current.get(key) || []);
       if (stack.length <= 1) return false;
 
       const kindLabel: Record<PoiKind, string> = {
@@ -3522,17 +3566,6 @@ export default function MapPage() {
         radar: "stackPopupCode--radar",
       };
 
-      stack.sort((a, b) => {
-        const aKind = asPoiKind(a.properties?.kind);
-        const bKind = asPoiKind(b.properties?.kind);
-        const aWeight = aKind ? POI_KIND_ORDER.indexOf(aKind) : 999;
-        const bWeight = bKind ? POI_KIND_ORDER.indexOf(bKind) : 999;
-        if (aWeight !== bWeight) return aWeight - bWeight;
-        const aCode = getPointCollectionCode(a.properties) || "";
-        const bCode = getPointCollectionCode(b.properties) || "";
-        return String(aCode).localeCompare(String(bCode), "pt-BR", { numeric: true });
-      });
-
       const counts: Record<PoiKind, number> = {
         camera: 0,
         camera_intel: 0,
@@ -3554,7 +3587,7 @@ export default function MapPage() {
         .join("");
 
       const itemsHtml = stack
-        .map((feature) => {
+        .map((feature, index) => {
           const info = getPoiInfo(feature);
           if (!info || !info.kind) return "";
           const p = feature.properties || {};
@@ -3577,7 +3610,7 @@ export default function MapPage() {
               : "";
 
           return `
-            <div class="stackPopupItem ${kindItemCardClass[info.kind]}">
+            <div class="stackPopupItem ${kindItemCardClass[info.kind]}${index === selectedIndex ? " stackPopupItemSelected" : ""}" style="--equipment-accent:${visual.accent};">
               <div class="stackPopupItemHead">
                 <div class="stackPopupItemHeadLeft">
                   <span
@@ -3624,7 +3657,154 @@ export default function MapPage() {
       bindPopupCloseButton();
       bindSmartCameraPopupActions();
       centerMobilePopup();
+      if (selectedIndex >= 0) {
+        const list = popup?.getElement()?.querySelector<HTMLElement>(".stackPopupList");
+        const selected = list?.querySelector<HTMLElement>(".stackPopupItemSelected");
+        if (list && selected) list.scrollTop = selected.offsetTop - list.offsetTop;
+      }
       return true;
+    }
+
+    function showStackCircle(e: mapboxgl.MapLayerMouseEvent) {
+      if (isMobileRef.current || areaDrawModeRef.current || !window.matchMedia("(hover: hover)").matches) return;
+      const feature = e.features?.[0];
+      if (feature?.geometry?.type !== "Point") return;
+      const coords = feature.geometry.coordinates as [number, number];
+      const key = poiCoordKey(coords[0], coords[1]);
+      if (stackCircleKeyRef.current === key) return;
+      const activeCenter = stackCircleCenterRef.current;
+      if (activeCenter) {
+        const centerPoint = map.project(activeCenter);
+        if (Math.hypot(e.point.x - centerPoint.x, e.point.y - centerPoint.y) <= stackCircleRadiusRef.current + 44) return;
+      }
+
+      clearStackCircle();
+      const stack = sortStackedPoiFeatures(poiCoordIndexRef.current.get(key) || []);
+      if (stack.length <= 1) return;
+
+      hideHoverPreview();
+      stackCircleKeyRef.current = key;
+      stackCircleCenterRef.current = coords;
+      const radius = Math.max(50, (stack.length * 56) / (2 * Math.PI));
+      stackCircleRadiusRef.current = radius;
+      for (const layerId of [LAYERS.cameras_points, LAYERS.cameras_intel_points, LAYERS.cameras_lpr_points, LAYERS.radares_points]) {
+        if (!map.getLayer(layerId)) continue;
+        stackCircleLayerOpacityRef.current.push({ layerId, opacity: map.getPaintProperty(layerId, "icon-opacity") });
+        map.setPaintProperty(layerId, "icon-opacity", 0.2);
+      }
+
+      const extent = radius + 28;
+      const connections = document.createElement("div");
+      connections.className = "stackCircleConnections";
+      connections.style.width = `${2 * extent}px`;
+      connections.style.height = connections.style.width;
+      connections.setAttribute("aria-hidden", "true");
+      const svgNamespace = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNamespace, "svg");
+      svg.setAttribute("viewBox", `${-extent} ${-extent} ${2 * extent} ${2 * extent}`);
+      svg.setAttribute("focusable", "false");
+      connections.appendChild(svg);
+      stackCircleConnectionsRef.current = new mapboxgl.Marker({ element: connections, anchor: "center" })
+        .setLngLat(coords)
+        .addTo(map);
+      const spokes: Array<{ halo: SVGLineElement; line: SVGLineElement; angle: number; length: number }> = [];
+
+      stackCircleMarkersRef.current = stack.map((item, index) => {
+        const kind = asPoiKind(item.properties?.kind);
+        const info = getPoiInfo(item);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "stackCircleMarker";
+        const accent = kind ? getPoiVisual(kind).accent : "#64748b";
+        const iconSize = kind ? POI_MARKER_PIXEL_SIZES[kind] : 24;
+        button.style.setProperty("--equipment-accent", accent);
+        button.style.setProperty("--equipment-icon-size", `${iconSize}px`);
+        const label = getPointCollectionCode(item.properties) || info?.title || `Aparelho ${index + 1}`;
+        button.title = `${info?.title || "Equipamento"} · ${label}`;
+        button.setAttribute("aria-label", button.title);
+
+        const icon = document.createElement("img");
+        icon.className = "stackCircleMarkerIcon";
+        icon.alt = "";
+        icon.draggable = false;
+        if (kind) {
+          icon.src = getPoiIconSource(mapBaseStyleRef.current, kind);
+        }
+        button.appendChild(icon);
+
+        const spoke = document.createElementNS(svgNamespace, "g");
+        spoke.classList.add("stackCircleSpoke");
+        spoke.style.setProperty("--equipment-accent", accent);
+        const halo = document.createElementNS(svgNamespace, "line");
+        halo.classList.add("stackCircleSpokeHalo");
+        const line = document.createElementNS(svgNamespace, "line");
+        line.classList.add("stackCircleSpokeLine");
+        spoke.append(halo, line);
+        svg.appendChild(spoke);
+        spokes.push({ halo, line, angle: -Math.PI / 2 + (2 * Math.PI * index) / stack.length, length: radius - iconSize / 2 - 4 });
+        let pointerOver = false;
+        let focused = false;
+        const updateSpokeHighlight = () => spoke.classList.toggle("stackCircleSpokeActive", pointerOver || focused);
+        button.addEventListener("mouseenter", () => { pointerOver = true; updateSpokeHighlight(); });
+        button.addEventListener("mouseleave", () => { pointerOver = false; updateSpokeHighlight(); });
+        button.addEventListener("focus", () => { focused = true; updateSpokeHighlight(); });
+        button.addEventListener("blur", () => { focused = false; updateSpokeHighlight(); });
+
+        const code = document.createElement("span");
+        code.className = "stackCircleMarkerCode";
+        code.textContent = label;
+        button.appendChild(code);
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          hideHoverPreview();
+          setSelectionRing(coords[0], coords[1]);
+          openStackedPopupIfNeeded(coords, index);
+        });
+
+        const marker = new mapboxgl.Marker({ element: button, anchor: "center", offset: [0, 0] })
+          .setLngLat(coords)
+          .addTo(map);
+        return marker;
+      });
+
+      const origin = document.createElementNS(svgNamespace, "circle");
+      origin.classList.add("stackCircleOrigin");
+      origin.setAttribute("r", "3.5");
+      svg.appendChild(origin);
+
+      const setCircleProgress = (progress: number) => {
+        svg.style.opacity = String(progress);
+        stackCircleMarkersRef.current.forEach((marker, index) => {
+          const { halo, line, angle, length } = spokes[index];
+          const x = Math.cos(angle);
+          const y = Math.sin(angle);
+          for (const segment of [halo, line]) {
+            segment.setAttribute("x2", String(x * length * progress));
+            segment.setAttribute("y2", String(y * length * progress));
+          }
+          marker.setOffset([
+            x * radius * progress,
+            y * radius * progress,
+          ]);
+        });
+      };
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        setCircleProgress(1);
+      } else {
+        const animation = stackCircleAnimationRef.current;
+        const duration = 260;
+        let startedAt: number | null = null;
+        const animate = (now: number) => {
+          if (stackCircleAnimationRef.current !== animation) return;
+          if (startedAt === null) startedAt = now;
+          const elapsed = Math.min((now - startedAt) / duration, 1);
+          const progress = 1 - Math.pow(1 - elapsed, 3);
+          setCircleProgress(progress);
+          if (elapsed < 1) window.requestAnimationFrame(animate);
+        };
+        window.requestAnimationFrame(animate);
+      }
     }
 
     function markMobileMapGesture() {
@@ -3753,6 +3933,20 @@ export default function MapPage() {
       map.on("mouseleave", lid, setCursorDefault);
     }
 
+    for (const lid of [LAYERS.cameras_points, LAYERS.cameras_intel_points, LAYERS.cameras_lpr_points, LAYERS.radares_points]) {
+      map.on("mouseenter", lid, showStackCircle);
+    }
+    map.on("mousemove", (e) => {
+      const center = stackCircleCenterRef.current;
+      if (!center) return;
+      const point = map.project(center);
+      const distance = Math.hypot(e.point.x - point.x, e.point.y - point.y);
+      if (distance > stackCircleRadiusRef.current + 44) clearStackCircle();
+    });
+    map.on("movestart", clearStackCircle);
+    map.getContainer().addEventListener("pointerleave", clearStackCircle);
+    stackCirclePointerLeaveRef.current = clearStackCircle;
+
     map.on("mouseenter", LAYERS.area_draw_points, () => {
       map.getCanvas().style.cursor =
         draggingAreaPointIndexRef.current !== null ? "grabbing" : "grab";
@@ -3852,19 +4046,21 @@ export default function MapPage() {
     });
 
     function showCommonCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
+      if (stackCircleKeyRef.current) return;
       setCursorPointer();
       clearHoverPreviewTimer();
       clearHoverPreviewCloseTimer();
       clearHoverPreviewCountdownTimer();
-      if (!hasStreamingAccessRef.current) return;
       const f: any = e.features?.[0];
       if (!f) return;
+      const coords = (f.geometry as any).coordinates as [number, number];
+      if ((poiCoordIndexRef.current.get(poiCoordKey(coords[0], coords[1])) || []).length > 1) return;
+      if (!hasStreamingAccessRef.current) return;
 
       const p = f.properties || {};
       const cameraId = cleanString(p.camera_id || p.id);
       if (!cameraId) return;
       const requestGeneration = hoverPreviewGenerationRef.current;
-      const coords = (f.geometry as any).coordinates as [number, number];
       const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
       const navSafeTop = 96;
       const previewHeight = 240;
@@ -3974,21 +4170,23 @@ export default function MapPage() {
     });
 
     function showSmartCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
+      if (stackCircleKeyRef.current) return;
       clearHoverPreviewTimer();
       clearHoverPreviewCloseTimer();
       clearHoverPreviewCountdownTimer();
       setCursorPointer();
 
-      if (!hasSmartCameraStreamingAccessRef.current) return;
       const f: any = e.features?.[0];
       if (!f) return;
+      const coords = (f.geometry as any).coordinates as [number, number];
+      if ((poiCoordIndexRef.current.get(poiCoordKey(coords[0], coords[1])) || []).length > 1) return;
+      if (!hasSmartCameraStreamingAccessRef.current) return;
 
       const p = f.properties || {};
       const smartId = cleanString(p.id);
       if (!smartId) return;
       if (isSmartCameraStreamingUnavailable(smartId)) return;
 
-      const coords = (f.geometry as any).coordinates as [number, number];
       const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
       const navSafeTop = 96;
       const previewHeight = 240;
@@ -4776,6 +4974,11 @@ export default function MapPage() {
 
     return () => {
       map.off("style.load", handleStyleLoad);
+      if (stackCirclePointerLeaveRef.current) {
+        map.getContainer().removeEventListener("pointerleave", stackCirclePointerLeaveRef.current);
+        stackCirclePointerLeaveRef.current = null;
+      }
+      clearStackCircle();
       popupRef.current?.remove();
       popupRef.current = null;
       searchMarkerRef.current?.remove();
@@ -5709,6 +5912,7 @@ export default function MapPage() {
       }
     }
     poiCoordIndexRef.current = index;
+    clearStackCircle();
   }, [poisGeo]);
 
   const bairrosList = useMemo(() => {

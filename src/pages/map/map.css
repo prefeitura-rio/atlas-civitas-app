@@ -3050,6 +3050,119 @@
   gap: 5px;
 }
 
+.stackPopupItemSelected {
+  outline: 2px solid var(--equipment-accent);
+  outline-offset: -2px;
+}
+
+.stackCircleConnections {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.stackCircleConnections svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+.stackCircleSpoke line {
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.stackCircleSpokeHalo {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1;
+}
+
+.stackCircleSpokeLine {
+  stroke: rgba(71, 85, 105, 0.65);
+  stroke-width: 0.65;
+}
+
+.stackCircleSpokeActive .stackCircleSpokeHalo {
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 1.5;
+}
+
+.stackCircleSpokeActive .stackCircleSpokeLine {
+  stroke: var(--equipment-accent);
+  stroke-width: 1;
+}
+
+.stackCircleOrigin {
+  fill: #fff;
+  stroke: #64748b;
+  stroke-width: 1.5;
+}
+
+.stackCircleMarker {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.stackCircleMarker:hover,
+.stackCircleMarker:focus-visible {
+  z-index: 3;
+}
+
+.stackCircleMarker:hover .stackCircleMarkerIcon,
+.stackCircleMarker:focus-visible .stackCircleMarkerIcon {
+  filter: drop-shadow(0 0 5px var(--equipment-accent));
+}
+
+.stackCircleMarker:focus-visible {
+  outline: 2px solid var(--equipment-accent);
+  outline-offset: 2px;
+}
+
+.stackCircleMarkerIcon {
+  width: var(--equipment-icon-size, 24px);
+  height: var(--equipment-icon-size, 24px);
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.65));
+  transition: filter 160ms ease;
+}
+
+.stackCircleMarkerCode {
+  position: absolute;
+  top: calc(50% + var(--equipment-icon-size, 24px) / 2 + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: block;
+  width: max-content;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-shadow: 0 1px 3px #000, 0 0 2px #000;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stackCircleMarkerIcon,
+  .stackCircleSpoke line {
+    transition: none;
+  }
+}
+
 .stackPopupItem--camera {
   border-left: 3px solid #004881;
 }
