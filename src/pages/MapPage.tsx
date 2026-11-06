@@ -1840,7 +1840,7 @@ export default function MapPage() {
   const civitasContactWhatsappHref = "https://wa.me/5521989091247";
   const civitasContactEmail = "civitas@dados.rio";
   const civitasContactEmailHref = `mailto:${civitasContactEmail}`;
-  const civitasModelPdfHref = "/Modelo%20Of%C3%ADcio%20CIVITAS%20-%20JAN26.pdf";
+  const civitasModelPdfHref = "/Modelo_Oficio_CIVITAS_NOV26.pdf";
   useEffect(() => {
     gpsOnRef.current = gpsOn;
   }, [gpsOn]);
