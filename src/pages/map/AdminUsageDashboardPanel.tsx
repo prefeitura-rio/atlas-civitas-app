@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Building2, Download, FileDown, Loader2, Radio, RefreshCw, Search, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import { fetchJson } from "./shared";
+import { fetchWithFriendlyNetworkError, SERVER_UNAVAILABLE_MESSAGE } from "../../app/errorMessages";
 import "./usage-dashboard.css";
 
 type UsageSummary = {
@@ -389,12 +390,13 @@ export function AdminUsageDashboardPanel({
       ? clean
       : `${apiBase}${clean.startsWith("/") ? "" : "/"}${clean}`;
 
-    const res = await fetch(url, {
+    const res = await fetchWithFriendlyNetworkError(url, {
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
     if (!res.ok) {
+      if (res.status >= 500) throw new Error(SERVER_UNAVAILABLE_MESSAGE);
       throw new Error(`Falha no download (${res.status}) ${res.statusText}`);
     }
 
