@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { fetchJson, inputStyle } from "./map/shared";
+import { fetchWithFriendlyNetworkError, SERVER_UNAVAILABLE_MESSAGE } from "../app/errorMessages";
 import type { Camera, CameraIntel, CameraLpr, Radar, SmartCameraSessionResponse } from "./map/types";
 import {
   canAccessAdminBackoffice,
@@ -90,6 +91,7 @@ type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "smar
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
 type AreaDrawPolygonPoints = Array<[number, number]>;
+type PreviewPopupAnchor = "top" | "bottom" | "left" | "right" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
   { key: "users", label: "Usuários" },
@@ -1574,11 +1576,12 @@ export default function MapPage() {
   const hasSmartCameraStreamingAccessRef = useRef(false);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
   const hoverPreviewPopupRef = useRef<mapboxgl.Popup | null>(null);
-  const hoverPreviewAnchorRef = useRef<"top" | "bottom">("bottom");
+  const hoverPreviewAnchorRef = useRef<PreviewPopupAnchor>("bottom");
   const hoverPreviewTimerRef = useRef<number | null>(null);
   const hoverPreviewCloseTimerRef = useRef<number | null>(null);
   const hoverPreviewCountdownTimerRef = useRef<number | null>(null);
   const hoverPreviewGenerationRef = useRef(0);
+  const hideStackCirclePreviewRef = useRef<(() => void) | null>(null);
   const poiCoordIndexRef = useRef<Map<string, Feature<Point, any>[]>>(new Map());
   const stackCircleMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const stackCircleConnectionsRef = useRef<mapboxgl.Marker | null>(null);
@@ -1587,6 +1590,9 @@ export default function MapPage() {
   const stackCircleCenterRef = useRef<[number, number] | null>(null);
   const stackCircleRadiusRef = useRef(0);
   const stackCircleAnimationRef = useRef(0);
+  const stackPreviewPanActiveRef = useRef(false);
+  const stackPreviewPanGenerationRef = useRef(0);
+  const stackPreviewLockedMarkerRef = useRef<HTMLButtonElement | null>(null);
   const stackCirclePointerLeaveRef = useRef<(() => void) | null>(null);
   const suppressHoverHideRef = useRef(false);
   const suppressHoverHideTimerRef = useRef<number | null>(null);
@@ -3044,6 +3050,10 @@ export default function MapPage() {
   }
 
   function clearStackCircle() {
+    stackPreviewPanGenerationRef.current += 1;
+    stackPreviewPanActiveRef.current = false;
+    stackPreviewLockedMarkerRef.current = null;
+    if (stackCircleKeyRef.current) hideStackCirclePreviewRef.current?.();
     stackCircleAnimationRef.current += 1;
     const map = mapRef.current;
     for (const { layerId, opacity } of stackCircleLayerOpacityRef.current) {
@@ -3327,7 +3337,7 @@ export default function MapPage() {
     }
     const popup = popupRef.current;
 
-    function ensureHoverPreviewPopup(anchor: "top" | "bottom") {
+    function ensureHoverPreviewPopup(anchor: PreviewPopupAnchor) {
       if (hoverPreviewPopupRef.current && hoverPreviewAnchorRef.current === anchor) {
         return hoverPreviewPopupRef.current;
       }
@@ -3336,11 +3346,52 @@ export default function MapPage() {
         offset: 14,
         closeButton: false,
         closeOnClick: false,
+        maxWidth: "360px",
         className: "cameraHoverPreviewPopup",
         anchor,
       });
       hoverPreviewAnchorRef.current = anchor;
       return hoverPreviewPopupRef.current;
+    }
+
+    function getHoverPreviewPlacement(
+      position: [number, number],
+      pointY: number,
+      stackAnchor?: PreviewPopupAnchor
+    ) {
+      const minTop = 96 + 6;
+      const isNearTop = pointY < minTop + 240;
+      const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
+      const opensDownward = stackAnchor === "top" || stackAnchor === "top-left" || stackAnchor === "top-right";
+      const panY = opensDownward ? Math.max(0, pointY + 30 + 240 - (map.getContainer().clientHeight - 12)) : 0;
+      return {
+        position,
+        anchor: panY > 0 ? "top" : stackAnchor ?? (isNearTop ? "top" : "bottom"),
+        offset: stackAnchor ? 30 : isNearTop ? [0, offsetY] as [number, number] : 14,
+        panY,
+      };
+    }
+
+    function releaseStackPreviewPointerLock() {
+      const lockedMarker = stackPreviewLockedMarkerRef.current;
+      stackPreviewLockedMarkerRef.current = null;
+      lockedMarker?.dispatchEvent(new MouseEvent("mouseleave"));
+    }
+
+    function panStackPreviewIntoView(position: [number, number], panY: number, button?: HTMLButtonElement) {
+      if (panY <= 0) return;
+      const mapContainer = map.getContainer();
+      const pointX = map.project(position).x;
+      const generation = ++stackPreviewPanGenerationRef.current;
+      stackPreviewPanActiveRef.current = true;
+      stackPreviewLockedMarkerRef.current = button ?? null;
+      map.once("moveend", () => {
+        if (generation === stackPreviewPanGenerationRef.current) stackPreviewPanActiveRef.current = false;
+      });
+      map.panBy([pointX - mapContainer.clientWidth / 2, panY], {
+        duration: 750,
+        easing: (t) => t * t * (3 - 2 * t),
+      });
     }
 
     function clearHoverPreviewTimer() {
@@ -3391,6 +3442,7 @@ export default function MapPage() {
       clearHoverPreviewCountdownTimer();
       hoverPreviewPopupRef.current?.remove();
     }
+    hideStackCirclePreviewRef.current = hideHoverPreview;
 
     function bindPopupCloseButton() {
       if (!popup?.isOpen()) return;
@@ -3708,6 +3760,10 @@ export default function MapPage() {
         .setLngLat(coords)
         .addTo(map);
       const spokes: Array<{ halo: SVGLineElement; line: SVGLineElement; angle: number; length: number }> = [];
+      const previewPopupAnchors: PreviewPopupAnchor[] = [
+        "bottom", "bottom-left", "left", "top-left",
+        "top", "top-right", "right", "bottom-right",
+      ];
 
       stackCircleMarkersRef.current = stack.map((item, index) => {
         const kind = asPoiKind(item.properties?.kind);
@@ -3720,8 +3776,9 @@ export default function MapPage() {
         button.style.setProperty("--equipment-accent", accent);
         button.style.setProperty("--equipment-icon-size", `${iconSize}px`);
         const label = getPointCollectionCode(item.properties) || info?.title || `Aparelho ${index + 1}`;
-        button.title = `${info?.title || "Equipamento"} · ${label}`;
-        button.setAttribute("aria-label", button.title);
+        const accessibleLabel = `${info?.title || "Equipamento"} · ${label}`;
+        button.setAttribute("aria-label", accessibleLabel);
+        if (kind !== "camera" && kind !== "camera_intel") button.title = accessibleLabel;
 
         const icon = document.createElement("img");
         icon.className = "stackCircleMarkerIcon";
@@ -3746,7 +3803,11 @@ export default function MapPage() {
         let focused = false;
         const updateSpokeHighlight = () => spoke.classList.toggle("stackCircleSpokeActive", pointerOver || focused);
         button.addEventListener("mouseenter", () => { pointerOver = true; updateSpokeHighlight(); });
-        button.addEventListener("mouseleave", () => { pointerOver = false; updateSpokeHighlight(); });
+        button.addEventListener("mouseleave", () => {
+          if (stackPreviewLockedMarkerRef.current === button) return;
+          pointerOver = false;
+          updateSpokeHighlight();
+        });
         button.addEventListener("focus", () => { focused = true; updateSpokeHighlight(); });
         button.addEventListener("blur", () => { focused = false; updateSpokeHighlight(); });
 
@@ -3754,9 +3815,41 @@ export default function MapPage() {
         code.className = "stackCircleMarkerCode";
         code.textContent = label;
         button.appendChild(code);
+        if (kind === "camera" || kind === "camera_intel") {
+          const angle = spokes[index].angle;
+          const previewPopupAnchor = previewPopupAnchors[Math.round((angle + Math.PI / 2) / (Math.PI / 4)) % 8];
+          button.addEventListener("mouseenter", () => {
+            if (stackPreviewLockedMarkerRef.current === button) {
+              stackPreviewLockedMarkerRef.current = null;
+              return;
+            }
+            releaseStackPreviewPointerLock();
+            hideHoverPreview();
+            const markerRect = button.getBoundingClientRect();
+            const mapRect = map.getContainer().getBoundingClientRect();
+            const point = {
+              x: markerRect.left + markerRect.width / 2 - mapRect.left,
+              y: markerRect.top + markerRect.height / 2 - mapRect.top,
+            };
+            const anchor = map.unproject([point.x, point.y]).toArray() as [number, number];
+            const previewEvent = { features: [item], point };
+            if (kind === "camera") showCommonCameraHoverPreview(previewEvent, true, anchor, previewPopupAnchor, button);
+            else showSmartCameraHoverPreview(previewEvent, true, anchor, previewPopupAnchor, button);
+          });
+          button.addEventListener("mouseleave", () => {
+            if (stackPreviewLockedMarkerRef.current !== button && !stackPreviewPanActiveRef.current) hideHoverPreview();
+          });
+        } else {
+          button.addEventListener("mouseenter", () => {
+            if (!stackPreviewLockedMarkerRef.current) return;
+            releaseStackPreviewPointerLock();
+            hideHoverPreview();
+          });
+        }
         button.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          stackPreviewLockedMarkerRef.current = null;
           hideHoverPreview();
           setSelectionRing(coords[0], coords[1]);
           openStackedPopupIfNeeded(coords, index);
@@ -3938,12 +4031,18 @@ export default function MapPage() {
     }
     map.on("mousemove", (e) => {
       const center = stackCircleCenterRef.current;
-      if (!center) return;
+      if (!center || stackPreviewPanActiveRef.current) return;
+      if (stackPreviewLockedMarkerRef.current) {
+        if (hoverPreviewPopupRef.current?.isOpen()) return;
+        releaseStackPreviewPointerLock();
+      }
       const point = map.project(center);
       const distance = Math.hypot(e.point.x - point.x, e.point.y - point.y);
       if (distance > stackCircleRadiusRef.current + 44) clearStackCircle();
     });
-    map.on("movestart", clearStackCircle);
+    map.on("movestart", () => {
+      if (!stackPreviewPanActiveRef.current) clearStackCircle();
+    });
     map.getContainer().addEventListener("pointerleave", clearStackCircle);
     stackCirclePointerLeaveRef.current = clearStackCircle;
 
@@ -4045,8 +4144,14 @@ export default function MapPage() {
       stopAreaPointDrag();
     });
 
-    function showCommonCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
-      if (stackCircleKeyRef.current) return;
+    function showCommonCameraHoverPreview(
+      e: { features?: readonly unknown[]; point?: { y: number } },
+      fromStack = false,
+      previewAnchor?: [number, number],
+      stackPopupAnchor?: PreviewPopupAnchor,
+      stackButton?: HTMLButtonElement
+    ) {
+      if (stackCircleKeyRef.current && !fromStack) return;
       setCursorPointer();
       clearHoverPreviewTimer();
       clearHoverPreviewCloseTimer();
@@ -4054,20 +4159,18 @@ export default function MapPage() {
       const f: any = e.features?.[0];
       if (!f) return;
       const coords = (f.geometry as any).coordinates as [number, number];
-      if ((poiCoordIndexRef.current.get(poiCoordKey(coords[0], coords[1])) || []).length > 1) return;
+      if (!fromStack && (poiCoordIndexRef.current.get(poiCoordKey(coords[0], coords[1])) || []).length > 1) return;
+      const anchor = previewAnchor ?? coords;
       if (!hasStreamingAccessRef.current) return;
 
       const p = f.properties || {};
       const cameraId = cleanString(p.camera_id || p.id);
       if (!cameraId) return;
       const requestGeneration = hoverPreviewGenerationRef.current;
-      const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
-      const navSafeTop = 96;
-      const previewHeight = 240;
-      const minTop = navSafeTop + 6;
-      const isNearTop = pointY < minTop + previewHeight;
-      const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
-      const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
+      const pointY = e.point?.y ?? map.project({ lng: anchor[0], lat: anchor[1] }).y;
+      const placement = getHoverPreviewPlacement(anchor, pointY, stackPopupAnchor);
+      const hoverPreviewPopup = ensureHoverPreviewPopup(placement.anchor);
+      panStackPreviewIntoView(anchor, placement.panY, stackButton);
       const playerAspectRatio = 16 / 9;
       // O player da Tixxi confunde iframes menores que a janela com DevTools aberto
       // e apaga o próprio vídeo. Mantemos um viewport interno do tamanho da tela e
@@ -4086,8 +4189,8 @@ export default function MapPage() {
 
       hoverPreviewTimerRef.current = window.setTimeout(async () => {
         hoverPreviewPopup
-          ?.setLngLat(coords)
-          .setOffset(isNearTop ? [0, offsetY] : 14)
+          ?.setLngLat(placement.position)
+          .setOffset(placement.offset)
           .setHTML(`
             <div style="width:360px;background:#000;">
               <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:12px;letter-spacing:.02em;">
@@ -4109,8 +4212,8 @@ export default function MapPage() {
           if (requestGeneration !== hoverPreviewGenerationRef.current) return;
 
           hoverPreviewPopup
-            ?.setLngLat(coords)
-            .setOffset(isNearTop ? [0, offsetY] : 14)
+            ?.setLngLat(placement.position)
+            .setOffset(placement.offset)
             .setHTML(`
               <div style="width:360px;background:#000;">
                 <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
@@ -4148,8 +4251,8 @@ export default function MapPage() {
           if (requestGeneration !== hoverPreviewGenerationRef.current) return;
           clearHoverPreviewCountdownTimer();
           hoverPreviewPopup
-            ?.setLngLat(coords)
-            .setOffset(isNearTop ? [0, offsetY] : 14)
+            ?.setLngLat(placement.position)
+            .setOffset(placement.offset)
             .setHTML(`
               <div style="width:360px;background:#000;">
                 <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
@@ -4166,11 +4269,17 @@ export default function MapPage() {
 
     map.on("mouseleave", LAYERS.cameras_points, () => {
       setCursorDefault();
-      hideHoverPreview();
+      if (!stackCircleKeyRef.current) hideHoverPreview();
     });
 
-    function showSmartCameraHoverPreview(e: mapboxgl.MapLayerMouseEvent) {
-      if (stackCircleKeyRef.current) return;
+    function showSmartCameraHoverPreview(
+      e: { features?: readonly unknown[]; point?: { y: number } },
+      fromStack = false,
+      previewAnchor?: [number, number],
+      stackPopupAnchor?: PreviewPopupAnchor,
+      stackButton?: HTMLButtonElement
+    ) {
+      if (stackCircleKeyRef.current && !fromStack) return;
       clearHoverPreviewTimer();
       clearHoverPreviewCloseTimer();
       clearHoverPreviewCountdownTimer();
@@ -4179,7 +4288,8 @@ export default function MapPage() {
       const f: any = e.features?.[0];
       if (!f) return;
       const coords = (f.geometry as any).coordinates as [number, number];
-      if ((poiCoordIndexRef.current.get(poiCoordKey(coords[0], coords[1])) || []).length > 1) return;
+      if (!fromStack && (poiCoordIndexRef.current.get(poiCoordKey(coords[0], coords[1])) || []).length > 1) return;
+      const anchor = previewAnchor ?? coords;
       if (!hasSmartCameraStreamingAccessRef.current) return;
 
       const p = f.properties || {};
@@ -4187,19 +4297,16 @@ export default function MapPage() {
       if (!smartId) return;
       if (isSmartCameraStreamingUnavailable(smartId)) return;
 
-      const pointY = e.point?.y ?? map.project({ lng: coords[0], lat: coords[1] }).y;
-      const navSafeTop = 96;
-      const previewHeight = 240;
-      const minTop = navSafeTop + 6;
-      const isNearTop = pointY < minTop + previewHeight;
-      const offsetY = isNearTop ? Math.max(14, minTop - pointY + 14) : 14;
-      const hoverPreviewPopup = ensureHoverPreviewPopup(isNearTop ? "top" : "bottom");
+      const pointY = e.point?.y ?? map.project({ lng: anchor[0], lat: anchor[1] }).y;
+      const placement = getHoverPreviewPlacement(anchor, pointY, stackPopupAnchor);
+      const hoverPreviewPopup = ensureHoverPreviewPopup(placement.anchor);
+      panStackPreviewIntoView(anchor, placement.panY, stackButton);
       const requestGeneration = hoverPreviewGenerationRef.current;
 
       hoverPreviewTimerRef.current = window.setTimeout(async () => {
         hoverPreviewPopup
-          ?.setLngLat(coords)
-          .setOffset(isNearTop ? [0, offsetY] : 14)
+          ?.setLngLat(placement.position)
+          .setOffset(placement.offset)
           .setHTML(`
             <div style="width:360px;background:#000;">
               <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:12px;letter-spacing:.02em;">
@@ -4217,8 +4324,8 @@ export default function MapPage() {
           if (!isHttpsUrl(session.sessionUrl)) {
             clearHoverPreviewCountdownTimer();
             hoverPreviewPopup
-              ?.setLngLat(coords)
-              .setOffset(isNearTop ? [0, offsetY] : 14)
+              ?.setLngLat(placement.position)
+              .setOffset(placement.offset)
               .setHTML(`
                 <div style="width:360px;background:#000;">
                   <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
@@ -4232,8 +4339,8 @@ export default function MapPage() {
           }
 
           hoverPreviewPopup
-            ?.setLngLat(coords)
-            .setOffset(isNearTop ? [0, offsetY] : 14)
+            ?.setLngLat(placement.position)
+            .setOffset(placement.offset)
             .setHTML(`
               <div style="width:360px;background:#000;">
                 <div style="width:360px;height:203px;overflow:hidden;position:relative;background:#000;">
@@ -4271,8 +4378,8 @@ export default function MapPage() {
             markSmartCameraStreamingUnavailable(smartId);
             clearHoverPreviewCountdownTimer();
             hoverPreviewPopup
-              ?.setLngLat(coords)
-              .setOffset(isNearTop ? [0, offsetY] : 14)
+              ?.setLngLat(placement.position)
+              .setOffset(placement.offset)
               .setHTML(`
                 <div style="width:360px;background:#000;">
                   <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
@@ -4285,8 +4392,8 @@ export default function MapPage() {
           }
           clearHoverPreviewCountdownTimer();
           hoverPreviewPopup
-            ?.setLngLat(coords)
-            .setOffset(isNearTop ? [0, offsetY] : 14)
+            ?.setLngLat(placement.position)
+            .setOffset(placement.offset)
             .setHTML(`
               <div style="width:360px;background:#000;">
                 <div style="width:360px;height:203px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-size:13px;line-height:1.5;text-align:center;padding:20px;box-sizing:border-box;">
@@ -4308,7 +4415,7 @@ export default function MapPage() {
     map.on("mouseenter", LAYERS.cameras_intel_points, showSmartCameraHoverPreview);
     map.on("mouseleave", LAYERS.cameras_intel_points, () => {
       setCursorDefault();
-      hideHoverPreview();
+      if (!stackCircleKeyRef.current) hideHoverPreview();
     });
 
     map.on("click", LAYERS.clusters, (e) => {
@@ -4567,6 +4674,7 @@ export default function MapPage() {
     });
 
     map.on("click", (e) => {
+      releaseStackPreviewPointerLock();
       hideHoverPreview();
       if (consumeSuppressedAreaDrawClick()) return;
       if (areaDrawModeRef.current) {
@@ -5169,6 +5277,9 @@ export default function MapPage() {
       if (status === 409) {
         return "Esta super câmera ainda não possui integração de streaming.";
       }
+      if (status >= 500) {
+        return "O serviço de streaming está indisponível no momento. Tente novamente mais tarde.";
+      }
     }
 
     if (rawMessage) return rawMessage;
@@ -5473,12 +5584,13 @@ export default function MapPage() {
 
     const liveAccessToken =
       sessionStorage.getItem("access_token") || localStorage.getItem("access_token") || accessToken;
-    const res = await fetch(url, {
+    const res = await fetchWithFriendlyNetworkError(url, {
       headers: {
         ...(liveAccessToken ? { Authorization: `Bearer ${liveAccessToken}` } : {}),
       },
     });
     if (!res.ok) {
+      if (res.status >= 500) throw new Error(SERVER_UNAVAILABLE_MESSAGE);
       const txt = await res.text().catch(() => "");
       throw new Error(`Falha no download (${res.status}) ${txt || res.statusText}`);
     }
@@ -5513,7 +5625,7 @@ export default function MapPage() {
       }
       await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
     }
-    throw new Error("Relatório ainda em processamento. Tente novamente em instantes.");
+    throw new Error("Relatório ainda em processamento. Tente novamente mais tarde.");
   }
 
   async function downloadBairroReport() {
