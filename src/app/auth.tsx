@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { normalizeFeatureCode, normalizeFeatureCodes } from "./featureCodes";
+import { fetchWithFriendlyNetworkError, SERVER_UNAVAILABLE_MESSAGE } from "./errorMessages";
 
 export type AuthUser = {
   id?: string;
@@ -220,7 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     body.set("username", email);
     body.set("password", password);
 
-    const res = await fetch(`${API_BASE}/auth/token`, {
+    const res = await fetchWithFriendlyNetworkError(`${API_BASE}/auth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
@@ -232,10 +233,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       : await res.text().catch(() => "");
 
     if (!res.ok) {
-      const msg =
-        (payload && (payload.detail || payload.message || payload.error)) ||
-        (typeof payload === "string" && payload) ||
-        `Falha no login (${res.status})`;
+      const msg = res.status >= 500
+        ? SERVER_UNAVAILABLE_MESSAGE
+        : (payload && (payload.detail || payload.message || payload.error)) ||
+          (typeof payload === "string" && payload) ||
+          `Falha no login (${res.status})`;
       throw new Error(msg);
     }
 

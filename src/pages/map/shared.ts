@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { fetchWithFriendlyNetworkError, SERVER_UNAVAILABLE_MESSAGE } from "../../app/errorMessages";
 
 let authRedirecting = false;
 let refreshPromise: Promise<string | null> | null = null;
@@ -182,7 +183,7 @@ function withLatestAuthorization(opts: RequestInit = {}) {
 
 export async function fetchJson<T>(url: string, opts: RequestInit = {}) {
   let req = withLatestAuthorization(opts);
-  let res = await fetch(url, req);
+  let res = await fetchWithFriendlyNetworkError(url, req);
 
   if (res.status === 401) {
     const nextAccessToken = await tryRefreshToken();
@@ -195,7 +196,7 @@ export async function fetchJson<T>(url: string, opts: RequestInit = {}) {
         ...req,
         headers,
       };
-      res = await fetch(url, req);
+      res = await fetchWithFriendlyNetworkError(url, req);
     }
   }
 
@@ -218,8 +219,9 @@ export async function fetchJson<T>(url: string, opts: RequestInit = {}) {
         window.location.href = "/login";
       } catch {}
     }
-    const msg =
-      typeof data === "string"
+    const msg = res.status >= 500
+      ? SERVER_UNAVAILABLE_MESSAGE
+      : typeof data === "string"
         ? data
         : data?.detail || data?.message || res.statusText || "Erro";
     throw new Error(`${res.status} - ${msg}`);

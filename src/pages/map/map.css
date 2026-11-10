@@ -1200,13 +1200,18 @@
 }
 
 .equipmentList .listItem:hover {
-  border-color: #b9d9e8;
-  background: #fbfeff;
+  border-color: var(--equipment-hover-border, #b9d9e8);
+  background: color-mix(in srgb, var(--equipment-accent, #00a9de) 3%, #fff);
   box-shadow: 0 8px 18px rgba(15, 35, 56, 0.08);
 }
 
 .equipmentList .listItem:hover::after {
-  background: #00a9de;
+  background: var(--equipment-accent, #00a9de);
+}
+
+.mobileEquipmentList .listItem:hover {
+  border-color: var(--equipment-hover-border, #b9d9e8);
+  background: color-mix(in srgb, var(--equipment-accent, #00a9de) 3%, #fff);
 }
 
 .equipmentList .listStreamPill--camera,
@@ -1455,6 +1460,27 @@
   pointer-events: none;
 }
 .mapTaskPanels > * { pointer-events: auto; }
+.mapTaskRestore { position: relative; display: inline-flex; flex: none; margin: 12px 12px 0 0; }
+.mapTaskRestoreClose {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #dce5ef;
+  border-radius: 50%;
+  color: #65778b;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(10, 31, 60, 0.14);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mapTaskRestoreClose::before { content: ""; position: absolute; inset: -3px; }
+.mapTaskRestoreClose:hover { color: #0a284b; background: #eaf1f7; }
+.mapTaskRestoreClose:focus-visible { outline: 2px solid #00a9de; outline-offset: 2px; }
 .areaDrawToolbar,
 .bairroSearchToolbar {
   width: min(340px, calc(100vw - 100px));
@@ -3888,6 +3914,107 @@
 .swal2-popup.atlasSwalPopup .swal2-icon.swal2-error {
   border-color: rgba(239, 68, 68, 0.58);
   color: #dc2626;
+}
+
+.swal2-popup.atlasAppAlertPopup {
+  width: min(28rem, calc(100vw - 32px)) !important;
+  padding: 28px !important;
+  border-top: 3px solid #0a91bd !important;
+  border-radius: 12px !important;
+  font-family: var(--font-family-primary) !important;
+  text-align: center;
+}
+
+.swal2-popup.atlasAppAlertPopup .swal2-icon.atlasAppAlertIcon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  justify-self: center;
+  border: 0;
+  border-radius: 14px;
+  background: #eaf4f8;
+  color: #0a284b;
+}
+
+.atlasAppAlertIcon .swal2-icon-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atlasAppAlertPopup .swal2-title.atlasSwalTitle {
+  color: #0a284b !important;
+  font-family: inherit !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  text-align: center;
+}
+
+.atlasAppAlertPopup .swal2-html-container.atlasSwalHtml {
+  margin-top: 10px !important;
+  color: #526b80 !important;
+  font-family: inherit !important;
+  font-size: 14px !important;
+  font-weight: 400;
+  line-height: 1.65 !important;
+  text-align: center;
+}
+
+.swal2-popup.atlasAppAlertPopup .swal2-actions {
+  justify-content: center;
+  margin-top: 24px !important;
+}
+
+.atlasAppAlertPopup .swal2-actions .atlasSwalBtn {
+  min-height: 42px !important;
+  padding: 10px 22px;
+  box-shadow: none !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0;
+}
+
+.atlasAppAlertPopup .swal2-actions .atlasSwalBtnPrimary {
+  border-color: #0a284b !important;
+  background: #0a284b !important;
+  color: #fff !important;
+}
+
+.atlasAppAlertPopup .swal2-actions .atlasSwalBtnGhost {
+  border-color: #d6e1e9 !important;
+  background: #fff !important;
+  color: #526b80 !important;
+}
+
+.atlasAppAlertPopup .swal2-actions .atlasSwalBtnPrimary:hover {
+  background: #163d5f !important;
+}
+
+.atlasAppAlertPopup .swal2-actions .atlasSwalBtnGhost:hover {
+  background: #f3f8fb !important;
+}
+
+.atlasAppAlertPopup .swal2-actions .atlasSwalBtn:focus-visible {
+  outline: 2px solid #00a9de;
+  outline-offset: 3px;
+}
+
+.atlasAppAlertPopup .swal2-footer.atlasSwalFooter {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-color: #e2e8f0;
+  color: #526b80;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .swal2-popup.atlasAppAlertPopup { padding: 24px !important; }
+  .atlasAppAlertPopup .swal2-actions .atlasSwalBtnPrimary { width: 100%; }
 }
 
 .summaryLoadingRow {

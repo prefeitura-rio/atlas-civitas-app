@@ -10,7 +10,7 @@ import {
   inputStyle,
   normalizeSearchText,
 } from "./shared";
-import Swal from "sweetalert2";
+import { showAppAlert } from "./alerts";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
 import cameraLprIcon from "@/assets/camera-lpr-icon.png";
@@ -100,18 +100,6 @@ export function AdminCamerasPanel({
     border: "1px solid rgba(15,23,42,0.14)",
     background: "rgba(248,250,252,0.95)",
     color: "rgba(15,23,42,0.85)",
-  } as const;
-  const swalBase = {
-    customClass: {
-      popup: "atlasSwalPopup",
-      title: "atlasSwalTitle",
-      htmlContainer: "atlasSwalHtml",
-      footer: "atlasSwalFooter",
-      confirmButton: "atlasSwalBtn atlasSwalBtnPrimary",
-      cancelButton: "atlasSwalBtn atlasSwalBtnGhost",
-    },
-    buttonsStyling: false,
-    backdrop: "rgba(2, 6, 23, 0.74)",
   } as const;
 
   function applyStatusFilter<T extends { is_active?: boolean; status_ativo?: boolean | number | string | null }>(
@@ -312,8 +300,7 @@ export function AdminCamerasPanel({
     const isActive = getCameraActive(item);
     const nextActive = !isActive;
 
-    const result = await Swal.fire({
-      ...swalBase,
+    const result = await showAppAlert({
       icon: "warning",
       title: nextActive ? "Ativar câmera?" : "Desativar câmera?",
       text: nextActive
@@ -322,8 +309,6 @@ export function AdminCamerasPanel({
       showCancelButton: true,
       confirmButtonText: nextActive ? "Sim, ativar" : "Sim, desativar",
       cancelButtonText: "Cancelar",
-      confirmButtonColor: nextActive ? "#15803d" : "#b91c1c",
-      cancelButtonColor: "#334155",
       reverseButtons: true,
       focusCancel: true,
       footer: `Câmera: <strong>${name}</strong>`,
@@ -337,8 +322,7 @@ export function AdminCamerasPanel({
       patchLocalStatus(scope, item, nextActive);
       onStatusChanged?.();
 
-      await Swal.fire({
-        ...swalBase,
+      await showAppAlert({
         icon: "success",
         title: nextActive ? "Câmera ativada" : "Câmera desativada",
         text: nextActive
@@ -350,12 +334,11 @@ export function AdminCamerasPanel({
     } catch (e: any) {
       const msg = e?.message || "Não foi possível atualizar o status desta câmera.";
       setErr(msg);
-      await Swal.fire({
-        ...swalBase,
+      await showAppAlert({
         icon: "error",
         title: "Não foi possível concluir",
         text: msg,
-        confirmButtonText: "Fechar",
+        confirmButtonText: "Entendi",
       });
     } finally {
       setStatusLoadingKey(null);
