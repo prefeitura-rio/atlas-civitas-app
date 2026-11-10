@@ -12,7 +12,7 @@ import {
   inputStyle,
   normalizeSearchText,
 } from "./shared";
-import Swal from "sweetalert2";
+import { showAppAlert } from "./alerts";
 import radarIcon from "@/assets/radar-icon.png";
 import { LayerToggle } from "./LayerToggle";
 import { EquipmentStatus } from "./EquipmentStatus";
@@ -75,18 +75,6 @@ export function AdminRadaresPanel({
       fontWeight: 800,
       cursor: "pointer",
     }) as const;
-  const swalBase = {
-    customClass: {
-      popup: "atlasSwalPopup",
-      title: "atlasSwalTitle",
-      htmlContainer: "atlasSwalHtml",
-      footer: "atlasSwalFooter",
-      confirmButton: "atlasSwalBtn atlasSwalBtnPrimary",
-      cancelButton: "atlasSwalBtn atlasSwalBtnGhost",
-    },
-    buttonsStyling: false,
-    backdrop: "rgba(2, 6, 23, 0.74)",
-  } as const;
 
   function getRadarActive(radar: Radar) {
     return isEntityActive(radar);
@@ -201,8 +189,7 @@ export function AdminRadaresPanel({
     const nextActive = !active;
     const radarName = getPointCollectionTitle(radar) || "Radar";
 
-    const confirm = await Swal.fire({
-      ...swalBase,
+    const confirm = await showAppAlert({
       icon: "warning",
       title: nextActive ? "Ativar radar?" : "Desativar radar?",
       text: nextActive
@@ -223,8 +210,7 @@ export function AdminRadaresPanel({
       await saveRadarStatus(radar, nextActive);
       patchLocalStatus(radar, nextActive);
       onStatusChanged?.();
-      await Swal.fire({
-        ...swalBase,
+      await showAppAlert({
         icon: "success",
         title: nextActive ? "Radar ativado" : "Radar desativado",
         text: nextActive
@@ -236,12 +222,11 @@ export function AdminRadaresPanel({
     } catch (e: any) {
       const msg = e?.message || "Não foi possível atualizar o status deste radar.";
       setErr(msg);
-      await Swal.fire({
-        ...swalBase,
+      await showAppAlert({
         icon: "error",
         title: "Não foi possível concluir",
         text: msg,
-        confirmButtonText: "Fechar",
+        confirmButtonText: "Entendi",
       });
     } finally {
       setStatusLoadingKey(null);

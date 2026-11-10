@@ -13,7 +13,7 @@ import type {
   GeometryCollection,
 } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
-import Swal from "sweetalert2";
+import { showAppAlert, showStreamingAlert } from "./map/alerts";
 import {
   Building2,
   ChartNoAxesCombined,
@@ -74,6 +74,7 @@ import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
 import { AdminUsageDashboardPanel } from "./map/AdminUsageDashboardPanel";
 import { LayerToggle } from "./map/LayerToggle";
+import { useEquipmentLayer } from "./map/useEquipmentLayer";
 import {
   cleanString,
   firstNonEmptyString,
@@ -1114,24 +1115,6 @@ function radaresToFeatures(list: Radar[]): Feature<Point, any>[] {
   return features;
 }
 
-function makePoisGeoJSON(
-  cameras: Camera[],
-  camerasIntel: CameraIntel[],
-  camerasLpr: CameraLpr[],
-  radares: Radar[],
-  showCameras: boolean,
-  showCamerasIntel: boolean,
-  showCamerasLpr: boolean,
-  showRadares: boolean
-): FeatureCollection<Point, any> {
-  const features: Feature<Point, any>[] = [];
-  if (showCameras) features.push(...camerasToFeatures(cameras));
-  if (showCamerasIntel) features.push(...camerasIntelToFeatures(camerasIntel));
-  if (showCamerasLpr) features.push(...camerasLprToFeatures(camerasLpr));
-  if (showRadares) features.push(...radaresToFeatures(radares));
-  return { type: "FeatureCollection", features };
-}
-
 type PoiKind = "camera" | "camera_intel" | "camera_lpr" | "radar";
 
 const POI_KIND_ORDER: PoiKind[] = ["camera_intel", "camera_lpr", "camera", "radar"];
@@ -1511,6 +1494,36 @@ function makeAreaDrawGeoJSON(
   return { type: "FeatureCollection", features } as FeatureCollection<any, any>;
 }
 
+function normalizeEquipmentPoints<T>(data: unknown): T[] {
+  if (!Array.isArray(data)) return [];
+  return data
+    .filter((item) => item && typeof item === "object" && isEntityActive(item))
+    .map((item) => ({ ...item, lat: getLat(item) ?? NaN, lng: getLng(item) ?? NaN }))
+    .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng)) as T[];
+}
+
+function normalizeCameras(data: unknown) {
+  return normalizeEquipmentPoints<Camera>(data);
+}
+
+function normalizeCamerasIntel(data: unknown) {
+  return normalizeEquipmentPoints<CameraIntel>(data).map((camera) => ({
+    ...camera,
+    id: cleanString(camera.id) || undefined,
+    external_camera_id: cleanString(camera.external_camera_id) || null,
+  }));
+}
+
+function normalizeCamerasLpr(data: unknown) {
+  return normalizeEquipmentPoints<CameraLpr>(data).map((camera) => ({
+    ...camera, neighborhood: getLprNeighborhood(camera),
+  }));
+}
+
+function normalizeRadares(data: unknown) {
+  return normalizeEquipmentPoints<Radar>(data);
+}
+
 export default function MapPage() {
   const auth = useAuth();
   const nav = useNavigate();
@@ -1593,7 +1606,7 @@ export default function MapPage() {
   const stackPreviewPanActiveRef = useRef(false);
   const stackPreviewPanGenerationRef = useRef(0);
   const stackPreviewLockedMarkerRef = useRef<HTMLButtonElement | null>(null);
-  const stackCirclePointerLeaveRef = useRef<(() => void) | null>(null);
+  const stackCirclePointerLeaveRef = useRef<((event: PointerEvent) => void) | null>(null);
   const suppressHoverHideRef = useRef(false);
   const suppressHoverHideTimerRef = useRef<number | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -1633,22 +1646,35 @@ export default function MapPage() {
     mapBaseStyleRef.current = mapBaseStyle;
   }, [mapBaseStyle]);
 
-  const [loadingCameras, setLoadingCameras] = useState(false);
-  const [cameras, setCameras] = useState<Camera[]>([]);
-  const [loadingCamerasIntel, setLoadingCamerasIntel] = useState(false);
-  const [camerasIntel, setCamerasIntel] = useState<CameraIntel[]>([]);
-  const [loadingCamerasLpr, setLoadingCamerasLpr] = useState(false);
-  const [camerasLpr, setCamerasLpr] = useState<CameraLpr[]>([]);
+  const equipmentScope = `${me?.id || me?.email || ""}:${me?.organization_id || ""}:${me?.role || ""}`;
+  const equipmentReady = !authLoading && !!accessToken;
+  const { data: cameras, loading: loadingCameras, reload: loadCameras } = useEquipmentLayer({
+    url: `${API_BASE}/cameras?active_only=true`, token: accessToken, scope: equipmentScope,
+    enabled: equipmentReady && canViewCameras, normalize: normalizeCameras,
+    failureMessage: "Falha ao carregar câmeras",
+  });
+  const { data: camerasIntel, loading: loadingCamerasIntel, reload: loadCamerasIntel } = useEquipmentLayer({
+    url: `${API_BASE}/cameras-inteligentes?only_active=true`, token: accessToken, scope: equipmentScope,
+    enabled: equipmentReady && canViewCamerasIntel, normalize: normalizeCamerasIntel,
+    failureMessage: "Falha ao carregar câmeras inteligentes",
+  });
+  const { data: camerasLpr, loading: loadingCamerasLpr, reload: loadCamerasLpr } = useEquipmentLayer({
+    url: `${API_BASE}/cameras-lpr?only_active=true`, token: accessToken, scope: equipmentScope,
+    enabled: equipmentReady && canViewCamerasLpr, normalize: normalizeCamerasLpr,
+    failureMessage: "Falha ao carregar câmeras LPR",
+  });
+  const { data: radares, loading: loadingRadares, reload: loadRadares } = useEquipmentLayer({
+    url: `${API_BASE}/radares?only_active=true`, token: accessToken, scope: equipmentScope,
+    enabled: equipmentReady && canViewRadares, normalize: normalizeRadares,
+    failureMessage: "Falha ao carregar radares",
+  });
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
-
-  const [loadingRadares, setLoadingRadares] = useState(false);
-  const [radares, setRadares] = useState<Radar[]>([]);
   const [selectedRadar, setSelectedRadar] = useState<string | null>(null);
 
-  const [showCameras, setShowCameras] = useState(true);
-  const [showCamerasIntel, setShowCamerasIntel] = useState(true);
-  const [showCamerasLpr, setShowCamerasLpr] = useState(true);
-  const [showRadares, setShowRadares] = useState(true);
+  const [showCameras, setShowCameras] = useState(canViewCameras);
+  const [showCamerasIntel, setShowCamerasIntel] = useState(canViewCamerasIntel);
+  const [showCamerasLpr, setShowCamerasLpr] = useState(canViewCamerasLpr);
+  const [showRadares, setShowRadares] = useState(canViewRadares);
   const [showBairros, setShowBairros] = useState(false);
   const [bairroIntroOpen, setBairroIntroOpen] = useState(false);
   const [bairroSearchMinimized, setBairroSearchMinimized] = useState(false);
@@ -2187,31 +2213,19 @@ export default function MapPage() {
   }, [availableListModes, listMode]);
 
   useEffect(() => {
-    if (!canViewCameras) {
-      setShowCameras(false);
-      setCameras([]);
-    }
+    setShowCameras(canViewCameras);
   }, [canViewCameras]);
 
   useEffect(() => {
-    if (!canViewCamerasIntel) {
-      setShowCamerasIntel(false);
-      setCamerasIntel([]);
-    }
+    setShowCamerasIntel(canViewCamerasIntel);
   }, [canViewCamerasIntel]);
 
   useEffect(() => {
-    if (!canViewCamerasLpr) {
-      setShowCamerasLpr(false);
-      setCamerasLpr([]);
-    }
+    setShowCamerasLpr(canViewCamerasLpr);
   }, [canViewCamerasLpr]);
 
   useEffect(() => {
-    if (!canViewRadares) {
-      setShowRadares(false);
-      setRadares([]);
-    }
+    setShowRadares(canViewRadares);
   }, [canViewRadares]);
 
   useEffect(() => {
@@ -2357,7 +2371,7 @@ export default function MapPage() {
     }[kind];
 
     if (!layer.visible) {
-      void Swal.fire({
+      void showAppAlert({
         icon: "info",
         title: "Camada desativada",
         text: `Ative a camada de ${layer.name} para visualizar este equipamento no mapa.`,
@@ -3188,25 +3202,28 @@ export default function MapPage() {
     }
   }
 
-  async function syncMapStyleState(map: mapboxgl.Map) {
+  function syncMapStyleState(map: mapboxgl.Map) {
     const currentStyle = mapBaseStyleRef.current;
-    try {
-      const cameraImageId = getCameraMarkerImageId(currentStyle, "camera");
-      const cameraIntelImageId = getCameraMarkerImageId(currentStyle, "camera_intel");
-      const cameraImageSrc = getCameraMarkerImageSource(currentStyle, "camera");
-      const cameraIntelImageSrc = getCameraMarkerImageSource(currentStyle, "camera_intel");
-      const radarImageSrc = getRadarMarkerImageSource(currentStyle);
-      const cameraLprImageSrc = getCameraLprMarkerImageSource(currentStyle);
-      await Promise.all([
-        upsertMapImage(map, cameraImageId, cameraImageSrc),
-        upsertMapImage(map, cameraIntelImageId, cameraIntelImageSrc),
-        upsertMapImage(map, IMAGES.radar, radarImageSrc),
-        upsertMapImage(map, IMAGES.camera_lpr, cameraLprImageSrc),
-        upsertMapImage(map, IMAGES.search_pin, mapPinRed),
-      ]);
-    } catch (e) {
-      console.warn("Falha ao carregar ícones do mapa:", e);
-    }
+    const cameraImageId = getCameraMarkerImageId(currentStyle, "camera");
+    const cameraIntelImageId = getCameraMarkerImageId(currentStyle, "camera_intel");
+    const cameraImageSrc = getCameraMarkerImageSource(currentStyle, "camera");
+    const cameraIntelImageSrc = getCameraMarkerImageSource(currentStyle, "camera_intel");
+    const radarImageSrc = getRadarMarkerImageSource(currentStyle);
+    const cameraLprImageSrc = getCameraLprMarkerImageSource(currentStyle);
+    void Promise.allSettled([
+      upsertMapImage(map, cameraImageId, cameraImageSrc),
+      upsertMapImage(map, cameraIntelImageId, cameraIntelImageSrc),
+      upsertMapImage(map, IMAGES.radar, radarImageSrc),
+      upsertMapImage(map, IMAGES.camera_lpr, cameraLprImageSrc),
+      upsertMapImage(map, IMAGES.search_pin, mapPinRed),
+    ]).then((results) => {
+      for (const result of results) {
+        if (result.status === "rejected") console.warn("Falha ao carregar ícone do mapa:", result.reason);
+      }
+      if (mapRef.current === map && mapBaseStyleRef.current === currentStyle && map.isStyleLoaded()) {
+        ensureSourcesAndLayers(map, currentStyle);
+      }
+    });
 
     ensureSourcesAndLayers(map, currentStyle);
     bindInteractionsOnce(map);
@@ -3717,27 +3734,29 @@ export default function MapPage() {
       return true;
     }
 
-    function showStackCircle(e: mapboxgl.MapLayerMouseEvent) {
-      if (isMobileRef.current || areaDrawModeRef.current || !window.matchMedia("(hover: hover)").matches) return;
+    function showStackCircle(e: mapboxgl.MapLayerMouseEvent, fromTap = false): boolean {
+      const mobile = isMobileRef.current;
+      if (areaDrawModeRef.current) return false;
+      if (!fromTap && (mobile || !window.matchMedia("(hover: hover)").matches)) return false;
       const feature = e.features?.[0];
-      if (feature?.geometry?.type !== "Point") return;
+      if (feature?.geometry?.type !== "Point") return false;
       const coords = feature.geometry.coordinates as [number, number];
       const key = poiCoordKey(coords[0], coords[1]);
-      if (stackCircleKeyRef.current === key) return;
+      if (stackCircleKeyRef.current === key) return true;
       const activeCenter = stackCircleCenterRef.current;
-      if (activeCenter) {
+      if (activeCenter && !fromTap) {
         const centerPoint = map.project(activeCenter);
-        if (Math.hypot(e.point.x - centerPoint.x, e.point.y - centerPoint.y) <= stackCircleRadiusRef.current + 44) return;
+        if (Math.hypot(e.point.x - centerPoint.x, e.point.y - centerPoint.y) <= stackCircleRadiusRef.current + 44) return true;
       }
 
       clearStackCircle();
       const stack = sortStackedPoiFeatures(poiCoordIndexRef.current.get(key) || []);
-      if (stack.length <= 1) return;
+      if (stack.length <= 1) return false;
 
       hideHoverPreview();
+      const radius = Math.max(50, (stack.length * 56) / (2 * Math.PI));
       stackCircleKeyRef.current = key;
       stackCircleCenterRef.current = coords;
-      const radius = Math.max(50, (stack.length * 56) / (2 * Math.PI));
       stackCircleRadiusRef.current = radius;
       for (const layerId of [LAYERS.cameras_points, LAYERS.cameras_intel_points, LAYERS.cameras_lpr_points, LAYERS.radares_points]) {
         if (!map.getLayer(layerId)) continue;
@@ -3819,6 +3838,7 @@ export default function MapPage() {
           const angle = spokes[index].angle;
           const previewPopupAnchor = previewPopupAnchors[Math.round((angle + Math.PI / 2) / (Math.PI / 4)) % 8];
           button.addEventListener("mouseenter", () => {
+            if (isMobileRef.current) return;
             if (stackPreviewLockedMarkerRef.current === button) {
               stackPreviewLockedMarkerRef.current = null;
               return;
@@ -3898,6 +3918,17 @@ export default function MapPage() {
         };
         window.requestAnimationFrame(animate);
       }
+      return true;
+    }
+
+    const handledMobileStackTaps = new WeakSet<Event>();
+    function handleMobileStackTap(e: mapboxgl.MapLayerMouseEvent): boolean {
+      if (!isMobileRef.current) return false;
+      if (suppressNextMapClickRef.current || areaDrawModeRef.current) return true;
+      if (handledMobileStackTaps.has(e.originalEvent)) return true;
+      const expanded = showStackCircle(e, true);
+      if (expanded) handledMobileStackTaps.add(e.originalEvent);
+      return expanded;
     }
 
     function markMobileMapGesture() {
@@ -4031,7 +4062,7 @@ export default function MapPage() {
     }
     map.on("mousemove", (e) => {
       const center = stackCircleCenterRef.current;
-      if (!center || stackPreviewPanActiveRef.current) return;
+      if (isMobileRef.current || !center || stackPreviewPanActiveRef.current) return;
       if (stackPreviewLockedMarkerRef.current) {
         if (hoverPreviewPopupRef.current?.isOpen()) return;
         releaseStackPreviewPointerLock();
@@ -4043,8 +4074,12 @@ export default function MapPage() {
     map.on("movestart", () => {
       if (!stackPreviewPanActiveRef.current) clearStackCircle();
     });
-    map.getContainer().addEventListener("pointerleave", clearStackCircle);
-    stackCirclePointerLeaveRef.current = clearStackCircle;
+    const handleStackPointerLeave = (event: PointerEvent) => {
+      if (isMobileRef.current || event.pointerType === "touch") return;
+      clearStackCircle();
+    };
+    map.getContainer().addEventListener("pointerleave", handleStackPointerLeave);
+    stackCirclePointerLeaveRef.current = handleStackPointerLeave;
 
     map.on("mouseenter", LAYERS.area_draw_points, () => {
       map.getCanvas().style.cursor =
@@ -4151,6 +4186,7 @@ export default function MapPage() {
       stackPopupAnchor?: PreviewPopupAnchor,
       stackButton?: HTMLButtonElement
     ) {
+      if (isMobileRef.current) return;
       if (stackCircleKeyRef.current && !fromStack) return;
       setCursorPointer();
       clearHoverPreviewTimer();
@@ -4279,6 +4315,7 @@ export default function MapPage() {
       stackPopupAnchor?: PreviewPopupAnchor,
       stackButton?: HTMLButtonElement
     ) {
+      if (isMobileRef.current) return;
       if (stackCircleKeyRef.current && !fromStack) return;
       clearHoverPreviewTimer();
       clearHoverPreviewCloseTimer();
@@ -4402,7 +4439,7 @@ export default function MapPage() {
               </div>
             `)
             .addTo(map);
-          await Swal.fire({
+          await showStreamingAlert({
             icon: "warning",
             title: "Preview indisponível",
             text: getSmartCameraSessionErrorMessage(error, "preview"),
@@ -4419,6 +4456,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.clusters, (e) => {
+      if (areaDrawModeRef.current || suppressNextMapClickRef.current) return;
       hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
@@ -4434,6 +4472,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.cameras_points, (e) => {
+      if (handleMobileStackTap(e)) return;
       hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
@@ -4493,6 +4532,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.cameras_intel_points, (e) => {
+      if (handleMobileStackTap(e)) return;
       hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
@@ -4562,6 +4602,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.cameras_lpr_points, (e) => {
+      if (handleMobileStackTap(e)) return;
       hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
@@ -4618,6 +4659,7 @@ export default function MapPage() {
     });
 
     map.on("click", LAYERS.radares_points, (e) => {
+      if (handleMobileStackTap(e)) return;
       hideHoverPreview();
       const f: any = e.features?.[0];
       if (!f) return;
@@ -4723,6 +4765,7 @@ export default function MapPage() {
         ],
       });
       if (!features || features.length === 0) {
+        clearStackCircle();
         let clickedBairro = "";
 
         if (showBairrosRef.current) {
@@ -4880,7 +4923,7 @@ export default function MapPage() {
       return;
     }
 
-    if (authLoading || !accessToken) {
+    if (authLoading || !accessToken || !showBairros || bairrosGeo) {
       return;
     }
 
@@ -4941,35 +4984,15 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, [accessToken, authLoading, canViewBairros]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !canViewBairros || !bairrosGeo || !bairrosLinesGeo) return;
-
-    const syncBairros = () => {
-      ensureSourcesAndLayers(map);
-      updateBairrosData(map, bairrosGeo);
-      updateBairrosLineData(map, bairrosLinesGeo);
-      applyBairrosVisibility(map, showBairros, selectedBairro);
-    };
-
-    if (map.isStyleLoaded()) {
-      syncBairros();
-      return;
-    }
-
-    map.once("load", syncBairros);
-    return () => {
-      map.off("load", syncBairros);
-    };
-  }, [bairrosGeo, bairrosLinesGeo, canViewBairros, showBairros, selectedBairro]);
+  }, [accessToken, authLoading, canViewBairros, showBairros, bairrosGeo]);
 
   useEffect(() => {
     if (!canViewRisp) {
       setRispGeo(null);
       return;
     }
+
+    if (!showRisp || rispGeo) return;
 
     let active = true;
     async function loadRisp() {
@@ -4993,13 +5016,15 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, [canViewRisp]);
+  }, [canViewRisp, showRisp, rispGeo]);
 
   useEffect(() => {
     if (!canViewAisp) {
       setAispGeo(null);
       return;
     }
+
+    if (!showAisp || aispGeo) return;
 
     let active = true;
     async function loadAisp() {
@@ -5022,13 +5047,15 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, [canViewAisp]);
+  }, [canViewAisp, showAisp, aispGeo]);
 
   useEffect(() => {
     if (!canViewCisp) {
       setCispGeo(null);
       return;
     }
+
+    if (!showCisp || cispGeo) return;
 
     let active = true;
     async function loadCisp() {
@@ -5051,7 +5078,7 @@ export default function MapPage() {
     return () => {
       active = false;
     };
-  }, [canViewCisp]);
+  }, [canViewCisp, showCisp, cispGeo]);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -5142,94 +5169,6 @@ export default function MapPage() {
       map.off("zoomend", handleZoomEnd);
     };
   }, [searchEquipmentPoint]);
-
-  async function loadCameras() {
-    if (!canViewCameras) {
-      setCameras([]);
-      setLoadingCameras(false);
-      return;
-    }
-
-    setLoadingCameras(true);
-    try {
-      const data = await fetchJson<any>(`${API_BASE}/cameras`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
-
-      const list: Camera[] = Array.isArray(data) ? data : [];
-
-      const normalized = list
-        .map((c) => {
-          const lat = getLat(c);
-          const lng = getLng(c);
-          return { ...c, lat: lat ?? NaN, lng: lng ?? NaN };
-        })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
-        .filter((c) => isEntityActive(c));
-
-      setCameras(normalized);
-    } catch (e: any) {
-      const msg = String(e?.message || "");
-      if (msg.startsWith("401") || msg.startsWith("403")) {
-        setCameras([]);
-        return;
-      }
-      console.error(e);
-      alert(e?.message || "Falha ao carregar câmeras");
-    } finally {
-      setLoadingCameras(false);
-    }
-  }
-
-  async function loadCamerasIntel() {
-    if (!canViewCamerasIntel) {
-      setCamerasIntel([]);
-      setLoadingCamerasIntel(false);
-      return;
-    }
-
-    setLoadingCamerasIntel(true);
-    try {
-      const data = await fetchJson<any>(`${API_BASE}/cameras-inteligentes`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
-
-      const list: CameraIntel[] = Array.isArray(data) ? data : [];
-
-      const normalized = list
-        .map((c) => {
-          const lat = getLat(c);
-          const lng = getLng(c);
-          return {
-            ...c,
-            id: cleanString(c.id) || undefined,
-            external_camera_id: cleanString(c.external_camera_id) || null,
-            lat: lat ?? NaN,
-            lng: lng ?? NaN,
-          };
-        })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
-        .filter((c) => isEntityActive(c));
-
-      setCamerasIntel(normalized);
-    } catch (e: any) {
-      const msg = String(e?.message || "");
-      if (msg.startsWith("401") || msg.startsWith("403")) {
-        setCamerasIntel([]);
-        return;
-      }
-      console.error(e);
-      alert(e?.message || "Falha ao carregar câmeras inteligentes");
-    } finally {
-      setLoadingCamerasIntel(false);
-    }
-  }
 
   type SmartCameraSessionSource = Pick<CameraIntel, "id" | "external_camera_id">;
 
@@ -5374,7 +5313,7 @@ export default function MapPage() {
 
   async function openSmartCameraStreamWindow(source: SmartCameraSessionSource, durationSeconds: number) {
     if (!hasSmartCameraStreamingAccessRef.current) {
-      await Swal.fire({
+      await showStreamingAlert({
         icon: "warning",
         title: "Streaming indisponível",
         text: "Seu perfil não pode abrir streaming desta super câmera.",
@@ -5385,7 +5324,7 @@ export default function MapPage() {
 
     const smartId = getSmartCameraId(source);
     if (!smartId) {
-      await Swal.fire({
+      await showStreamingAlert({
         icon: "warning",
         title: "Streaming indisponível",
         text: "Esta super câmera não possui um ID válido para streaming.",
@@ -5415,7 +5354,7 @@ export default function MapPage() {
       if (streamWindow) {
         streamWindow.close();
       }
-      await Swal.fire({
+      await showStreamingAlert({
         icon: "warning",
         title: "Streaming indisponível",
         text: getSmartCameraSessionErrorMessage(error, "stream"),
@@ -5426,7 +5365,7 @@ export default function MapPage() {
 
   async function openCommonCameraStreamWindow(cameraId: string, durationSeconds: number) {
     if (!hasStreamingAccessRef.current) {
-      await Swal.fire({
+      await showStreamingAlert({
         icon: "warning",
         title: "Streaming indisponível",
         text: "Seu perfil não pode abrir streaming desta câmera.",
@@ -5437,7 +5376,7 @@ export default function MapPage() {
 
     const trimmedCameraId = cleanString(cameraId);
     if (!trimmedCameraId) {
-      await Swal.fire({
+      await showStreamingAlert({
         icon: "warning",
         title: "Streaming indisponível",
         text: "Esta câmera não possui um ID válido para streaming.",
@@ -5475,99 +5414,12 @@ export default function MapPage() {
       if (streamWindow) {
         streamWindow.close();
       }
-      await Swal.fire({
+      await showStreamingAlert({
         icon: "warning",
         title: "Streaming indisponível",
         text: String((error as any)?.message || "Não foi possível abrir o streaming da câmera."),
         confirmButtonText: "Entendi",
       });
-    }
-  }
-
-  async function loadCamerasLpr() {
-    if (!canViewCamerasLpr) {
-      setCamerasLpr([]);
-      setLoadingCamerasLpr(false);
-      return;
-    }
-
-    setLoadingCamerasLpr(true);
-    try {
-      const data = await fetchJson<any>(`${API_BASE}/cameras-lpr?only_active=true`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
-
-      const list: CameraLpr[] = Array.isArray(data) ? data : [];
-
-      const normalized = list
-        .map((c) => {
-          const lat = getLat(c);
-          const lng = getLng(c);
-          const neighborhood = getLprNeighborhood(c);
-          return { ...c, neighborhood, lat: lat ?? NaN, lng: lng ?? NaN };
-        })
-        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng))
-        .filter((c) => isEntityActive(c));
-
-      setCamerasLpr(normalized);
-    } catch (e: any) {
-      const msg = String(e?.message || "");
-      if (msg.startsWith("401") || msg.startsWith("403")) {
-        setCamerasLpr([]);
-        return;
-      }
-      console.error(e);
-      alert(e?.message || "Falha ao carregar câmeras LPR");
-    } finally {
-      setLoadingCamerasLpr(false);
-    }
-  }
-
-  async function loadRadares() {
-    if (!canViewRadares) {
-      setRadares([]);
-      setLoadingRadares(false);
-      return;
-    }
-
-    setLoadingRadares(true);
-    try {
-      const data = await fetchJson<any>(`${API_BASE}/radares?only_active=true`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
-
-      const list: Radar[] = Array.isArray(data) ? data : [];
-
-      const normalized = list
-        .map((r) => {
-          const lat = getLat(r);
-          const lng = getLng(r);
-          return {
-            ...r,
-            lat: lat ?? NaN,
-            lng: lng ?? NaN,
-          };
-        })
-        .filter((r) => Number.isFinite(r.lat as any) && Number.isFinite(r.lng as any))
-        .filter((r) => isEntityActive(r));
-
-      setRadares(normalized);
-    } catch (e: any) {
-      const msg = String(e?.message || "");
-      if (msg.startsWith("401") || msg.startsWith("403")) {
-        setRadares([]);
-        return;
-      }
-      console.error(e);
-      alert(e?.message || "Falha ao carregar radares");
-    } finally {
-      setLoadingRadares(false);
     }
   }
 
@@ -5731,6 +5583,15 @@ export default function MapPage() {
     setAreaDrawAwaitingStart(true);
     setAreaDrawMinimized(false);
     setAreaReportMsg(null);
+  }
+
+  function closeBairroSearch() {
+    setShowBairros(false);
+    setBairroIntroOpen(false);
+    setBairroSearchMinimized(false);
+    setSelectedBairro("");
+    setBairroQuery("");
+    setBairroReportMsg(null);
   }
 
   function removeLastAreaPoint() {
@@ -5902,65 +5763,6 @@ export default function MapPage() {
   }
 
   useEffect(() => {
-    if (canViewCameras) {
-      void loadCameras();
-    } else {
-      setCameras([]);
-    }
-    if (canViewRadares) {
-      void loadRadares();
-    } else {
-      setRadares([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canViewCameras, canViewRadares]);
-
-  useEffect(() => {
-    if (!accessToken) {
-      setCamerasIntel([]);
-      setCamerasLpr([]);
-      return;
-    }
-    if (canViewCamerasIntel) {
-      void loadCamerasIntel();
-    } else {
-      setCamerasIntel([]);
-    }
-    if (canViewCamerasLpr) {
-      void loadCamerasLpr();
-    } else {
-      setCamerasLpr([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, canViewCamerasIntel, canViewCamerasLpr]);
-
-  useEffect(() => {
-    if (authLoading || !accessToken) return;
-    if (
-      canViewCamerasIntel &&
-      listMode === "inteligentes" &&
-      !loadingCamerasIntel &&
-      camerasIntel.length === 0
-    ) {
-      void loadCamerasIntel();
-    }
-    if (canViewCamerasLpr && listMode === "lpr" && !loadingCamerasLpr && camerasLpr.length === 0) {
-      void loadCamerasLpr();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    listMode,
-    authLoading,
-    accessToken,
-    canViewCamerasIntel,
-    canViewCamerasLpr,
-    loadingCamerasIntel,
-    loadingCamerasLpr,
-    camerasIntel.length,
-    camerasLpr.length,
-  ]);
-
-  useEffect(() => {
     if (!canUseGps || !gpsOn) return;
 
     if (!("geolocation" in navigator)) {
@@ -5996,19 +5798,22 @@ export default function MapPage() {
     };
   }, [canUseGps, gpsOn]);
 
-  const poisGeo = useMemo(
-    () =>
-      makePoisGeoJSON(
-        cameras,
-        camerasIntel,
-        camerasLpr,
-        radares,
-        showCameras,
-        showCamerasIntel,
-        showCamerasLpr,
-        showRadares
-      ),
-    [cameras, camerasIntel, camerasLpr, radares, showCameras, showCamerasIntel, showCamerasLpr, showRadares]
+  const cameraFeatures = useMemo(() => camerasToFeatures(cameras), [cameras]);
+  const cameraIntelFeatures = useMemo(() => camerasIntelToFeatures(camerasIntel), [camerasIntel]);
+  const cameraLprFeatures = useMemo(() => camerasLprToFeatures(camerasLpr), [camerasLpr]);
+  const radarFeatures = useMemo(() => radaresToFeatures(radares), [radares]);
+  const poisGeo = useMemo<FeatureCollection<Point, any>>(
+    () => ({
+      type: "FeatureCollection",
+      features: [
+        ...(showCameras ? cameraFeatures : []),
+        ...(showCamerasIntel ? cameraIntelFeatures : []),
+        ...(showCamerasLpr ? cameraLprFeatures : []),
+        ...(showRadares ? radarFeatures : []),
+      ],
+    }),
+    [cameraFeatures, cameraIntelFeatures, cameraLprFeatures, radarFeatures,
+      showCameras, showCamerasIntel, showCamerasLpr, showRadares]
   );
 
   useEffect(() => {
@@ -6291,19 +6096,19 @@ export default function MapPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (map.isStyleLoaded()) {
-      ensureSourcesAndLayers(map);
+    // isStyleLoaded() also becomes false while sources process setData().
+    // An existing source accepts the next response immediately; "load" only fires once.
+    if (map.getSource(SOURCES.pois)) {
       updatePoisData(map, poisGeo);
       return;
     }
 
-    const handleLoad = () => {
-      ensureSourcesAndLayers(map);
+    const handleStyleLoad = () => {
       updatePoisData(map, poisGeo);
     };
-    map.once("load", handleLoad);
+    map.once("style.load", handleStyleLoad);
     return () => {
-      map.off("load", handleLoad);
+      map.off("style.load", handleStyleLoad);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poisGeo]);
@@ -6312,7 +6117,7 @@ export default function MapPage() {
     if (cinematicModeRef.current === cinematicMode) return;
     cinematicModeRef.current = cinematicMode;
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !map.getSource(SOURCES.pois)) return;
 
     for (const layerId of POI_LAYER_IDS) {
       if (map.getLayer(layerId)) map.removeLayer(layerId);
@@ -7079,6 +6884,19 @@ export default function MapPage() {
   const panelSideInset = 82;
   const panelShiftRight = 0;
   const panelMaxHeight = "56vh";
+  const equipmentVisual = getPoiVisual(
+    listMode === "inteligentes" ? "camera_intel"
+      : listMode === "lpr" ? "camera_lpr"
+      : listMode === "radares" ? "radar" : "camera"
+  );
+  const equipmentListStyle = {
+    "--equipment-accent": equipmentVisual.accent,
+    "--equipment-hover-border": equipmentVisual.border,
+    display: "grid",
+    gap: 10,
+    maxHeight: panelMaxHeight,
+    overflow: "auto",
+  } as CSSProperties;
   const currentListOption =
     availableListModes.find(({ mode }) => mode === listMode) ||
     LIST_MODE_OPTIONS.find(({ mode }) => mode === listMode) ||
@@ -7478,10 +7296,15 @@ export default function MapPage() {
 
       <div className="mapTaskPanels">
       {canUseAreaDraw && areaDrawMode && !areaDrawAwaitingStart && areaDrawMinimized && (
-        <button type="button" className="areaDrawRestore" onClick={() => { setAreaDrawMinimized(false); if (showBairros) setBairroSearchMinimized(true); }}>
-          <PenTool size={16} aria-hidden="true" />
-          Desenhar área
-        </button>
+        <div className="mapTaskRestore">
+          <button type="button" className="areaDrawRestore" onClick={() => { setAreaDrawMinimized(false); if (showBairros) setBairroSearchMinimized(true); }}>
+            <PenTool size={16} aria-hidden="true" />
+            Desenhar área
+          </button>
+          <button type="button" className="mapTaskRestoreClose" onClick={toggleAreaDrawing} aria-label="Desativar desenho de área" title="Desativar desenho de área">
+            <X size={12} aria-hidden="true" />
+          </button>
+        </div>
       )}
 
       {canUseAreaDraw && areaDrawMode && !areaDrawAwaitingStart && !areaDrawMinimized && (
@@ -7510,14 +7333,19 @@ export default function MapPage() {
       )}
 
       {canViewBairros && showBairros && !bairroIntroOpen && bairroSearchMinimized && (
-        <button
-          type="button"
-          className="bairroSearchRestore"
-          onClick={() => { setBairroSearchMinimized(false); if (areaDrawMode) setAreaDrawMinimized(true); }}
-        >
-          <Building2 size={16} aria-hidden="true" />
-          Buscar bairro
-        </button>
+        <div className="mapTaskRestore">
+          <button
+            type="button"
+            className="bairroSearchRestore"
+            onClick={() => { setBairroSearchMinimized(false); if (areaDrawMode) setAreaDrawMinimized(true); }}
+          >
+            <Building2 size={16} aria-hidden="true" />
+            Buscar bairro
+          </button>
+          <button type="button" className="mapTaskRestoreClose" onClick={closeBairroSearch} aria-label="Desativar filtro de bairros" title="Desativar filtro de bairros">
+            <X size={12} aria-hidden="true" />
+          </button>
+        </div>
       )}
 
       {canViewBairros && showBairros && !bairroIntroOpen && !bairroSearchMinimized && (
@@ -8540,7 +8368,7 @@ export default function MapPage() {
                 key={listMode}
                 ref={listScrollRef}
                 className="scrollbarHidden equipmentList"
-                style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
+                style={equipmentListStyle}
                 onScroll={(e) => {
                   if (isMobile) return;
                   const el = e.currentTarget;
@@ -9399,7 +9227,7 @@ export default function MapPage() {
                   key={listMode}
                   ref={listScrollMobileRef}
                   className="scrollbarHidden mobileEquipmentList"
-                  style={{ display: "grid", gap: 10, maxHeight: panelMaxHeight, overflow: "auto" }}
+                  style={equipmentListStyle}
                   onScroll={(e) => {
                     if (!isMobile) return;
                     const el = e.currentTarget;
