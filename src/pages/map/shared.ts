@@ -243,3 +243,16 @@ export function inputStyle(): CSSProperties {
     color: "rgba(0,0,0,0.88)",
   };
 }
+
+export function adminInputStyle(): CSSProperties {
+  return {
+    ...inputStyle(),
+    padding: "var(--admin-field-padding)",
+    borderRadius: "var(--admin-field-radius)",
+    border: "1px solid var(--admin-field-border)",
+    outline: undefined,
+    background: "var(--admin-field-background)",
+    color: "var(--admin-field-text)",
+    font: "var(--admin-field-font)",
+  };
+}

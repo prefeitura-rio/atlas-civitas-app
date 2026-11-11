@@ -15,6 +15,8 @@ import type {
 import "mapbox-gl/dist/mapbox-gl.css";
 import { showAppAlert, showStreamingAlert } from "./map/alerts";
 import {
+  ArrowLeft,
+  Bell,
   Building2,
   ChartNoAxesCombined,
   ChevronRight,
@@ -68,11 +70,14 @@ import civitasJointPlatesIcon from "@/assets/icons/civitas/traffic_jam.svg";
 import civitasCorrelatesIcon from "@/assets/icons/civitas/car_crash.svg";
 import civitasMediaIcon from "@/assets/icons/civitas/videocam.svg";
 import { AdminUsersPanel } from "./map/AdminUsersPanel";
+import { AdminButton } from "./map/AdminButton";
 import { AdminOrganizationsPanel } from "./map/AdminOrganizationsPanel";
 import { AdminCamerasPanel } from "./map/AdminCamerasPanel";
 import { AdminRadaresPanel } from "./map/AdminRadaresPanel";
 import { AdminLogsPanel } from "./map/AdminLogsPanel";
 import { AdminUsageDashboardPanel } from "./map/AdminUsageDashboardPanel";
+import { AdminNotificationsPanel } from "./map/AdminNotificationsPanel";
+import { NotificationCenter } from "./map/NotificationCenter";
 import { LayerToggle } from "./map/LayerToggle";
 import { useEquipmentLayer } from "./map/useEquipmentLayer";
 import {
@@ -88,7 +93,7 @@ import {
 type TabKey = "map" | "profile" | "civitas" | "admin";
 type PanelKey = TabKey | null;
 
-type AdminTab = "usage" | "users" | "organizations" | "logs" | "cameras" | "smart_cameras" | "lpr" | "radares" | "cinematic";
+type AdminTab = "usage" | "users" | "organizations" | "notifications" | "logs" | "cameras" | "smart_cameras" | "lpr" | "radares" | "cinematic";
 type ListMode = "cameras" | "inteligentes" | "lpr" | "radares";
 type SecurityAreaKind = "risp" | "aisp" | "cisp";
 type AreaDrawPolygonPoints = Array<[number, number]>;
@@ -97,6 +102,7 @@ type PreviewPopupAnchor = "top" | "bottom" | "left" | "right" | "top-left" | "to
 const ADMIN_TAB_OPTIONS: Array<{ key: AdminTab; label: string }> = [
   { key: "users", label: "Usuários" },
   { key: "organizations", label: "Organizações" },
+  { key: "notifications", label: "Notificações" },
   { key: "cameras", label: "Câmeras" },
   { key: "smart_cameras", label: "Super Câmeras Inteligentes" },
   { key: "lpr", label: "LPR" },
@@ -2180,6 +2186,7 @@ export default function MapPage() {
   const activeAdminLabel = adminTabOptions.find((option) => option.key === activeAdminTab)?.label ?? "Usuários";
   const activeAdminIsEquipment = EQUIPMENT_ADMIN_TABS.includes(activeAdminTab);
   function adminTabIcon(key: AdminTab) {
+    if (key === "notifications") return <Bell aria-hidden="true" />;
     if (key === "cinematic") return <Clapperboard aria-hidden="true" />;
     if (key === "users") return <UserRound aria-hidden="true" />;
     if (key === "organizations") return <Building2 aria-hidden="true" />;
@@ -7431,6 +7438,9 @@ export default function MapPage() {
       <div className="mobileMapBrandPill">
         <img src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" />
       </div>
+      {isMobile && me?.id && (
+        <NotificationCenter key={me.id} apiBase={API_BASE} token={accessToken} isMobile />
+      )}
       <button
         type="button"
         className={`mobileLayersToggle ${mobileLayersVisible ? "mobileLayersToggleActive" : ""} ${gpsCenterVisible ? "mobileLayersToggleWithGps" : ""}`}
@@ -8237,6 +8247,9 @@ export default function MapPage() {
             <span>ACIONAR CIVITAS</span>
           </button>
           <div className="mapUtilityBar">
+            {!isMobile && me?.id && (
+              <NotificationCenter key={me.id} apiBase={API_BASE} token={accessToken} isMobile={false} />
+            )}
             <button
               type="button"
               className={`mapUtilityBarIdentity mapUtilityProfile ${panel === "profile" ? "mapUtilityProfileActive" : ""}`}
@@ -8847,7 +8860,7 @@ export default function MapPage() {
 
       {panel === "admin" && canAccessAdmin && (
         <section className="adminWorkspace" aria-label="Administração">
-          <main className={`adminWorkspaceMain ${activeAdminIsEquipment ? "adminWorkspaceMainEquipment" : ""}`} ref={adminWorkspaceMainRef}>
+          <main className={`adminWorkspaceMain ${activeAdminIsEquipment ? "adminWorkspaceMainEquipment" : ""} ${activeAdminTab === "notifications" ? "adminWorkspaceMainNotifications" : ""} ${activeAdminTab === "logs" ? "adminWorkspaceMainLogs" : ""}`} ref={adminWorkspaceMainRef}>
             <nav className="adminWorkspaceMobileNav" aria-label="Seções da administração">
               {adminTabOptions.map((option) => (
                 <button
@@ -8880,13 +8893,12 @@ export default function MapPage() {
                 <h1>{activeAdminIsEquipment ? "Equipamentos" : activeAdminLabel}</h1>
                 <p>{activeAdminIsEquipment ? activeAdminLabel : "Gerenciamento completo"}</p>
               </div>
-              <button type="button" className="adminWorkspaceClose" aria-label="Voltar ao mapa" onClick={() => { setPanel(null); setPanelOpen(false); }}>
-                <X size={16} className="workspaceCloseIcon" aria-hidden="true" />
+              <AdminButton size="small" icon={isMobile ? undefined : ArrowLeft} className="adminWorkspaceClose" aria-label="Voltar ao mapa" onClick={() => { setPanel(null); setPanelOpen(false); }}>
                 <span>Voltar ao mapa</span>
-              </button>
+              </AdminButton>
             </div>
 
-            <div className={`adminWorkspaceContent ${activeAdminIsEquipment ? "adminWorkspaceContentEquipment" : ""} ${adminUsersOrgOpen ? "adminWorkspaceContentDropdownOpen" : ""}`}>
+            <div className={`adminWorkspaceContent ${activeAdminIsEquipment ? "adminWorkspaceContentEquipment" : ""} ${activeAdminTab === "notifications" ? "adminWorkspaceContentNotifications" : ""} ${activeAdminTab === "logs" ? "adminWorkspaceContentLogs" : ""} ${adminUsersOrgOpen ? "adminWorkspaceContentDropdownOpen" : ""}`}>
               {activeAdminTab === "users" && (
                 <AdminUsersPanel
                   apiBase={API_BASE}
@@ -8898,6 +8910,9 @@ export default function MapPage() {
               )}
               {activeAdminTab === "usage" && (
                 <AdminUsageDashboardPanel apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
+              )}
+              {activeAdminTab === "notifications" && role === "admin" && (
+                <AdminNotificationsPanel key={me?.id} apiBase={API_BASE} token={accessToken} isMobile={isMobile} />
               )}
               {!isMobile && activeAdminTab === "cinematic" && (
                 <section className="adminCard adminCinematicCard" aria-labelledby="adminCinematicTitle">
@@ -8921,9 +8936,9 @@ export default function MapPage() {
                   <p className="adminCinematicNote">
                     {poisGeo.features.length.toLocaleString("pt-BR")} equipamentos nas camadas ativas. O mapa carrega os pontos em uma única fonte e desenha apenas os trechos visíveis na tela. O sistema deve ficar bem mais lento.
                   </p>
-                  <button type="button" className="adminCinematicMapButton" onClick={() => { setPanel(null); setPanelOpen(false); }}>
+                  <AdminButton variant="primary" size="small" icon={MapPinned} style={{ justifySelf: "start" }} onClick={() => { setPanel(null); setPanelOpen(false); }}>
                     Ver mapa
-                  </button>
+                  </AdminButton>
                 </section>
               )}
               {activeAdminTab === "organizations" && (

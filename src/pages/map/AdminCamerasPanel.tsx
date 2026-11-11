@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { RotateCcw } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 import type { Camera, CameraIntel, CameraLpr } from "./types";
 import {
   fetchJson,
@@ -7,7 +9,7 @@ import {
   getPointCollectionKey,
   getPointCollectionTitle,
   isEntityActive,
-  inputStyle,
+  adminInputStyle as inputStyle,
   normalizeSearchText,
 } from "./shared";
 import { showAppAlert } from "./alerts";
@@ -112,29 +114,17 @@ export function AdminCamerasPanel({
   }
 
   function renderStatusFilter(value: StatusFilter, onChange: (next: StatusFilter) => void) {
-    const btnStyle = (active: boolean) =>
-      ({
-        padding: "4px 10px",
-        borderRadius: 999,
-        border: active ? "1px solid rgba(15,23,42,0.3)" : "1px solid rgba(15,23,42,0.14)",
-        background: active ? "rgba(15,23,42,0.10)" : "rgba(255,255,255,0.92)",
-        color: active ? "#0f172a" : "rgba(15,23,42,0.72)",
-        fontSize: 11,
-        fontWeight: 800,
-        cursor: "pointer",
-      }) as const;
-
     return (
       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <button type="button" style={btnStyle(value === "all")} onClick={() => onChange("all")}>
+        <AdminButton onClick={() => onChange("all")} size="small" aria-pressed={value === "all"}>
           Todos
-        </button>
-        <button type="button" style={btnStyle(value === "active")} onClick={() => onChange("active")}>
+        </AdminButton>
+        <AdminButton onClick={() => onChange("active")} size="small" aria-pressed={value === "active"}>
           Ativos
-        </button>
-        <button type="button" style={btnStyle(value === "inactive")} onClick={() => onChange("inactive")}>
+        </AdminButton>
+        <AdminButton onClick={() => onChange("inactive")} size="small" aria-pressed={value === "inactive"}>
           Desativados
-        </button>
+        </AdminButton>
       </div>
     );
   }
@@ -161,34 +151,13 @@ export function AdminCamerasPanel({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Buscar por código ou nome"
-            style={{
-              ...inputStyle(),
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(15,23,42,0.14)",
-              background: "rgba(255,255,255,0.96)",
-            }}
+            style={inputStyle()}
           />
         </div>
         {value.trim() && (
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            style={{
-              height: 40,
-              padding: "0 14px",
-              borderRadius: 999,
-              border: "1px solid rgba(15,23,42,0.14)",
-              background: "rgba(255,255,255,0.92)",
-              color: "#0f172a",
-              fontSize: 11,
-              fontWeight: 800,
-              cursor: "pointer",
-              boxShadow: "0 4px 10px rgba(15,23,42,0.05)",
-            }}
-          >
+          <AdminButton onClick={() => onChange("")} icon={RotateCcw}>
             Limpar
-          </button>
+          </AdminButton>
         )}
       </div>
     );

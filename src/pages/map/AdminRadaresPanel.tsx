@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { RotateCcw } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 import type { Radar } from "./types";
 import {
   fetchJson,
@@ -9,7 +11,7 @@ import {
   getPointCollectionKey,
   getPointCollectionTitle,
   isEntityActive,
-  inputStyle,
+  adminInputStyle as inputStyle,
   normalizeSearchText,
 } from "./shared";
 import { showAppAlert } from "./alerts";
@@ -64,18 +66,6 @@ export function AdminRadaresPanel({
     background: "rgba(248,250,252,0.95)",
     color: "rgba(15,23,42,0.85)",
   } as const;
-  const filterBtnStyle = (active: boolean) =>
-    ({
-      padding: "4px 10px",
-      borderRadius: 999,
-      border: active ? "1px solid rgba(15,23,42,0.3)" : "1px solid rgba(15,23,42,0.14)",
-      background: active ? "rgba(15,23,42,0.10)" : "rgba(255,255,255,0.92)",
-      color: active ? "#0f172a" : "rgba(15,23,42,0.72)",
-      fontSize: 11,
-      fontWeight: 800,
-      cursor: "pointer",
-    }) as const;
-
   function getRadarActive(radar: Radar) {
     return isEntityActive(radar);
   }
@@ -98,34 +88,13 @@ export function AdminRadaresPanel({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Buscar por código ou nome"
-            style={{
-              ...inputStyle(),
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(15,23,42,0.14)",
-              background: "rgba(255,255,255,0.96)",
-            }}
+            style={inputStyle()}
           />
         </div>
         {value.trim() && (
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            style={{
-              height: 40,
-              padding: "0 14px",
-              borderRadius: 999,
-              border: "1px solid rgba(15,23,42,0.14)",
-              background: "rgba(255,255,255,0.92)",
-              color: "#0f172a",
-              fontSize: 11,
-              fontWeight: 800,
-              cursor: "pointer",
-              boxShadow: "0 4px 10px rgba(15,23,42,0.05)",
-            }}
-          >
+          <AdminButton onClick={() => onChange("")} icon={RotateCcw}>
             Limpar
-          </button>
+          </AdminButton>
         )}
       </div>
     );
@@ -285,23 +254,15 @@ export function AdminRadaresPanel({
           <div style={{ fontSize: 12, opacity: 0.75 }}>{loading ? "Carregando..." : `${filteredItems.length} itens`}</div>
           <div style={{ flex: 1 }} />
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <button type="button" style={filterBtnStyle(statusFilter === "all")} onClick={() => setStatusFilter("all")}>
+            <AdminButton onClick={() => setStatusFilter("all")} size="small" aria-pressed={statusFilter === "all"}>
               Todos
-            </button>
-            <button
-              type="button"
-              style={filterBtnStyle(statusFilter === "active")}
-              onClick={() => setStatusFilter("active")}
-            >
+            </AdminButton>
+            <AdminButton onClick={() => setStatusFilter("active")} size="small" aria-pressed={statusFilter === "active"}>
               Ativos
-            </button>
-            <button
-              type="button"
-              style={filterBtnStyle(statusFilter === "inactive")}
-              onClick={() => setStatusFilter("inactive")}
-            >
+            </AdminButton>
+            <AdminButton onClick={() => setStatusFilter("inactive")} size="small" aria-pressed={statusFilter === "inactive"}>
               Desativados
-            </button>
+            </AdminButton>
           </div>
         </div>
         {renderSearchRow(searchQuery, setSearchQuery)}

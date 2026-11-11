@@ -1,0 +1,42 @@
+.adminButton {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: 600 13px/1.5 var(--font-family-primary);
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.adminButton > svg { flex: 0 0 auto; }
+.adminButton.adminButtonPrimary { border-color: #0a284b; background: #0a284b; color: #fff; }
+.adminButton.adminButtonPrimary:hover:not(:disabled) { border-color: #153d68; background: #153d68; }
+.adminButton.adminButtonSecondary { border-color: #cbdbe5; background: #fff; color: #20415e; }
+.adminButton.adminButtonSecondary:hover:not(:disabled) { border-color: #9fc6d8; background: #f2f9fc; }
+.adminButton.adminButtonSecondary[aria-pressed="true"] { border-color: #a9d5e6; background: #eaf5fa; color: #087fa9; }
+.adminButton.adminButtonDanger { border-color: #efd0d5; background: #fff6f7; color: #b33143; }
+.adminButton.adminButtonDanger:hover:not(:disabled) { border-color: #dda7b0; background: #fcebef; }
+.adminButton.adminButtonGhost { border-color: transparent; background: transparent; color: #087fa9; }
+.adminButton.adminButtonGhost:hover:not(:disabled) { background: #edf7fb; color: #0a284b; }
+.adminButton.adminButtonSmall { min-height: 34px; padding: 7px 10px; gap: 6px; font-size: 12px; }
+.adminButton.adminButtonIcon { width: 36px; height: 36px; min-height: 36px; padding: 0; }
+.adminButton.adminButtonCompactIcon { width: 26px; height: 26px; min-height: 26px; padding: 0; border-radius: 6px; }
+.adminButton:focus-visible { outline: 2px solid #0a91bd; outline-offset: -2px; }
+.adminButton:disabled { opacity: .5; cursor: default; transform: none; }
+.adminButtonSpinner { animation: adminButtonSpin 900ms linear infinite; }
+.adminWorkspace .btnGhost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 7px 10px; border: 1px solid #cbdbe5; border-radius: 8px; background: #fff; color: #20415e; font: 600 12px/1.5 var(--font-family-primary); box-shadow: none; transition: background 150ms ease, border-color 150ms ease; }
+.adminWorkspace .btnGhost:hover:not(:disabled) { border-color: #9fc6d8; background: #f2f9fc; transform: none; }
+.adminWorkspace .btnGhost:focus-visible { outline: 2px solid #0a91bd; outline-offset: -2px; }
+.adminWorkspace .btnGhost:disabled { opacity: .5; cursor: default; transform: none; }
+@keyframes adminButtonSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .adminButton { transition: none; }
+  .adminButtonSpinner { animation: none; }
+}

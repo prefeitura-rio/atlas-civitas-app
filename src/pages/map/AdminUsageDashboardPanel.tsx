@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Building2, Download, FileDown, Loader2, Radio, RefreshCw, Search, ShieldCheck, Users, type LucideIcon } from "lucide-react";
-import { fetchJson } from "./shared";
+import { Activity, Building2, Download, FileDown, Radio, RefreshCw, Search, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import { AdminButton } from "./AdminButton";
+import { fetchJson, adminInputStyle } from "./shared";
 import { fetchWithFriendlyNetworkError, SERVER_UNAVAILABLE_MESSAGE } from "../../app/errorMessages";
 import "./usage-dashboard.css";
 
@@ -461,12 +462,9 @@ export function AdminUsageDashboardPanel({
             <label>Até<input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} /></label>
           </div>
           <div className="usageFilterActions">
-            <button type="button" className="usagePreset" onClick={() => { setFrom(startOfDayIso(7)); setTo(startOfDayIso(0)); }}>7 dias</button>
-            <button type="button" className="usagePreset" onClick={() => { setFrom(startOfDayIso(30)); setTo(startOfDayIso(0)); }}>30 dias</button>
-            <button type="button" className="usageRefresh" onClick={load} disabled={loading}>
-              {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-              {loading ? "Atualizando" : "Atualizar"}
-            </button>
+            <AdminButton onClick={() => { setFrom(startOfDayIso(7)); setTo(startOfDayIso(0)); }} size="small">7 dias</AdminButton>
+            <AdminButton onClick={() => { setFrom(startOfDayIso(30)); setTo(startOfDayIso(0)); }} size="small">30 dias</AdminButton>
+            <AdminButton onClick={load} disabled={loading} className="adminMetricsRefresh" variant="primary" size="small" icon={RefreshCw} loading={loading}>{loading ? "Atualizando..." : "Atualizar"}</AdminButton>
           </div>
         </div>
       </section>
@@ -491,7 +489,7 @@ export function AdminUsageDashboardPanel({
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
               placeholder="Filtrar por nome do usuário"
-              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 34px", borderRadius: 14, border: "1px solid rgba(10,40,75,0.12)", background: "rgba(255,255,255,0.96)", color: "#0f172a" }}
+              style={{ ...adminInputStyle(), paddingLeft: 34 }}
             />
           </div>
           <div className="usageList">
@@ -531,7 +529,7 @@ export function AdminUsageDashboardPanel({
               value={organizationSearch}
               onChange={(e) => setOrganizationSearch(e.target.value)}
               placeholder="Filtrar por nome da organização"
-              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 34px", borderRadius: 14, border: "1px solid rgba(10,40,75,0.12)", background: "rgba(255,255,255,0.96)", color: "#0f172a" }}
+              style={{ ...adminInputStyle(), paddingLeft: 34 }}
             />
           </div>
           <div className="usageList">
@@ -579,15 +577,7 @@ export function AdminUsageDashboardPanel({
               value={reportSearch}
               onChange={(e) => setReportSearch(e.target.value)}
               placeholder="Filtrar por usuário, relatório, hash..."
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px 12px 10px 34px",
-                borderRadius: 14,
-                border: "1px solid rgba(10,40,75,0.12)",
-                background: "rgba(255,255,255,0.96)",
-                color: "#0f172a",
-              }}
+              style={{ ...adminInputStyle(), paddingLeft: 34 }}
             />
           </div>
         </div>
@@ -648,29 +638,7 @@ export function AdminUsageDashboardPanel({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleDownloadReport(item, index)}
-                  disabled={isDownloading}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    padding: "10px 14px",
-                    borderRadius: 14,
-                    border: "0",
-                    background: "#0a284b",
-                    color: "#fff",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    minWidth: 140,
-                    opacity: isDownloading ? 0.75 : 1,
-                  }}
-                >
-                  {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                  {isDownloading ? "Baixando..." : "Baixar PDF"}
-                </button>
+                <AdminButton onClick={() => handleDownloadReport(item, index)} disabled={isDownloading} variant="primary" size="small" icon={Download} loading={isDownloading} style={{ minWidth: 140 }}>{isDownloading ? "Baixando..." : "Baixar PDF"}</AdminButton>
               </div>
             );
           })}

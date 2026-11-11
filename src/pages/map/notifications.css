@@ -1,0 +1,164 @@
+.notificationCenter { display: flex; align-items: center; flex: 0 0 auto; color: #0a284b; }
+.mapUtilityBar > .notificationCenter { margin-right: 12px; }
+.notificationBell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #dce5ed; border-radius: 10px; background: #fff; color: #0a284b; cursor: pointer; }
+.notificationBell:hover { border-color: #9bc9db; background: #f0f7fa; }
+.notificationBellUnread { color: #087eaa; background: #edf7fb; border-color: #b7dce9; }
+.notificationBellUnread > svg { transform-origin: 50% 14%; animation: notificationBellShake 2.4s ease-in-out infinite; }
+.notificationBadge { position: absolute; top: -5px; right: -6px; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 2px solid #fff; border-radius: 20px; background: #0a91bd; color: #fff; font: 700 10px/1 Inter, system-ui, sans-serif; }
+.notificationSrOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes notificationBellShake { 0%, 40%, 100% { transform: rotate(0); } 5%, 15% { transform: rotate(15deg); } 10%, 20% { transform: rotate(-13deg); } 25% { transform: rotate(9deg); } 30% { transform: rotate(-6deg); } 35% { transform: rotate(3deg); } }
+.notificationDialog { position: fixed; inset: 66px 20px auto auto; margin: 0; padding: 0; width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 86px); border: 1px solid #dce5ed; border-top: 3px solid #0a91bd; border-radius: 14px; background: #fff; color: #0a284b; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 20px 64px #0a284b33; overflow: hidden; }
+.notificationDialog::backdrop { background: #0a284b26; }
+.notificationInbox { display: flex; flex-direction: column; max-height: calc(100dvh - 90px); }
+.notificationInboxHeader { display: flex; align-items: center; gap: 12px; padding: 20px 20px 16px; }
+.notificationHeadingIcon { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; border-radius: 12px; background: #eaf5fa; color: #087fa9; }
+.notificationInboxHeader h2, .notificationSectionHeading h2 { margin: 0; color: #0a284b; font-size: 18px; line-height: 1.4; font-weight: 700; }
+.notificationInboxHeader p, .notificationSectionHeading p { margin: 4px 0 0; color: #637b90; font-size: 12px; line-height: 1.5; }
+.notificationIconButton { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; margin-left: auto; border: 0; border-radius: 8px; background: transparent; color: #637b90; cursor: pointer; }
+.notificationIconButton:hover { background: #eef4f7; color: #0a284b; }
+.notificationInboxToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 20px; border-block: 1px solid #e7eef3; color: #6e8294; font-size: 11px; }
+.notificationInboxFilters { display: flex; align-items: center; gap: 4px; }
+.notificationInboxFilters button { padding: 6px 9px; border: 0; border-radius: 7px; background: transparent; color: #637b90; font: 600 12px/1.5 Inter, system-ui, sans-serif; cursor: pointer; }
+.notificationInboxFilters button[aria-pressed="true"] { color: #087fa9; background: #eaf5fa; }
+.notificationInboxFilters button:hover:not(:disabled) { color: #0a284b; background: #f0f6f9; }
+.notificationInboxFilters button:disabled { opacity: .6; cursor: default; }
+.notificationInboxFilters button:focus-visible { outline: 2px solid #0a91bd; outline-offset: 2px; }
+.notificationTextButton { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 5px; padding: 4px 0; background: transparent; color: #087fa9; font: 600 12px/1.5 Inter, system-ui, sans-serif; cursor: pointer; }
+.notificationTextButton:hover:not(:disabled) { color: #0a284b; text-decoration: underline; }
+.notificationTextButton:disabled { opacity: .5; cursor: default; }
+.notificationInboxBody { min-height: 100px; overflow-y: auto; overscroll-behavior: contain; }
+.notificationEmpty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 24px; text-align: center; color: #71869a; font-size: 13px; }
+.notificationEmpty strong { color: #0a284b; font-size: 14px; }
+.notificationEmpty p { margin: 0; line-height: 1.6; }
+.notificationItem { padding: 18px 20px; border-bottom: 1px solid #e9eff4; border-left: 3px solid transparent; }
+.notificationItemUnread { border-left-color: #0a91bd; background: #f3f9fc; }
+.notificationItemMeta { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #71869a; font-size: 11px; line-height: 1.5; }
+.notificationItemMeta span { min-width: 0; overflow-wrap: anywhere; }
+.notificationItemMeta time { flex: 0 0 auto; font-size: 10px; }
+.notificationItem h3, .notificationSentItem h3 { margin: 8px 0 6px; color: #0a284b; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.notificationUnreadDot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #0a91bd; vertical-align: 1px; }
+.notificationMessage { margin: 0 0 10px; color: #526b80; font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.notificationReadLabel, .notificationDeliveryCount { display: inline-flex; align-items: center; gap: 5px; color: #71869a; font-size: 11px; }
+.notificationMoreButton { display: block; width: calc(100% - 40px); margin: 14px 20px; padding: 10px; border: 1px solid #d9e4ec; border-radius: 8px; background: #fff; color: #0a284b; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+.notificationFeedback { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 16px 0 0; padding: 12px 14px; border: 1px solid; border-radius: 9px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.notificationFeedbackError { color: #9f3240; border-color: #f0d3d9; background: #fff6f7; }
+.notificationFeedbackSuccess { color: #246b52; border-color: #c9e6da; background: #f0faf5; }
+.notificationInboxBody > .notificationFeedback { margin: 14px; }
+.notificationsAdmin { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: 100%; min-width: 0; }
+.notificationModeMobile { display: grid; gap: 6px; padding: 10px 12px; border-radius: 16px; border: 1px solid rgba(10,40,75,.08); background: rgba(255,255,255,.88); }
+.notificationModeLabel { font-size: 10px; font-weight: 900; letter-spacing: .08em; color: rgba(10,40,75,.58); }
+.notificationModeButtons { display: flex; gap: 8px; flex-wrap: wrap; }
+.notificationModeButtons .subTab { padding: 7px 12px; border-radius: 999px; border: 1px solid rgba(15,23,42,.12); background: rgba(255,255,255,.96); color: rgba(10,40,75,.76); font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.notificationModeButtons .subTabActive { border-color: rgba(10,40,75,.16); background: rgba(10,40,75,.10); color: #0a284b; }
+.notificationComposer, .notificationSent { padding: 24px; }
+.notificationSectionHeading { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.notificationFormFields { display: grid; gap: 18px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.notificationComposeBody { display: grid; gap: 18px; min-width: 0; }
+.notificationBroadcast { display: flex; flex: none; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border: 1px solid #dce5ed; border-radius: 9px; background: #fbfdff; cursor: pointer; }
+.notificationBroadcastActive { border-color: #a9d5e6; background: #edf7fb; }
+.notificationBroadcast > span { display: grid; gap: 3px; }
+.notificationBroadcast strong { color: #0a284b; font-size: 13px; font-weight: 600; }
+.notificationBroadcast small { color: #71869a; font-size: 11px; line-height: 1.5; }
+.adminWorkspace .adminCard .notificationBroadcast input[type="checkbox"] { flex: 0 0 16px; width: 16px; height: 16px; margin: 0; padding: 0; accent-color: #0a91bd; cursor: pointer; }
+.notificationAllRecipients { grid-column: 1 / -1; display: grid; align-content: center; justify-items: center; gap: 10px; min-width: 0; padding: 20px; border: 1px dashed #b9d7e4; border-radius: 10px; background: #f5fafc; text-align: center; }
+.notificationAllRecipients h3 { margin: 0; color: #0a284b; font-size: 14px; }
+.notificationAllRecipients p { max-width: 320px; margin: 0; color: #637b90; font-size: 12px; line-height: 1.7; }
+.notificationField { display: grid; gap: 8px; min-width: 0; }
+.notificationField > span { display: flex; justify-content: space-between; color: #0a284b; font-size: 13px; font-weight: 600; }
+.notificationField small { color: #71869a; font-size: 11px; font-weight: 400; }
+.notificationField textarea { resize: vertical; min-height: 132px; max-height: 500px; }
+.notificationRecipientsGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.notificationRecipientPicker { min-width: 0; padding: 16px; border: 1px solid #dce5ed; border-radius: 10px; }
+.notificationRecipientPicker h3 { display: flex; align-items: center; gap: 8px; margin: 0; color: #0a284b; font-size: 13px; font-weight: 650; }
+.notificationRecipientPicker h3 > span { display: grid; place-items: center; min-width: 22px; height: 22px; margin-left: auto; padding: 0 5px; border-radius: 7px; background: #eaf5fa; color: #087fa9; font-size: 11px; box-sizing: border-box; }
+.notificationRecipientPicker > p { margin: 8px 0 12px; color: #71869a; font-size: 12px; line-height: 1.6; }
+.notificationSearch { display: flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid #dce5ed; border-radius: 8px; background: #fbfdff; color: #71869a; }
+.notificationSearch > svg { flex: 0 0 16px; }
+.adminWorkspace .adminCard .notificationSearch input { width: 100%; min-width: 0; padding: 9px 0; border: 0 !important; border-radius: 0; outline: 0; background: transparent !important; color: #0a284b; font: 400 12px/1.5 Inter, system-ui, sans-serif; }
+.notificationChoices { height: 240px; margin-top: 10px; overflow-y: auto; overscroll-behavior: contain; }
+.notificationChoice { display: flex; align-items: flex-start; gap: 9px; padding: 10px 8px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; }
+.notificationChoice:hover { background: #f4f8fb; }
+.notificationChoiceSelected { border-color: #d7eaf3; background: #eef7fb; }
+.notificationChoice > span { display: grid; min-width: 0; gap: 3px; }
+.notificationChoice strong { color: #20415e; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.notificationChoice small { color: #71869a; font-size: 11px; overflow-wrap: anywhere; }
+.adminWorkspace .adminCard .notificationChoice input[type="checkbox"] { flex: 0 0 16px; width: 16px; height: 16px; margin: 1px 0 0; padding: 0; accent-color: #0a91bd; cursor: pointer; }
+.notificationPickerEmpty { padding: 16px 8px; color: #71869a; font-size: 12px; text-align: center; line-height: 1.6; }
+.notificationInlineError { color: #9f3240 !important; }
+.notificationSelectedRecipients { display: flex; flex-wrap: wrap; gap: 7px; }
+.notificationRecipientChip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 9px; border: 1px solid #d0e5ef; border-radius: 7px; background: #eff7fb; color: #20415e; font: 500 11px Inter, system-ui, sans-serif; cursor: pointer; }
+.notificationRecipientChip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notificationRecipientChip > svg { flex-shrink: 0; }
+.notificationSendFooter { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 4px; }
+.notificationSendFooter p { max-width: 450px; margin: 0; color: #71869a; font-size: 12px; line-height: 1.6; }
+.notificationSentItem { padding: 18px 0; border-top: 1px solid #e7eef3; }
+.notificationSentItem .notificationMessage { max-height: 180px; overflow-y: auto; }
+.notificationHistoryToolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.notificationHistoryToolbar > .notificationSearch { flex: 1; min-width: 0; }
+.notificationHistoryCount { color: #71869a; font-size: 12px; white-space: nowrap; }
+.notificationHistoryList { min-width: 0; }
+.notificationPagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; color: #71869a; font-size: 11px; }
+.notificationHistoryPagination { justify-content: center; gap: 8px; margin-top: 10px; padding-top: 0; }
+.notificationHistoryPagination > span { font-size: 12px; }
+.notificationHistoryPagination .btnGhost:disabled { opacity: .5; cursor: default; transform: none; }
+.notificationBell:focus-visible, .notificationIconButton:focus-visible, .notificationTextButton:focus-visible, .notificationMoreButton:focus-visible, .notificationRecipientChip:focus-visible { outline: 2px solid #0a91bd; outline-offset: 3px; }
+.notificationSearch:focus-within { outline: 2px solid #0a91bd; outline-offset: -2px; }
+.notificationSearch input:focus { box-shadow: none; }
+.notificationCenterMobile { position: fixed; top: calc(11px + env(safe-area-inset-top)); right: calc(64px + env(safe-area-inset-right)); z-index: 35; }
+.notificationCenterMobile .notificationBell { width: 44px; height: 44px; border-radius: 12px; box-shadow: 0 8px 24px #0a284b2e; }
+@media (min-width: 1211px) {
+  .adminWorkspaceMainNotifications { display: flex; flex-direction: column; overflow: hidden; }
+  .adminWorkspaceMainNotifications > .adminBreadcrumb { flex: none; padding-top: 18px; }
+  .adminWorkspaceMainNotifications > .adminWorkspaceHeader { flex: none; padding-bottom: 14px; }
+  .adminWorkspaceContentNotifications { display: flex; flex: 1; min-height: 0; padding-bottom: 20px; overflow: hidden; }
+  .notificationsAdmin { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .notificationsAdmin > nav { flex: none; }
+  .notificationComposer, .notificationSent { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 18px; overflow: hidden; }
+  .notificationComposer > .notificationSectionHeading, .notificationSent > .notificationSectionHeading { flex: none; margin-bottom: 14px; }
+  .notificationComposer > form { display: flex; flex: 1; min-height: 0; }
+  .notificationComposer .notificationFormFields { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; }
+  .notificationComposeBody {
+    flex: 1;
+    grid-template-columns: minmax(240px, .85fr) minmax(0, 1.4fr);
+    grid-template-rows: auto minmax(100px, 1fr) auto;
+    grid-template-areas: "title recipients" "message recipients" "selected selected";
+    gap: 12px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .notificationTitleField { grid-area: title; }
+  .notificationMessageField { grid-area: message; display: flex; flex-direction: column; min-height: 0; }
+  .notificationMessageField > span { flex: none; }
+  .notificationMessageField textarea { flex: 1; min-height: 100px; max-height: none; resize: none; }
+  .notificationRecipientsGrid { grid-area: recipients; min-height: 240px; gap: 12px; }
+  .notificationRecipientPicker { display: flex; flex-direction: column; min-height: 0; padding: 12px; }
+  .notificationRecipientPicker > h3, .notificationRecipientPicker > p, .notificationRecipientPicker > .notificationSearch, .notificationRecipientPicker > .notificationPagination { flex: none; }
+  .notificationChoices { flex: 1; height: auto; min-height: 0; margin-top: 8px; }
+  .notificationSelectedRecipients { grid-area: selected; max-height: 56px; overflow-y: auto; overscroll-behavior: contain; align-content: start; }
+  .notificationSendFooter { flex: none; padding-top: 12px; border-top: 1px solid #e7eef3; }
+  .notificationComposer > .notificationFeedback { flex: none; margin-top: 10px; padding-block: 8px; }
+  .notificationHistoryToolbar { flex: none; }
+  .notificationHistoryList { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .notificationSent > .notificationPagination { flex: none; }
+}
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
+  .notificationDialog { inset: calc(66px + env(safe-area-inset-top)) 12px auto auto; width: calc(100vw - 24px); max-height: calc(100dvh - 150px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .notificationInbox { max-height: calc(100dvh - 154px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .notificationDialog::backdrop { background: #0a284b55; }
+  .mapRoot:has(.notificationCenterMobile) .mobileMapBrandPill img { width: min(200px, calc(100vw - 152px)); }
+}
+@media (max-width: 700px) {
+  .notificationComposer, .notificationSent { padding: 18px 14px; }
+  .notificationRecipientsGrid { grid-template-columns: minmax(0, 1fr); }
+  .notificationSendFooter { align-items: stretch; flex-direction: column; gap: 12px; }
+  .notificationSectionHeading { align-items: flex-start; }
+  .notificationSectionHeading h2 { font-size: 16px; }
+  .notificationInboxToolbar { padding-inline: 16px; }
+  .notificationItem { padding-inline: 16px; }
+  .notificationHistoryToolbar { flex-wrap: wrap; }
+  .notificationHistoryCount { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notificationBellUnread > svg { animation: none; }
+}
