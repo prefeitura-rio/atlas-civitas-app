@@ -1627,6 +1627,7 @@ export default function MapPage() {
   const [panel, setPanel] = useState<PanelKey>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileNotificationMenuTarget, setMobileNotificationMenuTarget] = useState<HTMLDivElement | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSearchFocused, setMobileSearchFocused] = useState(false);
@@ -7439,7 +7440,7 @@ export default function MapPage() {
         <img src={atlasBrand} alt="Prefeitura do Rio e CIVITAS Rio" />
       </div>
       {isMobile && me?.id && (
-        <NotificationCenter key={me.id} apiBase={API_BASE} token={accessToken} isMobile />
+        <NotificationCenter key={me.id} apiBase={API_BASE} token={accessToken} isMobile mobileMenuTarget={mobileNotificationMenuTarget} onOpen={() => setMobileMenuOpen(false)} />
       )}
       <button
         type="button"
@@ -9045,6 +9046,7 @@ export default function MapPage() {
                   </div>
 
                   <div className="mobileMenuActions">
+                    <div className="mobileNotificationsMenuSlot" ref={setMobileNotificationMenuTarget} />
                     {canAccessAdmin && (
                       <button
                         type="button"
@@ -9820,23 +9822,14 @@ export default function MapPage() {
           type="button"
           className={mobileMenuOpen ? "mobileBottomNavActive" : ""}
           onClick={() => {
-            if (!canAccessAdmin) {
-              auth?.logout?.();
-              try {
-                nav("/login", { replace: true });
-              } catch {
-                window.location.href = "/login";
-              }
-              return;
-            }
             setMobileSearchOpen(false);
             setPanelOpen(false);
             setMobileMenuOpen((open) => !open);
           }}
-          aria-label={canAccessAdmin ? "Mais opções" : "Sair"}
-          title={canAccessAdmin ? "Mais opções" : "Sair"}
+          aria-label="Mais opções"
+          title="Mais opções"
         >
-          {canAccessAdmin ? <Menu size={20} aria-hidden="true" /> : <LogOut size={20} aria-hidden="true" />}
+          <Menu size={20} aria-hidden="true" />
           <span>Mais</span>
         </button>
       </nav>

@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, BellRing, Check, CheckCheck, RefreshCw, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Bell, BellRing, Check, CheckCheck, ChevronRight, RefreshCw, X } from "lucide-react";
 import {
   notificationDate, notificationError, notificationRequest, type NotificationInbox,
 } from "./notifications";
 import "./notifications.css";
 
-type Props = { apiBase: string; token: string | null; isMobile: boolean };
+type Props = {
+  apiBase: string;
+  token: string | null;
+  isMobile: boolean;
+  mobileMenuTarget?: HTMLElement | null;
+  onOpen?: () => void;
+};
 type InboxStatus = "unread" | "read";
 
-export function NotificationCenter({ apiBase, token, isMobile }: Props) {
+export function NotificationCenter({ apiBase, token, isMobile, mobileMenuTarget, onOpen }: Props) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<InboxStatus>("unread");
   const [unread, setUnread] = useState(0);
@@ -184,12 +191,22 @@ export function NotificationCenter({ apiBase, token, isMobile }: Props) {
     setStatus(next);
   }
 
+  function openInbox() {
+    setStatus("unread");
+    setInbox(null);
+    setLoading(true);
+    setOpen(true);
+    onOpen?.();
+  }
+
+  const showBell = !isMobile || unread > 0;
+
   return (
-    <div className={isMobile ? "notificationCenter notificationCenterMobile" : "notificationCenter"}>
-      <button
+    <div className={isMobile && showBell ? "notificationCenter notificationCenterMobile" : "notificationCenter"}>
+      {showBell && <button
         type="button"
         className={`notificationBell ${unread > 0 ? "notificationBellUnread" : ""}`}
-        onClick={() => { setStatus("unread"); setInbox(null); setLoading(true); setOpen(true); }}
+        onClick={openInbox}
         aria-label={unread > 0 ? `Notificações: ${unread} não lidas` : "Notificações"}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -197,7 +214,17 @@ export function NotificationCenter({ apiBase, token, isMobile }: Props) {
       >
         {unread > 0 ? <BellRing size={21} aria-hidden="true" /> : <Bell size={21} aria-hidden="true" />}
         {unread > 0 && <span className="notificationBadge" aria-hidden="true">{unread > 99 ? "99+" : unread}</span>}
-      </button>
+      </button>}
+      {isMobile && !showBell && mobileMenuTarget && createPortal(
+        <button type="button" className="mobileMenuAction" onClick={openInbox} aria-haspopup="dialog" aria-expanded={open}>
+          <span className="mobileMenuActionIcon"><Bell size={16} strokeWidth={2.4} aria-hidden="true" /></span>
+          <span className="mobileMenuActionText">
+            <span className="mobileMenuActionLabel">Notificações</span>
+            <span className="mobileMenuActionSub">Consultar seus comunicados</span>
+          </span>
+          <ChevronRight className="mobileMenuActionChevron" size={16} strokeWidth={2.4} aria-hidden="true" />
+        </button>, mobileMenuTarget,
+      )}
       <span className="notificationSrOnly" role="status">{unread > 0 ? `${unread} notificações não lidas` : "Nenhuma notificação não lida"}</span>
       <dialog
         ref={dialogRef}

@@ -1,4 +1,5 @@
 .notificationCenter { display: flex; align-items: center; flex: 0 0 auto; color: #0a284b; }
+.mobileNotificationsMenuSlot { display: contents; }
 .mapUtilityBar > .notificationCenter { margin-right: 12px; }
 .notificationBell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #dce5ed; border-radius: 10px; background: #fff; color: #0a284b; cursor: pointer; }
 .notificationBell:hover { border-color: #9bc9db; background: #f0f7fa; }
@@ -7,14 +8,14 @@
 .notificationBadge { position: absolute; top: -5px; right: -6px; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 2px solid #fff; border-radius: 20px; background: #0a91bd; color: #fff; font: 700 10px/1 Inter, system-ui, sans-serif; }
 .notificationSrOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @keyframes notificationBellShake { 0%, 40%, 100% { transform: rotate(0); } 5%, 15% { transform: rotate(15deg); } 10%, 20% { transform: rotate(-13deg); } 25% { transform: rotate(9deg); } 30% { transform: rotate(-6deg); } 35% { transform: rotate(3deg); } }
-.notificationDialog { position: fixed; inset: 66px 20px auto auto; margin: 0; padding: 0; width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 86px); border: 1px solid #dce5ed; border-top: 3px solid #0a91bd; border-radius: 14px; background: #fff; color: #0a284b; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 20px 64px #0a284b33; overflow: hidden; }
+.notificationDialog { position: fixed; inset: 66px 20px auto auto; margin: 0; padding: 0; width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 86px); border: 1px solid #dce5ed; border-radius: 14px; background: #fff; color: #0a284b; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 20px 64px #0a284b33; overflow: hidden; }
 .notificationDialog::backdrop { background: #0a284b26; }
 .notificationInbox { display: flex; flex-direction: column; max-height: calc(100dvh - 90px); }
 .notificationInboxHeader { display: flex; align-items: center; gap: 12px; padding: 20px 20px 16px; }
 .notificationHeadingIcon { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; border-radius: 12px; background: #eaf5fa; color: #087fa9; }
 .notificationInboxHeader h2, .notificationSectionHeading h2 { margin: 0; color: #0a284b; font-size: 18px; line-height: 1.4; font-weight: 700; }
 .notificationInboxHeader p, .notificationSectionHeading p { margin: 4px 0 0; color: #637b90; font-size: 12px; line-height: 1.5; }
-.notificationIconButton { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; margin-left: auto; border: 0; border-radius: 8px; background: transparent; color: #637b90; cursor: pointer; }
+.notificationIconButton { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; margin-left: auto; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #637b90; cursor: pointer; }
 .notificationIconButton:hover { background: #eef4f7; color: #0a284b; }
 .notificationInboxToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 20px; border-block: 1px solid #e7eef3; color: #6e8294; font-size: 11px; }
 .notificationInboxFilters { display: flex; align-items: center; gap: 4px; }
