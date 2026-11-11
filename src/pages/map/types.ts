@@ -153,6 +153,7 @@ export type AdminLog = {
 
   message: string;
   target?: {
+    notification_id?: string;
     email?: string;
     name?: string;
     code?: string;

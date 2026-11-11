@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Pencil, RefreshCw, RotateCcw, Save, UserCheck, UserPlus, UserX } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 import type { AdminUser } from "./types";
 import { isUserRole, roleLabel, type UserRole } from "./roles";
-import { fetchJson, inputStyle } from "./shared";
+import { fetchJson, adminInputStyle as inputStyle } from "./shared";
 
 const ADMIN_PAGE_SIZE = 50;
 const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -722,13 +723,7 @@ export function AdminUsersPanel({
                     value={organizationSearch}
                     onChange={(e) => setOrganizationSearch(e.target.value)}
                     placeholder="Filtrar organização..."
-                    style={{
-                      ...inputStyle(),
-                      height: 36,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      fontSize: 13,
-                    }}
+                    style={inputStyle()}
                     autoFocus
                   />
                 </div>
@@ -839,54 +834,8 @@ export function AdminUsersPanel({
                   gap: 6,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setIsPasswordVisible((isVisible) => !isVisible)}
-                  style={{
-                    width: 26,
-                    height: 26,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(255,255,255,0.92)",
-                    color: "rgba(0,0,0,0.78)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 8,
-                    padding: 0,
-                    cursor: "pointer",
-                  }}
-                  title={isPasswordVisible ? "Ocultar senha" : "Mostrar senha"}
-                  aria-label={isPasswordVisible ? "Ocultar senha" : "Mostrar senha"}
-                >
-                  {isPasswordVisible ? (
-                    <EyeOff size={14} strokeWidth={2.2} aria-hidden="true" />
-                  ) : (
-                    <Eye size={14} strokeWidth={2.2} aria-hidden="true" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={copyPassword}
-                  disabled={!password}
-                  style={{
-                    width: 26,
-                    height: 26,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(255,255,255,0.92)",
-                    color: passwordCopied ? "#15803d" : "rgba(0,0,0,0.78)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 8,
-                    padding: 0,
-                    cursor: password ? "pointer" : "not-allowed",
-                    opacity: password ? 1 : 0.7,
-                  }}
-                  title={password ? "Copiar senha" : "Digite uma senha para copiar"}
-                  aria-label={password ? "Copiar senha" : "Digite uma senha para copiar"}
-                >
-                  <Copy size={14} strokeWidth={2.2} aria-hidden="true" />
-                </button>
+                <AdminButton onClick={() => setIsPasswordVisible((isVisible) => !isVisible)} title={isPasswordVisible ? "Ocultar senha" : "Mostrar senha"} aria-label={isPasswordVisible ? "Ocultar senha" : "Mostrar senha"} size="compactIcon" icon={isPasswordVisible ? EyeOff : Eye} />
+                <AdminButton onClick={copyPassword} disabled={!password} title={password ? "Copiar senha" : "Digite uma senha para copiar"} aria-label={password ? "Copiar senha" : "Digite uma senha para copiar"} size="compactIcon" icon={passwordCopied ? Check : Copy} />
               </div>
             </div>
             {editingUserId && (
@@ -895,27 +844,12 @@ export function AdminUsersPanel({
               </div>
             )}
             {!editingUserId && suggestedPassword && (
-              <button
-                type="button"
-                onClick={applySuggestedPassword}
-                style={{
-                  justifySelf: "start",
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  borderRadius: 10,
-                  padding: "5px 8px",
-                  background: "rgba(255,255,255,0.92)",
-                  color: "rgba(0,0,0,0.82)",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-                title="Usar senha sugerida"
-              >
+              <AdminButton onClick={applySuggestedPassword} title="Usar senha sugerida" variant="ghost" size="small" style={{ justifySelf: "start" }}>
                 Sugerida:{" "}
                 <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
                   {suggestedPassword}
                 </span>
-              </button>
+              </AdminButton>
             )}
           </div>
 
@@ -969,35 +903,13 @@ export function AdminUsersPanel({
         </div>
 
         <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-          <button
-            onClick={save}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(10,40,75,0.18)",
-              background: "rgba(10,40,75,0.92)",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 900,
-            }}
-          >
+          <AdminButton onClick={save} variant="primary" icon={editingUserId ? Save : UserPlus}>
             {editingUserId ? "Salvar alterações" : "Criar usuário"}
-          </button>
+          </AdminButton>
 
-          <button
-            onClick={resetUserForm}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(10,40,75,0.82)",
-              background: "rgba(255,255,255,0.96)",
-              cursor: "pointer",
-              fontWeight: 900,
-              color: "#0a284b",
-            }}
-          >
+          <AdminButton onClick={resetUserForm} icon={RotateCcw}>
             Limpar
-          </button>
+          </AdminButton>
         </div>
 
         {err && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9, color: "#991b1b" }}>{err}</div>}
@@ -1029,26 +941,7 @@ export function AdminUsersPanel({
             placeholder="Filtrar por nome, CPF, matrícula ou órgão"
             style={{ ...inputStyle(), flex: 1, minWidth: 0 }}
           />
-          <button
-            onClick={loadUsers}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              border: "1px solid rgba(10,40,75,0.82)",
-              background: "rgba(255,255,255,0.96)",
-              cursor: "pointer",
-              color: "#0a284b",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flex: "0 0 auto",
-            }}
-            title="Recarregar usuários"
-            aria-label="Recarregar usuários"
-          >
-            <RefreshCw size={16} />
-          </button>
+          <AdminButton onClick={loadUsers} title="Recarregar usuários" aria-label="Recarregar usuários" size="icon" icon={RefreshCw} loading={loadingUsers} />
         </div>
 
           <div
@@ -1209,54 +1102,18 @@ export function AdminUsersPanel({
 
               {!isManagerViewer || canManagerTouchRole(user.role) ? (
                 <>
-                  <button
-                    onClick={() => editUser(user)}
-                    className="adminRowBtn"
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(10,40,75,0.82)",
-                      background: "rgba(255,255,255,0.96)",
-                      cursor: "pointer",
-                      fontWeight: 900,
-                      color: "#0a284b",
-                    }}
-                  >
+                  <AdminButton onClick={() => editUser(user)} className="adminRowBtn" size="small" icon={Pencil}>
                     Editar
-                  </button>
+                  </AdminButton>
 
                   {user.is_active && !isExpired ? (
-                    <button
-                      onClick={() => deactivate(user.id)}
-                      className="adminRowBtn"
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(10,40,75,0.18)",
-                        background: "rgba(10,40,75,0.92)",
-                        color: "#fff",
-                        cursor: "pointer",
-                        fontWeight: 900,
-                      }}
-                    >
+                    <AdminButton onClick={() => deactivate(user.id)} className="adminRowBtn" variant="danger" size="small" icon={UserX}>
                       Desativar
-                    </button>
+                    </AdminButton>
                   ) : (
-                    <button
-                      onClick={() => reactivate(user.id)}
-                      className="adminRowBtn"
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(0,0,0,0.12)",
-                        background: "rgba(34,197,94,.14)",
-                        color: "#15803d",
-                        cursor: "pointer",
-                        fontWeight: 900,
-                      }}
-                    >
+                    <AdminButton onClick={() => reactivate(user.id)} className="adminRowBtn" size="small" icon={UserCheck}>
                       Reativar
-                    </button>
+                    </AdminButton>
                   )}
                 </>
               ) : null}

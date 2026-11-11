@@ -35,14 +35,9 @@
 .usageFilterHeading { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #b9ddeb; }
 .usageDateFields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .usageDateFields label { display: grid; gap: 5px; min-width: 0; color: #d2e8f1; font-size: 11px; font-weight: 700; }
-.usageDateFields input { box-sizing: border-box; width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid #cadde9; border-radius: 8px; background: #fff; color: #0b294a; font: inherit; font-size: 12px; }
+.usageDateFields input { box-sizing: border-box; width: 100%; min-width: 0; }
 .usageFilterActions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
-.usageFilterActions button { min-height: 32px; border-radius: 7px; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
-.usagePreset { padding: 0 11px; border: 1px solid rgba(182,222,239,.3); background: rgba(255,255,255,.06); color: #e5f5fa; }
-.usagePreset:hover { background: rgba(255,255,255,.16); }
-.usageRefresh { display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin-left: auto; padding: 0 12px; border: 1px solid #69d5f1; background: #24a6d2; color: #fff; }
-.usageRefresh:hover { background: #168fbb; }
-.usageRefresh:disabled { opacity: .65; cursor: wait; }
+.usageFilterActions .adminMetricsRefresh { margin-left: auto; }
 .usageError { padding: 11px 14px; border: 1px solid #fecaca; border-radius: 9px; background: #fff1f2; color: #9f1239; font-size: 13px; }
 .usageViewTabs { display: inline-flex; justify-self: start; gap: 4px; padding: 4px; border: 1px solid #d7e4ed; border-radius: 10px; background: #eaf1f6; }
 .usageViewTabs button { min-height: 35px; padding: 0 16px; border: 0; border-radius: 7px; background: transparent; color: #5b7288; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }

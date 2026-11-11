@@ -2,14 +2,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   PenTool,
+  Pencil,
   RefreshCw,
+  RotateCcw,
+  Save,
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 import type { AdminOrganization, FeatureCatalogItem } from "./types";
-import { fetchJson, inputStyle } from "./shared";
+import { fetchJson, adminInputStyle as inputStyle } from "./shared";
 import { normalizeFeatureCode, normalizeFeatureCodes } from "../../app/featureCodes";
 import cameraIcon from "@/assets/camera-icon.png";
 import cameraIntelIcon from "@/assets/cameras-inteligentes-icon.png";
@@ -1009,37 +1014,13 @@ export function AdminOrganizationsPanel({
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={save}
-              disabled={saving}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(10,40,75,0.18)",
-                background: "rgba(10,40,75,0.92)",
-                color: "#fff",
-                cursor: saving ? "not-allowed" : "pointer",
-                fontWeight: 900,
-                opacity: saving ? 0.7 : 1,
-              }}
-            >
+            <AdminButton onClick={save} disabled={saving} variant="primary" icon={id ? Save : Building2} loading={saving}>
               {saving ? "Salvando..." : id ? "Salvar alterações" : "Criar organização"}
-            </button>
+            </AdminButton>
 
-            <button
-              onClick={() => resetForm()}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(10,40,75,0.82)",
-                background: "rgba(255,255,255,0.96)",
-                cursor: "pointer",
-                fontWeight: 900,
-                color: "#0a284b",
-              }}
-            >
+            <AdminButton onClick={() => resetForm()} icon={RotateCcw}>
               Limpar
-            </button>
+            </AdminButton>
           </div>
 
           {detailLoading && <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>Carregando detalhes...</div>}
@@ -1072,29 +1053,10 @@ export function AdminOrganizationsPanel({
               placeholder="Filtrar por nome, tipo, sigla, jurisdição, ID ou feature"
               style={{ ...inputStyle(), flex: 1, minWidth: 0 }}
             />
-            <button
-              onClick={() => {
+            <AdminButton onClick={() => {
                 void load();
                 void loadFeatureCatalog();
-              }}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                border: "1px solid rgba(10,40,75,0.82)",
-                background: "rgba(255,255,255,0.96)",
-                cursor: "pointer",
-                color: "#0a284b",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flex: "0 0 auto",
-              }}
-              title="Recarregar organizações e catálogo"
-              aria-label="Recarregar organizações e catálogo"
-            >
-              <RefreshCw size={16} />
-            </button>
+              }} title="Recarregar organizações e catálogo" aria-label="Recarregar organizações e catálogo" size="icon" icon={RefreshCw} loading={loading || catalogLoading} />
           </div>
 
           <div
@@ -1214,39 +1176,13 @@ export function AdminOrganizationsPanel({
                   </div>
                 </div>
 
-                <button
-                  onClick={() => pick(org)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(10,40,75,0.82)",
-                    background: "rgba(255,255,255,0.96)",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                    color: "#0a284b",
-                    flex: "0 0 auto",
-                  }}
-                >
+                <AdminButton onClick={() => pick(org)} className="adminRowBtn" size="small" icon={Pencil}>
                   Editar
-                </button>
+                </AdminButton>
 
-                <button
-                  onClick={() => void removeOrganization(org)}
-                  className="adminRowBtn"
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    background: "rgba(239,68,68,0.12)",
-                    color: "#b91c1c",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                    flex: "0 0 auto",
-                  }}
-                >
+                <AdminButton onClick={() => void removeOrganization(org)} className="adminRowBtn" variant="danger" size="small" icon={Trash2}>
                   Excluir
-                </button>
+                </AdminButton>
               </div>
             ))}
 

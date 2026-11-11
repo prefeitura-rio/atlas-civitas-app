@@ -1248,6 +1248,14 @@
 }
 
 .adminWorkspace {
+  --admin-field-border: #d9e3eb;
+  --admin-field-background: #fbfdff;
+  --admin-field-text: #0a284b;
+  --admin-field-placeholder: #8a9bab;
+  --admin-field-focus: #0a91bd;
+  --admin-field-radius: 9px;
+  --admin-field-padding: 11px 13px;
+  --admin-field-font: 400 13px/1.6 var(--font-family-primary);
   position: absolute;
   z-index: 55;
   top: 56px;
@@ -1300,6 +1308,18 @@
 .adminWorkspaceClose:hover { background: #edf7fb; }
 .adminWorkspaceContent { min-width: 0; padding: 0 28px 48px; }
 .adminWorkspaceContentDropdownOpen { padding-bottom: 180px; }
+.adminWorkspaceMainLogs { display: flex; flex-direction: column; overflow: hidden; }
+.adminWorkspaceMainLogs > .adminWorkspaceMobileNav,
+.adminWorkspaceMainLogs > .adminBreadcrumb,
+.adminWorkspaceMainLogs > .adminWorkspaceHeader { flex: none; }
+.adminWorkspaceMainLogs > .adminBreadcrumb { padding-top: 18px; }
+.adminWorkspaceMainLogs > .adminWorkspaceHeader { padding-bottom: 14px; }
+.adminWorkspaceContentLogs { display: flex; flex: 1; min-height: 0; padding-bottom: 20px; }
+.adminLogsPanel { display: flex; flex-direction: column; flex: 1; gap: 12px; width: 100%; min-width: 0; min-height: 0; }
+.adminLogsToolbar { flex: none; }
+.adminLogsListCard { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.adminLogsList { display: grid; align-content: start; flex: 1; gap: 8px; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.adminLogsPagination { display: flex; flex: none; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
 @media (min-width: 1211px) {
   .adminWorkspaceMainEquipment {
     display: flex;
@@ -1339,11 +1359,36 @@
 .adminCinematicHeading p, .adminCinematicNote { margin: 0; color: #64748b; font-size: 13px; line-height: 1.45; }
 .adminCinematicToggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 54px; padding: 10px 14px; border: 1px solid #dce5ed; border-radius: 10px; background: #f8fafc; color: #24425d; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
 .adminCinematicToggleOn { border-color: #b4d8e8; background: #edf8fc; color: #0a284b; }
-.adminCinematicToggle:focus-visible, .adminCinematicMapButton:focus-visible { outline: 2px solid #00a9de; outline-offset: 2px; }
-.adminCinematicMapButton { justify-self: start; min-height: 38px; padding: 0 16px; border: 0; border-radius: 8px; background: #0a284b; color: #fff; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
-.adminCinematicMapButton:hover { background: #163f70; }
-.adminWorkspace .adminCard input,
-.adminWorkspace .adminCard .customSelectBtn { border-color: #d9e3eb !important; background: #fbfdff !important; }
+.adminCinematicToggle:focus-visible { outline: 2px solid #00a9de; outline-offset: 2px; }
+.adminWorkspace :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"]), textarea, select, .customSelectBtn) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--admin-field-padding);
+  border: 1px solid var(--admin-field-border);
+  border-radius: var(--admin-field-radius);
+  outline: none;
+  background: var(--admin-field-background);
+  color: var(--admin-field-text);
+  font: var(--admin-field-font);
+  box-shadow: none;
+}
+.adminWorkspace :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"]), textarea, select, .customSelectBtn):not(.notificationSearch input):focus {
+  outline: 2px solid var(--admin-field-focus);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+.adminWorkspace :is(input, textarea)::placeholder { color: var(--admin-field-placeholder); opacity: 1; }
+.adminWorkspace :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--admin-field-focus); }
+.adminWorkspace .customSelectBtn { padding-right: 36px; font-weight: 400 !important; }
+.adminWorkspace .customSelectBtn:disabled { color: #71869a; }
+.adminWorkspace .customSelectMenu { border-color: var(--admin-field-border); border-radius: 10px; background: #fff; box-shadow: 0 12px 28px rgba(10, 40, 75, .12); }
+.adminWorkspace .customSelectItem { border-radius: 7px; color: var(--admin-field-text); font: var(--admin-field-font); }
+.adminWorkspace .customSelectItem:hover { background: #f0f6f9; }
+.adminWorkspace .customSelectItemActive { background: #eaf5fa; color: #087fa9; }
+.adminWorkspace .customSelectItem:focus-visible { outline: 2px solid var(--admin-field-focus); outline-offset: -2px; }
+.adminWorkspace .adminLabelWrap { border-color: var(--admin-field-border) !important; border-radius: var(--admin-field-radius) !important; background: var(--admin-field-background) !important; color: var(--admin-field-text) !important; font-size: 13px; font-weight: 600 !important; }
 .adminWorkspace .adminCard .btnGhost { border-color: #cbdbe5; background: #fff; color: #20415e; }
 .adminWorkspace .adminCard .btnGhost:hover { border-color: #9fc6d8; background: #f2f9fc; }
 
@@ -1724,6 +1769,7 @@
   .adminWorkspaceClose .workspaceCloseIcon { display: none; }
   .adminWorkspaceContent { padding: 0 16px calc(36px + env(safe-area-inset-bottom)); }
   .adminWorkspaceContentDropdownOpen { padding-bottom: 180px; }
+  .adminWorkspaceContentLogs { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
   .adminWorkspace .adminGrid2 { grid-template-columns: 1fr !important; }
   .adminWorkspace .adminCard { max-width: 100%; overflow: visible; }
   .adminWorkspace input,
