@@ -12,7 +12,8 @@ on:
     - cron: "0 9 * * 1"
 
 concurrency:
-  group: sast-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # O run agendado tem grupo próprio: não cancela nem é cancelado pelo run de um push na main.
+  group: sast-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'schedule' && '-agendado' || '' }}
   cancel-in-progress: true
 
 permissions: {}
