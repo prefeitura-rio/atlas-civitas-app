@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch: {}
+  # Reanalisa a main toda segunda-feira (09:00 UTC): advisories e regras novas
+  # aparecem sem push, e o deploy de produção não olha para este resultado.
+  schedule:
+    - cron: "0 9 * * 1"
 
 concurrency:
   group: sast-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
