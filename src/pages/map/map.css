@@ -1435,6 +1435,36 @@
   background: #0b0b0f;
 }
 
+.mapClusterSummary {
+  position: absolute;
+  z-index: 19;
+  top: 68px;
+  right: 16px;
+  width: min(280px, calc(100vw - 88px));
+  padding: 12px 14px;
+  border: 1px solid rgba(220, 229, 239, 0.8);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.93);
+  box-shadow: 0 4px 18px rgba(10, 31, 60, 0.1);
+  color: #24425d;
+  font-size: 12px;
+  pointer-events: none;
+}
+.mapClusterSummaryHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 8px; border-bottom: 1px solid #e4eaf0; color: #65778b; font-size: 11px; }
+.mapClusterSummaryHeader strong { color: #24425d; font-variant-numeric: tabular-nums; }
+.mapClusterSummaryItems { display: grid; gap: 8px; margin: 10px 0 0; }
+.mapClusterSummaryItem { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.mapClusterSummaryItem dt { display: flex; align-items: center; gap: 8px; }
+.mapClusterSummaryItem img { width: 18px; height: 18px; flex: none; object-fit: contain; }
+.mapClusterSummaryItem dd { margin: 0; color: #132f50; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1210px), (max-height: 500px) and (pointer: coarse) {
+  .mapClusterSummary {
+    top: calc(76px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+  }
+}
+
 .areaDrawIntroBackdrop {
   position: absolute;
   z-index: 80;
@@ -1606,6 +1636,9 @@
   transition: left 230ms cubic-bezier(0.2, 0.82, 0.25, 1);
 }
 .mapActiveLayersWithPanel { top: 76px; left: var(--map-active-panel-right); }
+@media (min-width: 1211px) {
+  .mapRoot:has(.mapClusterSummary) .mapActiveLayers { right: 328px; }
+}
 .mapRoot:has(.appSidebar:hover) .mapActiveLayers:not(.mapActiveLayersWithPanel),
 .mapRoot:has(.appSidebar:focus-within) .mapActiveLayers:not(.mapActiveLayersWithPanel),
 .mapRoot:has(.appSidebarExpanded) .mapActiveLayers:not(.mapActiveLayersWithPanel) {

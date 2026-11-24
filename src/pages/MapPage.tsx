@@ -79,6 +79,7 @@ import { AdminUsageDashboardPanel } from "./map/AdminUsageDashboardPanel";
 import { AdminNotificationsPanel } from "./map/AdminNotificationsPanel";
 import { NotificationCenter } from "./map/NotificationCenter";
 import { LayerToggle } from "./map/LayerToggle";
+import { ClusterSummary, type ClusterCounts } from "./map/ClusterSummary";
 import { useEquipmentLayer } from "./map/useEquipmentLayer";
 import {
   cleanString,
@@ -1828,6 +1829,7 @@ export default function MapPage() {
 
   const [adminTab, setAdminTab] = useState<AdminTab>("users");
   const [cinematicMode, setCinematicMode] = useState(false);
+  const [hoveredCluster, setHoveredCluster] = useState<{ id: number; counts: ClusterCounts } | null>(null);
   const [adminMenuExpanded, setAdminMenuExpanded] = useState(true);
   const [equipmentMenuExpanded, setEquipmentMenuExpanded] = useState(true);
   const [adminUsersOrgOpen, setAdminUsersOrgOpen] = useState(false);
@@ -2416,6 +2418,12 @@ export default function MapPage() {
         cluster: !cinematicModeRef.current,
         clusterRadius: 60,
         clusterMaxZoom: 14,
+        clusterProperties: {
+          camera: ["+", ["case", ["==", ["get", "kind"], "camera"], 1, 0]],
+          camera_intel: ["+", ["case", ["==", ["get", "kind"], "camera_intel"], 1, 0]],
+          camera_lpr: ["+", ["case", ["==", ["get", "kind"], "camera_lpr"], 1, 0]],
+          radar: ["+", ["case", ["==", ["get", "kind"], "radar"], 1, 0]],
+        },
         ...(cinematicModeRef.current ? { maxzoom: 14, buffer: 32 } : {}),
       });
     }
@@ -3070,6 +3078,7 @@ export default function MapPage() {
   }
 
   function updatePoisData(map: mapboxgl.Map, geo: FeatureCollection<Point, any>) {
+    setHoveredCluster(null);
     const src: any = map.getSource(SOURCES.pois);
     if (src && typeof src.setData === "function") src.setData(geo);
   }
@@ -3288,6 +3297,7 @@ export default function MapPage() {
 
   function switchMapBaseStyle(next: MapBaseStyle) {
     if (mapBaseStyleRef.current === next) return;
+    setHoveredCluster(null);
     clearStackCircle();
     mapBaseStyleRef.current = next;
     setMapBaseStyle(next);
@@ -4067,6 +4077,30 @@ export default function MapPage() {
       map.on("mouseenter", lid, setCursorPointer);
       map.on("mouseleave", lid, setCursorDefault);
     }
+
+    const hideClusterSummary = () => setHoveredCluster(null);
+    const showClusterSummary = (event: mapboxgl.MapLayerMouseEvent) => {
+      const properties = event.features?.[0]?.properties;
+      if (areaDrawModeRef.current || map.isMoving() || !properties) {
+        hideClusterSummary();
+        return;
+      }
+      const id = Number(properties.cluster_id);
+      setHoveredCluster((current) => current?.id === id ? current : {
+        id,
+        counts: {
+          camera: Number(properties.camera) || 0,
+          camera_intel: Number(properties.camera_intel) || 0,
+          camera_lpr: Number(properties.camera_lpr) || 0,
+          radar: Number(properties.radar) || 0,
+        },
+      });
+    };
+    map.on("mouseenter", LAYERS.clusters, showClusterSummary);
+    map.on("mousemove", LAYERS.clusters, showClusterSummary);
+    map.on("mouseleave", LAYERS.clusters, hideClusterSummary);
+    map.on("mouseout", hideClusterSummary);
+    map.on("movestart", hideClusterSummary);
 
     for (const lid of [LAYERS.cameras_points, LAYERS.cameras_intel_points, LAYERS.cameras_lpr_points, LAYERS.radares_points]) {
       map.on("mouseenter", lid, showStackCircle);
@@ -7268,6 +7302,10 @@ export default function MapPage() {
         }}
       />
 
+      {hoveredCluster && !areaDrawMode && !cinematicMode && (
+        <ClusterSummary counts={hoveredCluster.counts} />
+      )}
+
       {canViewBairros && showBairros && bairroIntroOpen && (
         <div className="areaDrawIntroBackdrop">
           <div className="areaDrawIntro" role="dialog" aria-modal="true" aria-labelledby="bairroIntroTitle">
@@ -7861,8 +7899,12 @@ export default function MapPage() {
               </div>
             )}
 
-            <div className="dockDivider" />
-            <div className="dockTitle dockToolsTitle">Ferramentas</div>
+            {(canViewBairros || canUseAreaDraw || canUseGps) && (
+              <>
+                <div className="dockDivider" />
+                <div className="dockTitle dockToolsTitle">Ferramentas</div>
+              </>
+            )}
 
             {canViewBairros && (
               <button
