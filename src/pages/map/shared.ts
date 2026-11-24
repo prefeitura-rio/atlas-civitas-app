@@ -159,6 +159,8 @@ async function tryRefreshToken() {
     const nextAccessToken = payload?.access_token;
     const nextRefreshToken = payload?.refresh_token;
     if (!nextAccessToken) return null;
+    // A logout or another login may have happened while the refresh was pending.
+    if (getStoredRefreshToken() !== refreshToken) return null;
     storeTokens(nextAccessToken, nextRefreshToken || refreshToken);
     return nextAccessToken as string;
   })()

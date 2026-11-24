@@ -149,6 +149,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
         });
 
+        if (sessionStorage.getItem("access_token") !== token) return null;
+
         if (!res.ok) {
           if (res.status === 401) {
             clearAuthStorage();
@@ -159,6 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const payload = await res.json().catch(() => null);
+        if (sessionStorage.getItem("access_token") !== token) return null;
         const nextUser = normalizeUser(payload);
         persistUser(nextUser);
         return nextUser;
@@ -267,11 +270,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loadCurrentUser(token);
   }
 
-  function logout() {
+  const logout = useCallback(() => {
+    const token = sessionStorage.getItem("access_token") || localStorage.getItem("access_token");
+    const refreshToken = sessionStorage.getItem("refresh_token") || localStorage.getItem("refresh_token");
+
     clearAuthStorage();
     setAccessToken(null);
     setUser(null);
-  }
+
+    if (!token) return;
+
+    // Notify the API with the captured credentials; leaving never depends on the network.
+    void fetch(`${API_BASE}/auth/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      keepalive: true,
+    }).catch(() => {
+      // Local credentials are already cleared if the API cannot be reached.
+    });
+  }, [clearAuthStorage]);
 
   useEffect(() => {
     const onTokens = (event: Event) => {
@@ -319,7 +340,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       reloadCurrentUser,
     }),
-    [isAuthed, loading, accessToken, user, organizationId, organizationName, featureCodes, hasFeature, reloadCurrentUser]
+    [isAuthed, loading, accessToken, user, organizationId, organizationName, featureCodes, hasFeature, logout, reloadCurrentUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
